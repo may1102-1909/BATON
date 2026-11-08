@@ -1,8 +1,12 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Brand } from './components/Brand'
 import { Icon } from './components/Icon'
 import { Button } from './components/Button'
 import { Auth } from './components/Auth'
+import { TerminalDemo } from './components/TerminalDemo'
+import { Comparison } from './components/Comparison'
+import { CtaBanner } from './components/CtaBanner'
+import { supabase } from './lib/supabase'
 
 const C = {
   bg: '#0c0d0e',
@@ -19,15 +23,42 @@ export default function App({
 }) {
   const [view, setView] = useState(initialScreen)
   const [mode, setMode] = useState('login')
+  const [currentUser, setCurrentUser] = useState(null)
 
   const featuresRef = useRef(null)
+  const workflowRef = useRef(null)
   const architectureRef = useRef(null)
   const docsRef = useRef(null)
+
+  useEffect(() => {
+    // 1. Get initial active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setCurrentUser(session.user)
+      }
+    })
+
+    // 2. Listen to authentication state changes
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUser(session?.user ?? null)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
 
   function auth(m = 'signup') {
     setMode(m)
     setView('auth')
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    setCurrentUser(null)
   }
 
   function scroll(ref) {
@@ -37,7 +68,17 @@ export default function App({
   }
 
   if (view === 'auth') {
-    return <Auth mode={mode} setMode={setMode} back={() => setView('landing')} />
+    return (
+      <Auth
+        mode={mode}
+        setMode={setMode}
+        back={() => setView('landing')}
+        onAuthSuccess={(user) => {
+          setCurrentUser(user)
+          setView('landing')
+        }}
+      />
+    )
   }
 
   const headlineParts = headline.split('not just')
@@ -90,6 +131,7 @@ export default function App({
           <nav className="bt-navlinks" aria-label="Main navigation">
             {[
               ['Features', featuresRef],
+              ['Workflow', workflowRef],
               ['Architecture', architectureRef],
               ['Docs', docsRef]
             ].map(([label, ref]) => (
@@ -113,28 +155,62 @@ export default function App({
           </nav>
 
           <div style={{ display: 'flex', gap: 17, alignItems: 'center' }}>
-            <button
-              className="bt-text bt-signin"
-              onClick={() => auth('login')}
-              style={{
-                fontSize: 12,
-                fontWeight: 500,
-                border: 0,
-                background: 'none',
-                color: C.text,
-                cursor: 'pointer'
-              }}
-            >
-              Sign In
-            </button>
-            <Button
-              primary
-              onClick={() => auth('signup')}
-              style={{ padding: '9px 15px', fontSize: 12 }}
-            >
-              Get Started
-              <Icon size={13} />
-            </Button>
+            {currentUser ? (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    color: C.green,
+                    background: '#10b98118',
+                    border: '1px solid #284435',
+                    padding: '4px 10px',
+                    borderRadius: 20
+                  }}
+                >
+                  {currentUser.email}
+                </span>
+                <button
+                  className="bt-text"
+                  onClick={handleSignOut}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    border: 0,
+                    background: 'none',
+                    color: C.muted,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  className="bt-text bt-signin"
+                  onClick={() => auth('login')}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    border: 0,
+                    background: 'none',
+                    color: C.text,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Sign In
+                </button>
+                <Button
+                  primary
+                  onClick={() => auth('signup')}
+                  style={{ padding: '9px 15px', fontSize: 12 }}
+                >
+                  Get Started
+                  <Icon size={13} />
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -144,7 +220,16 @@ export default function App({
         <div className="bt-shell">
           {/* Hero Section */}
           <section className="bt-hero">
-            <div style={{ maxWidth: 780, margin: '0 auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div
+              style={{
+                maxWidth: 780,
+                margin: '0 auto',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center'
+              }}
+            >
               <span
                 style={{
                   display: 'inline-flex',
@@ -196,13 +281,27 @@ export default function App({
                 door.
               </p>
 
-              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
-                <Button primary onClick={() => auth('signup')} style={{ padding: '14px 26px', fontSize: 14 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 14,
+                  flexWrap: 'wrap',
+                  justifyContent: 'center'
+                }}
+              >
+                <Button
+                  primary
+                  onClick={() => auth('signup')}
+                  style={{ padding: '14px 26px', fontSize: 14 }}
+                >
                   Get Started
                   <Icon size={16} />
                 </Button>
-                <Button onClick={() => scroll(featuresRef)} style={{ padding: '14px 24px', fontSize: 14 }}>
-                  Explore Features
+                <Button
+                  onClick={() => scroll(workflowRef)}
+                  style={{ padding: '14px 24px', fontSize: 14 }}
+                >
+                  View Workflow
                   <Icon size={16} />
                 </Button>
               </div>
@@ -368,6 +467,11 @@ export default function App({
             </div>
           </section>
 
+          {/* Developer Workflow Terminal Demo */}
+          <div ref={workflowRef}>
+            <TerminalDemo />
+          </div>
+
           {/* Architecture / Pipeline Section */}
           <section
             ref={architectureRef}
@@ -434,6 +538,12 @@ export default function App({
             </div>
           </section>
 
+          {/* Before & After Comparison */}
+          <Comparison />
+
+          {/* Call to Action Banner */}
+          <CtaBanner onGetStarted={() => auth('signup')} />
+
           {/* Developer Notes / Docs Section */}
           <section
             ref={docsRef}
@@ -465,7 +575,12 @@ export default function App({
                   marginTop: 12
                 }}
               >
-                Baton captures architectural decisions and citations from pull requests, commit traces, and agent conversation context. Authentication is simulated locally: GitHub never connects, magic links are not sent, and no personal data is stored. Production integration requires connecting an authentication provider and project-scoped sources.
+                Baton captures architectural decisions and citations from pull
+                requests, commit traces, and agent conversation context.
+                Authentication is simulated locally: GitHub never connects,
+                magic links are not sent, and no personal data is stored.
+                Production integration requires connecting an authentication
+                provider and project-scoped sources.
               </p>
             </details>
           </section>
@@ -488,7 +603,13 @@ export default function App({
           <span style={{ fontSize: 11, color: '#747881' }}>
             Pass the knowledge. Keep the momentum.
           </span>
-          <span style={{ fontSize: 10, color: '#555b64', fontFamily: 'monospace' }}>
+          <span
+            style={{
+              fontSize: 10,
+              color: '#555b64',
+              fontFamily: 'monospace'
+            }}
+          >
             © 2026 BATON · Hackathon Build
           </span>
         </div>

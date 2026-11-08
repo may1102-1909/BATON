@@ -179,3 +179,4 @@ run().catch((error) => {
   console.error('Fatal error running Baton MCP Server:', error);
   process.exit(1);
 });
+

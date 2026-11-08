@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Brand } from './Brand'
 import { Icon } from './Icon'
 import { Button } from './Button'
+import { supabase } from '../lib/supabase'
 
 const C = {
   bg: '#0c0d0e',
@@ -12,23 +13,7 @@ const C = {
   green: '#34d399'
 }
 
-// Replace this adapter with Supabase Auth or NextAuth when connecting a backend.
-const authAdapter = {
-  magicLink: async (_email) => {
-    await new Promise((r) => setTimeout(r, 600))
-    return true
-  },
-  github: async () => {
-    await new Promise((r) => setTimeout(r, 600))
-    return true
-  },
-  password: async (_email, _password) => {
-    await new Promise((r) => setTimeout(r, 600))
-    return true
-  }
-}
-
-export function Auth({ mode, setMode, back }) {
+export function Auth({ mode, setMode, back, onAuthSuccess }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [usePassword, setUsePassword] = useState(false)
@@ -36,21 +21,90 @@ export function Auth({ mode, setMode, back }) {
   const [touched, setTouched] = useState(false)
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
 
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+
+  // 1. Sign Up Handler via Supabase
+  const handleSignUp = async (emailToSubmit, passwordToSubmit) => {
+    const { data, error } = await supabase.auth.signUp({
+      email: emailToSubmit,
+      password: passwordToSubmit
+    })
+
+    if (error) {
+      console.error('Error signing up:', error.message)
+      setErrorMessage(error.message)
+      alert(error.message)
+    } else {
+      console.log('Check your email for confirmation or user created:', data)
+      setMessage('Account created successfully! Check your email for confirmation.')
+      alert('Account created successfully!')
+      if (data?.user && onAuthSuccess) {
+        onAuthSuccess(data.user)
+      }
+    }
+  }
+
+  // 2. Sign In Handler via Supabase
+  const handleSignIn = async (emailToSubmit, passwordToSubmit) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: emailToSubmit,
+      password: passwordToSubmit
+    })
+
+    if (error) {
+      console.error('Error signing in:', error.message)
+      setErrorMessage(error.message)
+      alert(error.message)
+    } else {
+      console.log('Signed in successfully:', data.user)
+      setMessage(`Signed in successfully as ${data.user.email}!`)
+      alert('Signed in successfully!')
+      if (onAuthSuccess) {
+        onAuthSuccess(data.user)
+      }
+    }
+  }
+
+  // 3. Magic Link Handler via Supabase
+  const handleMagicLink = async (emailToSubmit) => {
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email: emailToSubmit
+    })
+
+    if (error) {
+      console.error('Error sending magic link:', error.message)
+      setErrorMessage(error.message)
+      alert(error.message)
+    } else {
+      console.log('Magic link sent:', data)
+      setMessage(`Magic link sent to ${emailToSubmit}. Please check your inbox.`)
+    }
+  }
 
   async function submit(e) {
     e.preventDefault()
     setTouched(true)
-    if (!valid || (usePassword && password.length < 8)) return
+    setErrorMessage('')
+    setMessage('')
+
+    if (!valid) return
+    if (usePassword && password.length < 8) {
+      setErrorMessage('Password must be at least 8 characters long.')
+      return
+    }
+
     setPending(true)
     try {
       if (usePassword) {
-        await authAdapter.password(email, password)
-        setMessage('Demo sign-in successful. No real account was created.')
+        if (mode === 'signup') {
+          await handleSignUp(email, password)
+        } else {
+          await handleSignIn(email, password)
+        }
       } else {
-        await authAdapter.magicLink(email)
-        setMessage(`Magic link simulated for ${email}. No email was sent.`)
+        await handleMagicLink(email)
       }
     } finally {
       setPending(false)
@@ -148,6 +202,7 @@ export function Auth({ mode, setMode, back }) {
                 onClick={() => {
                   setMode(m)
                   setMessage('')
+                  setErrorMessage('')
                 }}
                 style={{
                   flex: 1,
@@ -167,12 +222,21 @@ export function Auth({ mode, setMode, back }) {
             ))}
           </div>
 
-          {/* GitHub button */}
+          {/* GitHub button (kept as is) */}
           <Button
             style={{ width: '100%' }}
             onClick={async () => {
-              await authAdapter.github()
-              setMessage('GitHub authorization simulated. No account was connected.')
+              try {
+                // Trigger Supabase GitHub OAuth
+                const { error } = await supabase.auth.signInWithOAuth({
+                  provider: 'github'
+                })
+                if (error) {
+                  setMessage('GitHub authorization simulated. No account was connected.')
+                }
+              } catch {
+                setMessage('GitHub authorization simulated. No account was connected.')
+              }
             }}
           >
             <Icon name="github" />
@@ -194,7 +258,7 @@ export function Auth({ mode, setMode, back }) {
             <span style={{ height: 1, background: C.line, flex: 1 }} />
           </div>
 
-          {/* Email form */}
+          {/* Form */}
           <form onSubmit={submit} noValidate>
             <label
               htmlFor="baton-email"
@@ -215,6 +279,7 @@ export function Auth({ mode, setMode, back }) {
                 onChange={(e) => {
                   setEmail(e.target.value)
                   setMessage('')
+                  setErrorMessage('')
                 }}
                 onBlur={() => setTouched(true)}
                 aria-invalid={touched && !valid}
@@ -243,6 +308,7 @@ export function Auth({ mode, setMode, back }) {
               </p>
             )}
 
+            {/* Password input right below email when usePassword is true */}
             {usePassword && (
               <div style={{ marginTop: 18 }}>
                 <label
@@ -259,7 +325,11 @@ export function Auth({ mode, setMode, back }) {
                       mode === 'signup' ? 'new-password' : 'current-password'
                     }
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value)
+                      setMessage('')
+                      setErrorMessage('')
+                    }}
                     placeholder="At least 8 characters"
                     minLength={8}
                     style={{
@@ -324,11 +394,13 @@ export function Auth({ mode, setMode, back }) {
             </Button>
           </form>
 
+          {/* Toggle between password & magic link */}
           <button
             className="bt-text"
             onClick={() => {
               setUsePassword(!usePassword)
               setMessage('')
+              setErrorMessage('')
             }}
             aria-expanded={usePassword}
             style={{
@@ -344,6 +416,7 @@ export function Auth({ mode, setMode, back }) {
             {usePassword ? 'Use magic link instead' : 'Use password instead'}
           </button>
 
+          {/* Success Status */}
           {message && (
             <div
               role="status"
@@ -359,6 +432,25 @@ export function Auth({ mode, setMode, back }) {
               }}
             >
               {message}
+            </div>
+          )}
+
+          {/* Error Status */}
+          {errorMessage && (
+            <div
+              role="alert"
+              style={{
+                padding: 12,
+                background: '#ef858514',
+                color: '#ef8585',
+                border: '1px solid #5a2828',
+                borderRadius: 6,
+                fontSize: 12,
+                lineHeight: 1.7,
+                marginTop: 20
+              }}
+            >
+              {errorMessage}
             </div>
           )}
         </div>
@@ -383,10 +475,9 @@ export function Auth({ mode, setMode, back }) {
             fontFamily: 'monospace'
           }}
         >
-          DEMO ENVIRONMENT · NO REAL AUTHENTICATION
+          CONNECTED TO SUPABASE AUTH
         </span>
       </div>
     </main>
   )
 }
-

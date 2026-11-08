@@ -58,3 +58,4 @@ Before undertaking significant refactoring or answering architectural inquiries 
 
 ## 🔒 Security Notice
 The Baton MCP server automatically sanitizes and redacts all secrets client-side via `src/redact.ts`. Never deliberately inject raw secrets or production credentials into decision or blocker logs.
+
