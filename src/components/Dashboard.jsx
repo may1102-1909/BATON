@@ -6,6 +6,7 @@ import { Preview } from './Preview'
 import { supabase } from '../lib/supabase'
 import { getDecisions, insertDecision, getBlockers, insertBlocker, getSources } from '../lib/db'
 import { useRouter } from '../router'
+import { HandoverReview } from './HandoverReview'
 
 const C = {
   bg: '#0c0d0e',
@@ -18,11 +19,11 @@ const C = {
 
 const initialMockDecisions = [
   {
-    id: 'dec-rls-supabase',
+    id: 'dec-rls-pgvector',
     decision: 'Chose Supabase Postgres over Firebase',
-    reason: 'Row-Level Security (RLS) requirements and fine-grained data access control.',
-    alternatives: ['Firebase Firestore', 'Custom PostgreSQL with Auth0'],
-    files_affected: ['supabase/schema.sql', 'src/lib/supabase.js', 'src/lib/db.js'],
+    reason: 'Strict Row-Level Security requirements and pgvector support for AI semantic search and agent memory indexing.',
+    alternatives: ['Firebase Firestore', 'Custom PostgreSQL with Auth0 and Pinecone'],
+    files_affected: ['supabase/schema.sql', 'src/lib/supabase.js', 'src/lib/db.js', '.env.local'],
     status: 'Verified',
     citation: 'baton:log_decision',
     timestamp: 'Just now'
@@ -84,14 +85,24 @@ export function Dashboard({ user, onBack, onSignOut }) {
   const [newDecision, setNewDecision] = useState({ decision: '', reason: '', files: '' })
   const [decisions, setDecisions] = useState(initialMockDecisions)
   const [blockers, setBlockers] = useState(initialMockBlockers)
+  const [sources, setSources] = useState([])
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false)
   const [theme, setTheme] = useState('Baton Official')
+  const [showSimulateModal, setShowSimulateModal] = useState(false)
+  const [simulating, setSimulating] = useState(false)
+  const [simulateSuccess, setSimulateSuccess] = useState('')
 
   // Load from Supabase on mount & listen to Realtime changes
   useEffect(() => {
     let channel
 
     async function loadData() {
+      const remoteSources = await getSources()
+      if (remoteSources && remoteSources.length > 0) {
+        setSources(remoteSources)
+        setIsSupabaseConnected(true)
+      }
+
       const remoteDecisions = await getDecisions()
       if (remoteDecisions && remoteDecisions.length > 0) {
         setDecisions(remoteDecisions)
@@ -112,6 +123,13 @@ export function Dashboard({ user, onBack, onSignOut }) {
     try {
       channel = supabase
         .channel('baton-realtime-dashboard')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'sources' },
+          (payload) => {
+            setSources((prev) => [payload.new, ...prev.filter((s) => s.id !== payload.new.id)])
+          }
+        )
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'decisions' },
@@ -472,6 +490,32 @@ ${blockers.map((b) => `- **[${b.status}] ${b.problem}**: ${b.workaround_notes}`)
             </button>
           ))}
         </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {[
+              ['review', '⚡ Review Handover'],
+              ['decisions', `Decisions (${decisions.length})`],
+              ['sources', `Agent Sources (${sources.length})`],
+              ['blockers', `Blockers (${blockers.length})`],
+              ['mcp', 'MCP Status']
+            ].map(([tabKey, label]) => (
+              <button
+                key={tabKey}
+                onClick={() => setActiveTab(tabKey)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  border: `1px solid ${activeTab === tabKey ? '#34d39966' : '#27282d'}`,
+                  background: activeTab === tabKey ? '#10b98118' : '#141618',
+                  color: activeTab === tabKey ? C.green : C.muted,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 500
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
         {/* Search & Filter Bar */}
         {(activeTab === 'decisions' || activeTab === 'blockers') && (
@@ -495,6 +539,9 @@ ${blockers.map((b) => `- **[${b.status}] ${b.problem}**: ${b.workaround_notes}`)
             />
           </div>
         )}
+
+        {/* Tab 0: Handover Review */}
+        {activeTab === 'review' && <HandoverReview user={user} />}
 
         {/* Tab 1: Decisions */}
         {activeTab === 'decisions' && (
@@ -639,6 +686,96 @@ ${blockers.map((b) => `- **[${b.status}] ${b.problem}**: ${b.workaround_notes}`)
         )}
 
         {/* Tab 2: Operational Blockers */}
+        {/* Tab 2: Agent Dispatched Sources */}
+        {activeTab === 'sources' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {sources.length === 0 ? (
+              <div
+                style={{
+                  background: '#131518',
+                  border: `1px solid ${C.line}`,
+                  borderRadius: 8,
+                  padding: '36px 20px',
+                  textAlign: 'center',
+                  color: C.muted
+                }}
+              >
+                <div style={{ fontSize: 13, marginBottom: 8, color: '#f4f4f5' }}>
+                  No agent sources indexed in Supabase yet.
+                </div>
+                <div style={{ fontSize: 11 }}>
+                  Dispatches from Baton MCP tools (`baton:log_decision`, `baton:log_blocker`) will stream here in real-time.
+                </div>
+              </div>
+            ) : (
+              sources.map((src) => (
+                <div
+                  key={src.id}
+                  style={{
+                    background: '#131518',
+                    border: `1px solid ${C.line}`,
+                    borderRadius: 8,
+                    padding: '20px 22px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                          color: C.green,
+                          background: '#10b98115',
+                          border: '1px solid #284435',
+                          padding: '3px 8px',
+                          borderRadius: 4
+                        }}
+                      >
+                        {src.author || 'Antigravity Agent'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                          color: src.type?.includes('blocker') ? '#ef8585' : '#7be1b4',
+                          background: src.type?.includes('blocker') ? '#ef858515' : '#10b98115',
+                          border: `1px solid ${src.type?.includes('blocker') ? '#5d2b2b' : '#234836'}`,
+                          padding: '3px 7px',
+                          borderRadius: 4
+                        }}
+                      >
+                        {src.type}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 10, color: '#747983', fontFamily: 'monospace' }}>
+                      {new Date(src.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+
+                  <pre
+                    style={{
+                      margin: 0,
+                      background: '#0d0f11',
+                      border: '1px solid #24272c',
+                      borderRadius: 6,
+                      padding: '14px 16px',
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: 12,
+                      lineHeight: 1.8,
+                      color: '#d4d8e0',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word'
+                    }}
+                  >
+                    {src.content}
+                  </pre>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Tab 3: Blockers */}
         {activeTab === 'blockers' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {filteredBlockers.map((b) => (
