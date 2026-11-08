@@ -395,7 +395,7 @@ ${
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <Button
             onClick={handleGenerateHandover}
             disabled={generating}
@@ -404,6 +404,34 @@ ${
             <Icon name="sparkles" size={13} />
             {generating ? 'Synthesizing...' : '⚡ Generate Handover'}
           </Button>
+
+          <Button
+            onClick={handleExportMarkdown}
+            style={{ padding: '9px 16px', fontSize: 12 }}
+          >
+            <Icon name="code" size={13} />
+            Export (.md)
+          </Button>
+
+          <a
+            href={`/handover/${handover.id || 'active'}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#16191c',
+              border: '1px solid #282b31',
+              color: '#d0d4dc',
+              borderRadius: 6,
+              padding: '9px 14px',
+              fontSize: 12,
+              textDecoration: 'none',
+              fontWeight: 500
+            }}
+          >
+            <span>Full Review View</span>
+            <Icon name="arrow" size={12} />
+          </a>
 
           {handover.status !== 'approved' && (
             <Button
