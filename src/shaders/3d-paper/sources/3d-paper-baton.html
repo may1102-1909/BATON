@@ -23,24 +23,24 @@ body{
   position:absolute;left:50%;top:50%;
   font-family:"Syne", "Space Grotesk", sans-serif;font-weight:900;letter-spacing:-0.055em;
   font-size:clamp(100px, 21.5vw, 450px);line-height:.8;white-space:nowrap;
-  color:rgba(16, 185, 129, 0.24);
-  text-shadow: 0 0 60px rgba(16, 185, 129, 0.32), 0 0 140px rgba(52, 211, 153, 0.18);
+  color:#10B981;
+  opacity:0.42;
+  filter: drop-shadow(0 0 60px rgba(16, 185, 129, 0.25)) drop-shadow(0 0 120px rgba(52, 211, 153, 0.18));
+  text-shadow: 0 0 40px rgba(16, 185, 129, 0.38), 0 0 90px rgba(52, 211, 153, 0.25);
   -webkit-user-select:none;user-select:none;pointer-events:none;
   animation: batonBgIntro 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards,
              batonBgPulse 7s ease-in-out 1.2s infinite alternate;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
 }
 
 @keyframes batonBgIntro {
   0% {
     opacity: 0;
     transform: translate(-50%, -50%) scale(0.92);
-    filter: blur(12px);
   }
   100% {
-    opacity: 0.38;
+    opacity: 0.42;
     transform: translate(-50%, -50%) scale(1);
-    filter: blur(0px);
   }
 }
 
@@ -48,19 +48,16 @@ body{
   0% {
     transform: translate(-50%, -50%) scale(1);
     opacity: 0.38;
-    text-shadow: 0 0 60px rgba(16, 185, 129, 0.32), 0 0 140px rgba(52, 211, 153, 0.18);
   }
   100% {
-    transform: translate(-50%, -50%) scale(1.025);
-    opacity: 0.44;
-    text-shadow: 0 0 80px rgba(16, 185, 129, 0.44), 0 0 160px rgba(52, 211, 153, 0.26);
+    transform: translate(-50%, -50%) scale(1.02);
+    opacity: 0.45;
   }
 }
 
-/* ---------- layers over it ---------- */
-#dof{position:fixed;inset:-30px;z-index:2;pointer-events:none;
-     backdrop-filter:blur(2.4px);-webkit-backdrop-filter:blur(2.4px);
-     background:rgba(8,8,10,.05)}
+/* ---------- layers over it (optimized without expensive full-screen backdrop-filters) ---------- */
+#dof{position:fixed;inset:0;z-index:2;pointer-events:none;
+     background:radial-gradient(130% 100% at 50% 50%, rgba(8,8,10,0.02) 0%, rgba(8,8,10,0.20) 100%)}
 #gl{position:fixed;top:0;left:0;width:100%;height:100%;z-index:3;
     pointer-events:none;display:block}
 #grain,#grain2{position:fixed;inset:0;z-index:4;pointer-events:none;
@@ -182,17 +179,6 @@ function drawGlass(ctx){
   ctx.font="600 20px \"Space Grotesk\", sans-serif";
   ctx.fillText("®", M + 50 + bw + 4, 126);
 
-  // Top right sub-badge: TEAM MUMBAI_WALE
-  ctx.fillStyle="rgba(16, 185, 129, 0.10)";
-  rr(ctx, 1200 - M - 250, 116, 250, 42, 6); ctx.fill();
-  ctx.strokeStyle="rgba(16, 185, 129, 0.32)"; ctx.lineWidth=1;
-  rr(ctx, 1200 - M - 250, 116, 250, 42, 6); ctx.stroke();
-  ctx.fillStyle="#10b981";
-  ctx.beginPath(); ctx.arc(1200 - M - 232, 137, 4, 0, 7); ctx.fill();
-  ctx.font="600 13px \"JetBrains Mono\", monospace";
-  ctx.fillStyle="#6ee7b7";
-  ctx.fillText("TEAM MUMBAI_WALE", 1200 - M - 220, 142);
-
   // Separator line
   ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(M, 220); ctx.lineTo(1200 - M, 220); ctx.stroke();
@@ -207,74 +193,57 @@ function drawGlass(ctx){
   ctx.fillStyle="#10b981";
   ctx.fillText("the code.", M + njw, 465);
 
-  // --- Subtext: Automated developer reasoning capture & context handover. (Space Grotesk) ---
-  ctx.font="500 32px \"Space Grotesk\", sans-serif";
-  ctx.fillStyle="rgba(255, 255, 255, 0.78)";
-  wrapL(ctx, "Automated developer reasoning capture & context handover.", M, 565, 1000, 46);
-
   // Separator line
   ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(M, 660); ctx.lineTo(1200 - M, 660); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(M, 570); ctx.lineTo(1200 - M, 570); ctx.stroke();
 
-  // --- Developer Manifest & Technical Spec Details (JetBrains Mono) ---
+  // --- Clean Minimal Monospace Team Roster Section ---
   ctx.font="700 18px \"JetBrains Mono\", monospace";
   ctx.fillStyle="#10b981";
-  ctx.fillText("// GROUNDED REASONING INVENTORY & VERIFICATION SPEC", M, 715);
+  ctx.fillText("// PROJECT CONTRIBUTORS", M, 640);
 
-  const specRows = [
-    { tag: "DECISION #42", file: "auth/supabase.ts", hash: "SHA: 8ec1b71c", status: "VERIFIED", color: "#34d399" },
-    { tag: "INFERRED #18", file: "api/webhooks/pay.ts", hash: "COMMIT: c82f91a", status: "STALE BRANCH", color: "#e8b86d" },
-    { tag: "SECURITY #03", file: "env/production.jwt", hash: "REDACTED", status: "0 LEAKS DETECTED", color: "#60a5fa" },
-    { tag: "PROTOCOL #01", file: "daemon/mcp-sync.ts", hash: "MCP SSE v2.4", status: "ACTIVE DAEMON", color: "#34d399" }
+  ctx.font="700 32px \"Space Grotesk\", sans-serif";
+  ctx.fillStyle="#ffffff";
+  ctx.fillText("TEAM MUMBAI_WALE", M, 700);
+
+  const contributors = [
+    { bullet: "•", name: "Anjana G P", role: "Frontend & Design Lead" },
+    { bullet: "•", name: "Mayank", role: "Backend & Systems Lead" },
+    { bullet: "•", name: "Vikrant", role: "Full Stack & Cloud" }
   ];
 
-  let specY = 755;
-  specRows.forEach((r) => {
-    ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
-    rr(ctx, M, specY, 1048, 52, 8); ctx.fill();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)"; ctx.lineWidth = 1;
-    rr(ctx, M, specY, 1048, 52, 8); ctx.stroke();
+  let rosterY = 760;
+  contributors.forEach((c) => {
+    // Subtle frosted card row
+    ctx.fillStyle = "rgba(255, 255, 255, 0.035)";
+    rr(ctx, M, rosterY, 1048, 68, 8); ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.10)"; ctx.lineWidth = 1;
+    rr(ctx, M, rosterY, 1048, 68, 8); ctx.stroke();
 
-    // Tag
-    ctx.font = "700 14px \"JetBrains Mono\", monospace";
-    ctx.fillStyle = r.color;
-    ctx.fillText(r.tag, M + 24, specY + 32);
+    // Monospace text: • Name — Role
+    ctx.font = "700 24px \"JetBrains Mono\", monospace";
+    ctx.fillStyle = "#10b981";
+    ctx.fillText(c.bullet, M + 28, rosterY + 42);
 
-    // File
-    ctx.font = "500 15px \"JetBrains Mono\", monospace";
+    ctx.font = "600 21px \"JetBrains Mono\", monospace";
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(r.file, M + 220, specY + 32);
+    ctx.fillText(c.name, M + 58, rosterY + 42);
+    const nw = ctx.measureText(c.name).width;
 
-    // Hash
-    ctx.font = "400 14px \"JetBrains Mono\", monospace";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
-    ctx.fillText(r.hash, M + 560, specY + 32);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+    ctx.fillText(" — ", M + 58 + nw, rosterY + 42);
+    const dw = ctx.measureText(" — ").width;
 
-    // Status pill
-    ctx.fillStyle = r.color + "18";
-    rr(ctx, 1200 - M - 210, specY + 12, 186, 28, 4); ctx.fill();
-    ctx.strokeStyle = r.color + "40"; ctx.lineWidth = 1;
-    rr(ctx, 1200 - M - 210, specY + 12, 186, 28, 4); ctx.stroke();
+    ctx.font = "500 20px \"JetBrains Mono\", monospace";
+    ctx.fillStyle = "#a7f3d0";
+    ctx.fillText(c.role, M + 58 + nw + dw, rosterY + 42);
 
-    ctx.font = "700 11px \"JetBrains Mono\", monospace";
-    ctx.fillStyle = r.color;
-    ctx.fillText(r.status, 1200 - M - 196, specY + 30);
-
-    specY += 66;
+    rosterY += 88;
   });
 
-  // --- Official Hackathon Certification & Signatures ---
-  const px = M, py = 1060;
-  ctx.font="700 18px \"JetBrains Mono\", monospace"; ctx.fillStyle="#10b981";
-  ctx.fillText("CODERSINPUNE HACKATHON 2026 // FULL STACK TRACK", px, py);
-
-  ctx.font="500 20px \"Space Grotesk\", sans-serif"; ctx.fillStyle="rgba(255, 255, 255, 0.62)";
-  wrapL(ctx, "Continuous developer reasoning indexing powered by Model Context Protocol & Supabase Auth.", px, py + 32, 680, 28);
-
-  // Signatures on right
-  [0, 1, 2].forEach(i => signature(ctx, 1200 - M - 260 + i * 86, py + 42, 0.82, i * 7 + 4, "rgba(16, 185, 129, 0.52)"));
-  ctx.font = "500 12px \"JetBrains Mono\", monospace"; ctx.fillStyle = "rgba(255, 255, 255, 0.40)";
-  ctx.fillText("CRYPTOGRAPHIC SIGNATURES", 1200 - M - 260, py + 78);
+  // Separator line
+  ctx.strokeStyle="rgba(255,255,255,.10)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(M, 1050); ctx.lineTo(1200 - M, 1050); ctx.stroke();
 
   // Vertical watermark on right edge
   ctx.save(); ctx.translate(1200 - M - 12, 1180); ctx.rotate(Math.PI / 2);
@@ -361,9 +330,9 @@ scene.add(key,fill,rim,new T.AmbientLight(0xffffff,0.16));
 const touchLight = new T.PointLight(0xdfe8ff, 0, 7.5, 1.35);
 touchLight.position.set(0,0,1.7); scene.add(touchLight);
 
-/* ---- geometry + the bend ------------------------------------------- */
+/* ---- geometry + the bend (optimized 32x32 mesh for high-performance 60fps) ---- */
 const SW = 2.30, SH = 2.72;
-const geo = new T.PlaneGeometry(SW,SH,72,96);
+const geo = new T.PlaneGeometry(SW,SH,32,32);
 
 const uni = {
   uTime:{value:0}, uAmp:{value:1.18}, uFreq:{value:4.70}, uTwist:{value:1.30},
@@ -572,7 +541,8 @@ window.addEventListener('pointerleave', ()=>{ hoverTarget=0; });
 let vw=0, vh=0;
 function resize(){
   vw = window.innerWidth; vh = window.innerHeight;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  const dpr = Math.min(typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1, 1.5);
+  renderer.setPixelRatio(dpr);
   renderer.setSize(vw,vh,false);
   camera.aspect = vw/vh; camera.updateProjectionMatrix();
   const visH = 2*camera.position.z*Math.tan(T.MathUtils.degToRad(camera.fov)/2);
@@ -625,15 +595,22 @@ function frame(){
   }
   prevYaw = dragYaw; prevPitch = dragPitch;
 
-  mouse.x += (mouse.tx-mouse.x)*Math.min(1,dt*3.0);
-  mouse.y += (mouse.ty-mouse.y)*Math.min(1,dt*3.0);
+  // Linear interpolation with damping factor (0.065) for ultra-smooth 60fps tracking
+  const damping = 0.065;
+  mouse.x += (mouse.tx - mouse.x) * damping;
+  mouse.y += (mouse.ty - mouse.y) * damping;
   const idle = REDUCED ? 0 : 1;
   const rise = 1 - intro;
-  group.rotation.y = dragYaw + mouse.x*0.16 + Math.sin(t*0.23)*0.045*idle;
-  group.rotation.x = dragPitch - mouse.y*0.11 + Math.sin(t*0.19)*0.026*idle + rise*0.28;
-  group.rotation.z = Math.sin(t*0.27)*0.018*idle;
-  group.position.y = Math.sin(t*0.36)*0.06*idle - rise*0.7;
-  group.position.x = Math.sin(t*0.21)*0.05*idle + mouse.x*0.10;
+
+  const targetRotY = dragYaw + mouse.x * 0.16 + Math.sin(t * 0.23) * 0.045 * idle;
+  const targetRotX = dragPitch - mouse.y * 0.11 + Math.sin(t * 0.19) * 0.026 * idle + rise * 0.28;
+  const targetPosX = Math.sin(t * 0.21) * 0.05 * idle + mouse.x * 0.10;
+
+  group.rotation.y += (targetRotY - group.rotation.y) * damping;
+  group.rotation.x += (targetRotX - group.rotation.x) * damping;
+  group.rotation.z = Math.sin(t * 0.27) * 0.018 * idle;
+  group.position.y = Math.sin(t * 0.36) * 0.06 * idle - rise * 0.7;
+  group.position.x += (targetPosX - group.position.x) * damping;
   group.updateMatrixWorld();
 
   hover += (hoverTarget - hover) * Math.min(1, dt*4.5);
