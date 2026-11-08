@@ -76,7 +76,7 @@ export function LandingPage() {
           </Link>
 
           <Link
-            to="/handover/active"
+            to="/dashboard/handover/active"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -119,7 +119,7 @@ export function LandingPage() {
           </Link>
 
           <Link
-            to="/dashboard"
+            to="/auth"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -183,7 +183,7 @@ export function LandingPage() {
             📊 Dashboard
           </Link>
           <Link
-            to="/handover/active"
+            to="/dashboard/handover/active"
             style={{
               fontSize: 11,
               fontWeight: 500,

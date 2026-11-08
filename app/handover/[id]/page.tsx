@@ -685,14 +685,14 @@ export default function HandoverReviewPage({
                 <input
                   readOnly
                   type="text"
-                  value={`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/handover/${handoverId}?role=receiver`}
+                  value={`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/dashboard/handover/${handoverId}?role=receiver`}
                   className="w-full bg-[#0c0d0e] border border-[#27282d] rounded p-2 text-xs font-mono text-emerald-400"
                 />
                 <button
                   onClick={() => {
                     if (typeof navigator !== 'undefined') {
                       navigator.clipboard.writeText(
-                        `${window.location.origin}/handover/${handoverId}?role=receiver`
+                        `${window.location.origin}/dashboard/handover/${handoverId}?role=receiver`
                       )
                       triggerToast('Link copied to clipboard!')
                     }
