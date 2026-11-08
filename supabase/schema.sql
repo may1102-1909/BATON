@@ -1,11 +1,23 @@
 -- BATON Continuity Database Schema (Supabase PostgreSQL)
 -- Run this in your Supabase Project SQL Editor to create tables for decisions and blockers.
 
--- 1. Sources Table (Baton Collector Dispatched Data)
+-- 1. Organizations Table
+create table if not exists public.organizations (
+  id uuid default gen_random_uuid() primary key,
+  name text not null unique,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+insert into public.organizations (name)
+values ('Mumbai_wale Hackathon Org')
+on conflict (name) do nothing;
+
+-- 2. Sources Table (Baton Collector Dispatched Data)
 create table if not exists public.sources (
   id uuid default gen_random_uuid() primary key,
-  author text not null default 'baton-agent',
-  content jsonb not null,
+  org_id uuid references public.organizations(id) on delete set null,
+  author text not null default 'Antigravity Agent',
+  content text not null,
   type text not null,
   timestamp timestamp with time zone default timezone('utc'::text, now()) not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null

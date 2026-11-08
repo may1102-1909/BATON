@@ -12,6 +12,8 @@ dist
 !mcp-server/dist
 dist-ssr
 *.local
+.env
+mcp-server/.env
 
 # Editor directories and files
 .vscode/*

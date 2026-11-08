@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
-function getSupabaseServerClient() {
+function getSupabaseClient() {
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
@@ -29,7 +29,7 @@ export async function OPTIONS() {
 
 /**
  * GET /api/collector/search?q=...
- * Searches stored Baton decisions, blockers, and sources for relevant context.
+ * Searches `sources` table with an ilike filter on `content`.
  */
 export async function GET(req: Request) {
   const corsHeaders = {
@@ -38,51 +38,32 @@ export async function GET(req: Request) {
   }
 
   try {
-    // 1. Authorization check
-    const expectedKey = process.env.BATON_PROJECT_KEY
-    if (expectedKey) {
-      const authHeader = req.headers.get('authorization') || req.headers.get('Authorization')
-      const token = authHeader ? authHeader.replace(/^Bearer\s+/i, '').trim() : null
-
-      if (!token || token !== expectedKey) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Unauthorized: Invalid BATON_PROJECT_KEY'
-          }),
-          { status: 401, headers: corsHeaders }
-        )
-      }
-    }
-
-    // 2. Extract search query
     const url = new URL(req.url)
-    const query = url.searchParams.get('q') || url.searchParams.get('query') || ''
+    const q = url.searchParams.get('q') || url.searchParams.get('query') || ''
 
-    const supabase = getSupabaseServerClient()
+    const supabase = getSupabaseClient()
 
-    // Query the sources table
     let queryBuilder = supabase
       .from('sources')
       .select('*')
       .order('timestamp', { ascending: false })
-      .limit(20)
+      .limit(25)
 
-    if (query.trim()) {
-      // Filter by type or content text representation
-      queryBuilder = queryBuilder.or(`type.ilike.%${query}%,author.ilike.%${query}%`)
+    if (q.trim()) {
+      // Query sources table with an ilike filter on content
+      queryBuilder = queryBuilder.ilike('content', `%${q.trim()}%`)
     }
 
     const { data: sources, error } = await queryBuilder
 
     if (error) {
-      console.warn('Sources query fallback:', error.message)
+      console.warn('Supabase sources search query error:', error.message)
       return new Response(
         JSON.stringify({
           success: true,
-          query,
+          q,
           data: [],
-          message: 'No remote sources found or table not provisioned yet.'
+          message: error.message
         }),
         { status: 200, headers: corsHeaders }
       )
@@ -91,7 +72,7 @@ export async function GET(req: Request) {
     return new Response(
       JSON.stringify({
         success: true,
-        query,
+        q,
         count: sources?.length || 0,
         data: sources || []
       }),
@@ -102,7 +83,7 @@ export async function GET(req: Request) {
     return new Response(
       JSON.stringify({
         success: false,
-        error: `Search failed: ${errMsg}`
+        error: `Search error: ${errMsg}`
       }),
       { status: 500, headers: corsHeaders }
     )
