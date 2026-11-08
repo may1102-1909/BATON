@@ -312,7 +312,27 @@ export default function HandoverReviewPage({
   }
 
   return (
-    <div className="min-h-screen bg-[#0c0d0e] text-[#f4f4f5] font-sans pb-28">
+    <div className="min-h-screen bg-[#0c0d0e] text-[#f4f4f5] font-sans pb-28" style={{ minHeight: '100vh', background: '#0c0d0e', color: '#f4f4f5', paddingBottom: 110, fontFamily: "'Inter', sans-serif" }}>
+      <style>{`
+        .hr-shell { max-width: 1120px; margin: 0 auto; padding: 28px 24px; }
+        .hr-hero { background: #141619; border: 1px solid #27282d; border-radius: 12px; padding: 24px; margin-bottom: 28px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
+        .hr-sec { background: #141619; border: 1px solid #27282d; border-radius: 12px; margin-bottom: 20px; overflow: hidden; }
+        .hr-sec-head { width: 100%; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; background: none; border: 0; border-bottom: 1px solid #27282d; text-align: left; cursor: pointer; color: inherit; }
+        .hr-sec-body { padding: 20px 24px; background: #0f1013; display: flex; flex-direction: column; gap: 14px; }
+        .hr-card { padding: 18px 20px; border-radius: 8px; background: #15171b; border: 1px solid #27282d; transition: all 0.2s ease; }
+        .hr-card:hover { border-color: #383b44; }
+        .hr-card.rejected { opacity: 0.55; text-decoration: line-through; }
+        .hr-actions { display: flex; gap: 6px; align-items: center; }
+        .hr-btn { background: #181a1f; border: 1px solid #2b2e35; color: #a0a5b2; border-radius: 5px; padding: 5px 11px; font-size: 11px; cursor: pointer; transition: all 0.15s ease; }
+        .hr-btn:hover { color: #fff; border-color: #444852; }
+        .hr-btn.approved { background: rgba(16,185,129,0.18); border-color: rgba(52,211,153,0.5); color: #34d399; }
+        .hr-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-family: monospace; font-weight: 600; padding: 3px 8px; border-radius: 4px; }
+        .hr-badge.verified { background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.35); }
+        .hr-badge.inferred { background: rgba(232,184,109,0.12); color: #e8b86d; border: 1px solid rgba(232,184,109,0.35); }
+        .hr-badge.conflicting { background: rgba(239,133,133,0.12); color: #ef8585; border: 1px solid rgba(239,133,133,0.35); }
+        .hr-footer { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(17,18,21,0.96); backdrop-filter: blur(16px); border-top: 1px solid #27282d; padding: 16px 24px; z-index: 40; }
+        .hr-footer-inner { max-width: 1120px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+      `}</style>
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-5 right-5 z-50 bg-[#16191c] border border-emerald-500/50 text-emerald-400 text-xs px-4 py-3 rounded-lg shadow-2xl flex items-center gap-2">
@@ -360,9 +380,9 @@ export default function HandoverReviewPage({
       </header>
 
       {/* Main Container */}
-      <main className="max-w-6xl mx-auto px-6 pt-8">
+      <main className="hr-shell max-w-6xl mx-auto px-6 pt-8">
         {/* Leaver → Receiver Hero Bar */}
-        <div className="bg-[#141619] border border-[#27282d] rounded-xl p-6 mb-8 flex flex-wrap items-center justify-between gap-6 shadow-xl">
+        <div className="hr-hero bg-[#141619] border border-[#27282d] rounded-xl p-6 mb-8 flex flex-wrap items-center justify-between gap-6 shadow-xl">
           <div>
             <div className="text-[11px] font-mono text-[#34d399] tracking-widest uppercase mb-1">
               ENGINEERING HANDOVER SPECIFICATION
@@ -384,10 +404,12 @@ export default function HandoverReviewPage({
                 {totalReviewed} / {claims.length}
               </div>
             </div>
-            <div className="w-16 h-2 rounded-full bg-[#27282d] overflow-hidden">
+            <div className="w-16 h-2 rounded-full bg-[#27282d] overflow-hidden" style={{ width: 64, height: 8, background: '#27282d', borderRadius: 99 }}>
               <div
                 className="h-full bg-[#34d399] transition-all duration-300"
                 style={{
+                  height: '100%',
+                  background: '#34d399',
                   width: `${claims.length > 0 ? (totalReviewed / claims.length) * 100 : 0}%`
                 }}
               />
@@ -403,24 +425,24 @@ export default function HandoverReviewPage({
             return (
               <section
                 key={section.key}
-                className="bg-[#141619] border border-[#27282d] rounded-xl overflow-hidden transition"
+                className="hr-sec bg-[#141619] border border-[#27282d] rounded-xl overflow-hidden transition"
               >
                 {/* Section Header */}
                 <button
                   type="button"
                   onClick={() => toggleSection(section.key)}
-                  className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-[#181a1e] transition border-b border-[#27282d]"
+                  className="hr-sec-head w-full px-6 py-4 flex items-center justify-between text-left hover:bg-[#181a1e] transition border-b border-[#27282d]"
                 >
                   <div>
                     <div className="flex items-center gap-3">
-                      <h2 className="text-base font-semibold text-white tracking-tight">
+                      <h2 className="text-base font-semibold text-white tracking-tight" style={{ margin: 0, fontSize: 16 }}>
                         {section.title}
                       </h2>
                       <span className="text-[11px] font-mono bg-[#1c1e22] text-[#8e93a0] px-2 py-0.5 rounded border border-[#2a2d33]">
                         {section.claims.length} claims
                       </span>
                     </div>
-                    <p className="text-xs text-[#8c909c] mt-0.5">
+                    <p className="text-xs text-[#8c909c] mt-0.5" style={{ margin: '4px 0 0', fontSize: 12, color: '#8c909c' }}>
                       {section.description}
                     </p>
                   </div>
@@ -431,7 +453,7 @@ export default function HandoverReviewPage({
 
                 {/* Section Claims List */}
                 {isExpanded && (
-                  <div className="p-6 space-y-4 bg-[#0f1013]">
+                  <div className="hr-sec-body p-6 space-y-4 bg-[#0f1013]">
                     {section.claims.length === 0 ? (
                       <div className="text-xs text-[#6e727e] italic py-2">
                         No claims in this category yet.
@@ -445,17 +467,17 @@ export default function HandoverReviewPage({
                         return (
                           <div
                             key={claim.id}
-                            className={`p-4 rounded-lg border transition ${
+                            className={`hr-card p-4 rounded-lg border transition ${
                               isRejected
-                                ? 'bg-[#121316] border-[#382222] opacity-60'
+                                ? 'rejected bg-[#121316] border-[#382222] opacity-60'
                                 : 'bg-[#15171b] border-[#27282d] hover:border-[#383a42]'
                             }`}
                           >
-                            <div className="flex flex-wrap items-center justify-between gap-3 mb-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-3 mb-2.5" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                               {/* Confidence Tag & Status */}
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                 <span
-                                  className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded border ${badge.bg}`}
+                                  className={`hr-badge ${claim.confidence?.toLowerCase()} text-[10px] font-mono font-medium px-2 py-0.5 rounded border ${badge.bg}`}
                                 >
                                   {badge.label}
                                 </span>
@@ -468,15 +490,11 @@ export default function HandoverReviewPage({
                               </div>
 
                               {/* Action Buttons: [Edit], [Reject], [Approve] */}
-                              <div className="flex items-center gap-1.5">
+                              <div className="hr-actions flex items-center gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() => handleApproveClaim(claim.id)}
-                                  className={`text-[11px] font-medium px-2.5 py-1 rounded transition border flex items-center gap-1 ${
-                                    claim.status === 'approved'
-                                      ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-400'
-                                      : 'bg-[#181a1f] border-[#2b2e35] text-[#999ba5] hover:text-white'
-                                  }`}
+                                  className={`hr-btn ${claim.status === 'approved' ? 'approved' : ''} text-[11px] font-medium px-2.5 py-1 rounded transition border flex items-center gap-1`}
                                 >
                                   <span>✓</span> Approve
                                 </button>
@@ -486,11 +504,7 @@ export default function HandoverReviewPage({
                                   onClick={() =>
                                     isEditing ? saveEdit(claim.id) : startEdit(claim)
                                   }
-                                  className={`text-[11px] font-medium px-2.5 py-1 rounded transition border ${
-                                    isEditing
-                                      ? 'bg-amber-950/70 border-amber-500/50 text-amber-300'
-                                      : 'bg-[#181a1f] border-[#2b2e35] text-[#999ba5] hover:text-white'
-                                  }`}
+                                  className={`hr-btn text-[11px] font-medium px-2.5 py-1 rounded transition border`}
                                 >
                                   {isEditing ? 'Save' : 'Edit'}
                                 </button>
@@ -498,11 +512,7 @@ export default function HandoverReviewPage({
                                 <button
                                   type="button"
                                   onClick={() => handleRejectClaim(claim.id)}
-                                  className={`text-[11px] font-medium px-2.5 py-1 rounded transition border ${
-                                    isRejected
-                                      ? 'bg-rose-950/70 border-rose-500/50 text-rose-300'
-                                      : 'bg-[#181a1f] border-[#2b2e35] text-[#999ba5] hover:text-rose-400'
-                                  }`}
+                                  className={`hr-btn text-[11px] font-medium px-2.5 py-1 rounded transition border`}
                                 >
                                   Reject
                                 </button>
@@ -517,17 +527,20 @@ export default function HandoverReviewPage({
                                   onChange={(e) => setEditText(e.target.value)}
                                   rows={2}
                                   className="w-full bg-[#0c0d0e] border border-emerald-500/50 rounded p-2.5 text-xs text-white outline-none font-sans leading-relaxed"
+                                  style={{ width: '100%', background: '#0c0d0e', border: '1px solid rgba(52,211,153,0.5)', borderRadius: 6, padding: '8px 10px', color: '#fff' }}
                                 />
-                                <div className="flex gap-2">
+                                <div className="flex gap-2" style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                                   <button
                                     onClick={() => saveEdit(claim.id)}
                                     className="text-[11px] bg-[#34d399] text-[#0c0d0e] font-semibold px-3 py-1 rounded"
+                                    style={{ background: '#34d399', color: '#0c0d0e', border: 0, padding: '5px 12px', borderRadius: 4, fontWeight: 600, cursor: 'pointer' }}
                                   >
                                     Save
                                   </button>
                                   <button
                                     onClick={() => setEditingClaimId(null)}
                                     className="text-[11px] bg-[#22242a] text-[#a0a5b2] px-3 py-1 rounded"
+                                    style={{ background: '#22242a', color: '#a0a5b2', border: 0, padding: '5px 12px', borderRadius: 4, cursor: 'pointer' }}
                                   >
                                     Cancel
                                   </button>
@@ -540,6 +553,13 @@ export default function HandoverReviewPage({
                                     ? 'line-through text-[#6e727e]'
                                     : 'text-[#e4e7ee]'
                                 }`}
+                                style={{
+                                  fontSize: 13,
+                                  lineHeight: 1.6,
+                                  margin: '8px 0',
+                                  color: isRejected ? '#6e727e' : '#e4e7ee',
+                                  textDecoration: isRejected ? 'line-through' : 'none'
+                                }}
                               >
                                 {claim.claim_text}
                               </p>
@@ -547,7 +567,7 @@ export default function HandoverReviewPage({
 
                             {/* Clickable Citation Badge */}
                             {(claim.citation || (claim.citations && claim.citations.length > 0)) && (
-                              <div className="mt-3 flex items-center gap-2">
+                              <div className="mt-3 flex items-center gap-2" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -556,6 +576,16 @@ export default function HandoverReviewPage({
                                     )
                                   }
                                   className="text-[11px] font-mono text-[#34d399] hover:underline flex items-center gap-1.5 bg-[#0f1613] px-2 py-0.5 rounded border border-[#204434]"
+                                  style={{
+                                    fontSize: 11,
+                                    fontFamily: 'monospace',
+                                    color: '#34d399',
+                                    background: '#0f1613',
+                                    border: '1px solid #204434',
+                                    borderRadius: 4,
+                                    padding: '3px 8px',
+                                    cursor: 'pointer'
+                                  }}
                                 >
                                   <span>📎 Source:</span>
                                   <span>
@@ -568,23 +598,23 @@ export default function HandoverReviewPage({
 
                             {/* Expandable Citation Details Card */}
                             {activeCitationSource === claim.id && (
-                              <div className="mt-3 p-3 bg-[#0d0e11] border border-[#272b33] rounded text-[11px] font-mono space-y-1.5 text-[#a0a5b2]">
-                                <div className="text-emerald-400 font-semibold">
+                              <div className="mt-3 p-3 bg-[#0d0e11] border border-[#272b33] rounded text-[11px] font-mono space-y-1.5 text-[#a0a5b2]" style={{ marginTop: 10, padding: 12, background: '#0d0e11', border: '1px solid #272b33', borderRadius: 6, fontSize: 11, fontFamily: 'monospace', color: '#a0a5b2' }}>
+                                <div className="text-emerald-400 font-semibold" style={{ color: '#34d399', fontWeight: 600, marginBottom: 4 }}>
                                   Evidence Source Citation:
                                 </div>
                                 <div>
                                   • Ref:{' '}
-                                  <span className="text-white">
+                                  <span className="text-white" style={{ color: '#fff' }}>
                                     {claim.citation || 'AI Coding Agent Session Memory'}
                                   </span>
                                 </div>
                                 <div>
                                   • Verification Protocol:{' '}
-                                  <span className="text-white">
+                                  <span className="text-white" style={{ color: '#fff' }}>
                                     Baton Local MCP Client-Side SHA256 & Secret Sanitized
                                   </span>
                                 </div>
-                                <div className="text-[#646a78] text-[10px]">
+                                <div className="text-[#646a78] text-[10px]" style={{ color: '#646a78', fontSize: 10, marginTop: 4 }}>
                                   Linked via claim_citations to immutable Supabase Postgres audit record.
                                 </div>
                               </div>
@@ -602,8 +632,8 @@ export default function HandoverReviewPage({
       </main>
 
       {/* Sticky Bottom Action Bar */}
-      <footer className="fixed bottom-0 left-0 right-0 border-t border-[#27282d] bg-[#111215]/95 backdrop-blur z-40">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+      <footer className="hr-footer border-t border-[#27282d] bg-[#111215]/95 backdrop-blur z-40">
+        <div className="hr-footer-inner max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3 text-xs text-[#999ba5]">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
             <span>

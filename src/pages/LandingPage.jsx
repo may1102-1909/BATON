@@ -6,7 +6,18 @@ import { Link } from '../router'
 
 export function LandingPage() {
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#08080a] text-[#f4f4f5] select-none font-sans">
+    <div
+      style={{
+        position: 'relative',
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        backgroundColor: '#08080a',
+        color: '#f4f4f5',
+        userSelect: 'none',
+        fontFamily: "'Inter', sans-serif"
+      }}
+    >
       <style>{`
         @keyframes navbarFadeSlideDown {
           0% {
@@ -22,42 +33,107 @@ export function LandingPage() {
 
       {/* Sleek Minimalist Top Navigation Bar */}
       <header
-        className="absolute top-0 left-0 right-0 z-50 h-[72px] flex items-center justify-between px-6 sm:px-12 pointer-events-auto"
         style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          height: 72,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 36px',
+          pointerEvents: 'auto',
           animation: 'navbarFadeSlideDown 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both'
         }}
       >
-        <Link to="/" className="flex items-center gap-3 no-underline">
+        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
           <Brand size={22} />
         </Link>
 
         {/* Top Navigation Links */}
-        <div className="flex items-center gap-3">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Link
             to="/dashboard"
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#2e3239] bg-[#14161a]/70 backdrop-blur-md text-[#d0d4dc] text-[12px] font-medium hover:border-[#10b981]/50 hover:text-white transition-all no-underline cursor-pointer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 14px',
+              borderRadius: 8,
+              border: '1px solid #2e3239',
+              background: 'rgba(20, 22, 26, 0.75)',
+              backdropFilter: 'blur(12px)',
+              color: '#d0d4dc',
+              fontSize: 12,
+              fontWeight: 500,
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
           >
             <span>Dashboard</span>
           </Link>
 
           <Link
             to="/handover/active"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#2e3239] bg-[#14161a]/70 backdrop-blur-md text-[#d0d4dc] text-[12px] font-medium hover:border-[#34d399]/50 hover:text-emerald-400 transition-all no-underline cursor-pointer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 14px',
+              borderRadius: 8,
+              border: '1px solid rgba(52, 211, 153, 0.35)',
+              background: 'rgba(16, 185, 129, 0.1)',
+              backdropFilter: 'blur(12px)',
+              color: '#34d399',
+              fontSize: 12,
+              fontWeight: 500,
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-[#34d399]" />
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399' }} />
             <span>Review Handover</span>
           </Link>
 
           <Link
             to="/auth"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-[#2e3239] bg-[#14161a]/70 backdrop-blur-md text-[#e2e8f0] text-[12px] font-medium hover:border-[#10b981]/50 hover:text-white transition-all no-underline cursor-pointer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 14px',
+              borderRadius: 8,
+              border: '1px solid #2e3239',
+              background: 'rgba(20, 22, 26, 0.75)',
+              backdropFilter: 'blur(12px)',
+              color: '#e2e8f0',
+              fontSize: 12,
+              fontWeight: 500,
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
           >
             <span>Sign In</span>
           </Link>
 
           <Link
             to="/dashboard"
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-[#10b981] text-[#042f21] text-[12px] font-semibold font-sans transition-all hover:bg-[#34d399] hover:shadow-[0_0_24px_rgba(16,185,129,0.4)] no-underline cursor-pointer shadow-md"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '7px 16px',
+              borderRadius: 8,
+              background: '#10b981',
+              color: '#042f21',
+              fontSize: 12,
+              fontWeight: 600,
+              textDecoration: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.25)'
+            }}
           >
             <span>Launch App</span>
             <Icon size={12} />
@@ -66,24 +142,72 @@ export function LandingPage() {
       </header>
 
       {/* Floating Bottom Quick-Access Bar */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
-        <div className="flex items-center gap-2 bg-[#121417]/80 backdrop-blur-md border border-[#272a30] px-4 py-2 rounded-full shadow-2xl">
-          <span className="text-[11px] font-mono text-[#8a8f9c] mr-1 hidden sm:inline">Explore Baton:</span>
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 50,
+          pointerEvents: 'auto'
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'rgba(18, 20, 23, 0.85)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid #272a30',
+            padding: '8px 16px',
+            borderRadius: 9999,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+          }}
+        >
+          <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#8a8f9c', marginRight: 4 }}>
+            Explore Baton:
+          </span>
           <Link
             to="/dashboard"
-            className="text-[11px] font-medium text-[#d0d4dc] hover:text-[#34d399] px-2.5 py-1 rounded bg-[#1a1d22] hover:bg-[#20252c] transition no-underline"
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              color: '#d0d4dc',
+              padding: '5px 10px',
+              borderRadius: 6,
+              background: '#1a1d22',
+              textDecoration: 'none'
+            }}
           >
             📊 Dashboard
           </Link>
           <Link
             to="/handover/active"
-            className="text-[11px] font-medium text-[#34d399] hover:text-emerald-300 px-2.5 py-1 rounded bg-[#10b98115] border border-[#25523f] hover:bg-[#10b98125] transition no-underline"
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              color: '#34d399',
+              padding: '5px 10px',
+              borderRadius: 6,
+              background: 'rgba(16, 185, 129, 0.12)',
+              border: '1px solid #25523f',
+              textDecoration: 'none'
+            }}
           >
             ⚡ Handover Review
           </Link>
           <Link
             to="/auth"
-            className="text-[11px] font-medium text-[#d0d4dc] hover:text-white px-2.5 py-1 rounded bg-[#1a1d22] hover:bg-[#20252c] transition no-underline"
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              color: '#d0d4dc',
+              padding: '5px 10px',
+              borderRadius: 6,
+              background: '#1a1d22',
+              textDecoration: 'none'
+            }}
           >
             🔐 Auth
           </Link>
@@ -91,7 +215,7 @@ export function LandingPage() {
       </div>
 
       {/* Full-Screen Centered 3D Paper Canvas */}
-      <div className="absolute inset-0 w-full h-full">
+      <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
         <Scene variant="original" />
       </div>
     </div>
