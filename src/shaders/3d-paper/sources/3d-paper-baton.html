@@ -17,16 +17,19 @@ body{
 }
 .mono{font-size:10px;letter-spacing:.2em;text-transform:uppercase;font-weight:500;color:var(--dim)}
 
-/* ---------- background: one giant word, nothing else ---------- */
-#bg{position:fixed;inset:0;z-index:1;overflow:hidden}
+/* ---------- background: one giant word with ambient dark emerald halo ---------- */
+#bg{
+  position:fixed;inset:0;z-index:1;overflow:hidden;
+  background: radial-gradient(ellipse 70% 50% at 50% 50%, rgba(6, 78, 59, 0.25) 0%, transparent 70%);
+}
 #bg h1{
   position:absolute;left:50%;top:50%;
   font-family:"Syne", "Space Grotesk", sans-serif;font-weight:900;letter-spacing:-0.055em;
   font-size:clamp(100px, 21.5vw, 450px);line-height:.8;white-space:nowrap;
-  color:#10B981;
-  opacity:0.42;
-  filter: drop-shadow(0 0 60px rgba(16, 185, 129, 0.25)) drop-shadow(0 0 120px rgba(52, 211, 153, 0.18));
-  text-shadow: 0 0 40px rgba(16, 185, 129, 0.38), 0 0 90px rgba(52, 211, 153, 0.25);
+  color:#065f46;
+  opacity:0.25;
+  filter: drop-shadow(0 0 40px rgba(6, 78, 59, 0.35));
+  text-shadow: 0 0 30px rgba(6, 78, 59, 0.45);
   -webkit-user-select:none;user-select:none;pointer-events:none;
   animation: batonBgIntro 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards,
              batonBgPulse 7s ease-in-out 1.2s infinite alternate;
@@ -39,7 +42,7 @@ body{
     transform: translate(-50%, -50%) scale(0.92);
   }
   100% {
-    opacity: 0.42;
+    opacity: 0.25;
     transform: translate(-50%, -50%) scale(1);
   }
 }
@@ -47,11 +50,11 @@ body{
 @keyframes batonBgPulse {
   0% {
     transform: translate(-50%, -50%) scale(1);
-    opacity: 0.38;
+    opacity: 0.22;
   }
   100% {
     transform: translate(-50%, -50%) scale(1.02);
-    opacity: 0.45;
+    opacity: 0.28;
   }
 }
 
@@ -179,71 +182,94 @@ function drawGlass(ctx){
   ctx.font="600 20px \"Space Grotesk\", sans-serif";
   ctx.fillText("®", M + 50 + bw + 4, 126);
 
+  // Sub-Badge: TEAM MUMBAI_WALE on top right
+  const badgeW = 240, badgeH = 42;
+  const badgeX = 1200 - M - badgeW, badgeY = 118;
+  ctx.fillStyle = "rgba(16, 185, 129, 0.12)";
+  rr(ctx, badgeX, badgeY, badgeW, badgeH, 6); ctx.fill();
+  ctx.strokeStyle = "rgba(16, 185, 129, 0.40)"; ctx.lineWidth = 1;
+  rr(ctx, badgeX, badgeY, badgeW, badgeH, 6); ctx.stroke();
+  ctx.fillStyle = "#10b981";
+  ctx.beginPath(); ctx.arc(badgeX + 20, badgeY + 21, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.font = "600 15px \"JetBrains Mono\", monospace";
+  ctx.fillStyle = "#34d399";
+  ctx.fillText("TEAM MUMBAI_WALE", badgeX + 34, badgeY + 27);
+
   // Separator line
   ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(M, 220); ctx.lineTo(1200 - M, 220); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(M, 205); ctx.lineTo(1200 - M, 205); ctx.stroke();
 
   // --- Main Heading: Pass the knowledge, not just the code. (Space Grotesk) ---
-  ctx.font="700 86px \"Space Grotesk\", sans-serif";
+  ctx.font="700 80px \"Space Grotesk\", sans-serif";
   ctx.fillStyle="#ffffff";
-  ctx.fillText("Pass the knowledge,", M, 370);
+  ctx.fillText("Pass the knowledge,", M, 310);
   ctx.fillStyle="rgba(255, 255, 255, 0.44)";
-  ctx.fillText("not just ", M, 465);
+  ctx.fillText("not just ", M, 395);
   const njw = ctx.measureText("not just ").width;
-  ctx.fillStyle="#10b981";
-  ctx.fillText("the code.", M + njw, 465);
+  ctx.fillStyle="#34d399";
+  ctx.fillText("the code.", M + njw, 395);
+
+  // Project Details
+  ctx.font = "600 18px \"JetBrains Mono\", monospace";
+  ctx.fillStyle = "#6ee7b7";
+  ctx.fillText("CodersInPune Hackathon 2026 · Track: Full Stack", M, 460);
+
+  // Body Note
+  ctx.font = "500 18px \"Space Grotesk\", sans-serif";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+  ctx.fillText("Autonomous developer handover platform powered by MCP & Supabase.", M, 498);
 
   // Separator line
   ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(M, 570); ctx.lineTo(1200 - M, 570); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(M, 550); ctx.lineTo(1200 - M, 550); ctx.stroke();
 
   // --- Clean Minimal Monospace Team Roster Section ---
-  ctx.font="700 18px \"JetBrains Mono\", monospace";
+  ctx.font="700 22px \"JetBrains Mono\", monospace";
   ctx.fillStyle="#10b981";
-  ctx.fillText("// PROJECT CONTRIBUTORS", M, 640);
-
-  ctx.font="700 32px \"Space Grotesk\", sans-serif";
-  ctx.fillStyle="#ffffff";
-  ctx.fillText("TEAM MUMBAI_WALE", M, 700);
+  ctx.fillText("// TEAM MUMBAI_WALE", M, 620);
 
   const contributors = [
-    { bullet: "•", name: "Anjana G P", role: "Frontend & Design Lead" },
-    { bullet: "•", name: "Mayank", role: "Backend & Systems Lead" },
-    { bullet: "•", name: "Vikrant", role: "Full Stack & Cloud" }
+    { name: "Vikrant GP", role: "Frontend & Design Lead" },
+    { name: "Tanmay Khurpe", role: "Backend Developer" },
+    { name: "Krishna Gupta", role: "UI/UX Designer & Business Analyst" },
+    { name: "Komal Chaurasiya", role: "QA & User Experience Lead" }
   ];
 
-  let rosterY = 760;
+  let rosterY = 670;
   contributors.forEach((c) => {
     // Subtle frosted card row
     ctx.fillStyle = "rgba(255, 255, 255, 0.035)";
-    rr(ctx, M, rosterY, 1048, 68, 8); ctx.fill();
+    rr(ctx, M, rosterY, 1048, 62, 8); ctx.fill();
     ctx.strokeStyle = "rgba(255, 255, 255, 0.10)"; ctx.lineWidth = 1;
-    rr(ctx, M, rosterY, 1048, 68, 8); ctx.stroke();
+    rr(ctx, M, rosterY, 1048, 62, 8); ctx.stroke();
 
-    // Monospace text: • Name — Role
-    ctx.font = "700 24px \"JetBrains Mono\", monospace";
+    // Emerald Bullet
+    ctx.font = "700 22px \"JetBrains Mono\", monospace";
     ctx.fillStyle = "#10b981";
-    ctx.fillText(c.bullet, M + 28, rosterY + 42);
+    ctx.fillText("•", M + 24, rosterY + 38);
 
-    ctx.font = "600 21px \"JetBrains Mono\", monospace";
+    // Member Name
+    ctx.font = "600 20px \"JetBrains Mono\", monospace";
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(c.name, M + 58, rosterY + 42);
+    ctx.fillText(c.name, M + 52, rosterY + 38);
     const nw = ctx.measureText(c.name).width;
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
-    ctx.fillText(" — ", M + 58 + nw, rosterY + 42);
+    // Em-dash
+    ctx.fillStyle = "rgba(255, 255, 255, 0.40)";
+    ctx.fillText(" — ", M + 52 + nw, rosterY + 38);
     const dw = ctx.measureText(" — ").width;
 
-    ctx.font = "500 20px \"JetBrains Mono\", monospace";
+    // Member Role
+    ctx.font = "500 18px \"JetBrains Mono\", monospace";
     ctx.fillStyle = "#a7f3d0";
-    ctx.fillText(c.role, M + 58 + nw + dw, rosterY + 42);
+    ctx.fillText(c.role, M + 52 + nw + dw, rosterY + 38);
 
-    rosterY += 88;
+    rosterY += 76;
   });
 
   // Separator line
   ctx.strokeStyle="rgba(255,255,255,.10)"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(M, 1050); ctx.lineTo(1200 - M, 1050); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(M, 1030); ctx.lineTo(1200 - M, 1030); ctx.stroke();
 
   // Vertical watermark on right edge
   ctx.save(); ctx.translate(1200 - M - 12, 1180); ctx.rotate(Math.PI / 2);
@@ -287,11 +313,17 @@ function makeCertTexture(){
 })();
 
 /* ======================================================================
-   3. SCENE
+   3. SCENE (Optimized with high-performance flags, no AA, capped DPR)
    ====================================================================== */
 const canvas = document.getElementById('gl');
-const renderer = new T.WebGLRenderer({canvas, antialias:true, alpha:true,
-                                      powerPreference:'high-performance'});
+const renderer = new T.WebGLRenderer({
+  canvas,
+  antialias: false,
+  alpha: true,
+  depth: true,
+  stencil: false,
+  powerPreference: 'high-performance'
+});
 renderer.outputEncoding = T.sRGBEncoding;
 renderer.toneMapping = T.NoToneMapping;
 
@@ -330,9 +362,9 @@ scene.add(key,fill,rim,new T.AmbientLight(0xffffff,0.16));
 const touchLight = new T.PointLight(0xdfe8ff, 0, 7.5, 1.35);
 touchLight.position.set(0,0,1.7); scene.add(touchLight);
 
-/* ---- geometry + the bend (optimized 32x32 mesh for high-performance 60fps) ---- */
+/* ---- geometry + the bend (optimized 16x16 mesh for ultra-smooth 60fps) ---- */
 const SW = 2.30, SH = 2.72;
-const geo = new T.PlaneGeometry(SW,SH,32,32);
+const geo = new T.PlaneGeometry(SW,SH,16,16);
 
 const uni = {
   uTime:{value:0}, uAmp:{value:1.18}, uFreq:{value:4.70}, uTwist:{value:1.30},
@@ -525,10 +557,8 @@ window.addEventListener('pointermove', e=>{
 }, {passive:true});
 
 window.addEventListener('pointerdown', e=>{
-  if(inQuad(e.clientX,e.clientY)){
-    dragging=true; moved=0; lastPX=e.clientX; lastPY=e.clientY;
-    velYaw=velPitch=0; prevYaw=dragYaw; prevPitch=dragPitch;
-  }
+  dragging=true; moved=0; lastPX=e.clientX; lastPY=e.clientY;
+  velYaw=velPitch=0; prevYaw=dragYaw; prevPitch=dragPitch;
 });
 window.addEventListener('pointerup', ()=>{
   if(dragging){ dragging=false; release=0.6; }
@@ -541,7 +571,7 @@ window.addEventListener('pointerleave', ()=>{ hoverTarget=0; });
 let vw=0, vh=0;
 function resize(){
   vw = window.innerWidth; vh = window.innerHeight;
-  const dpr = Math.min(typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1, 1.5);
+  const dpr = Math.min(typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1, 1.25);
   renderer.setPixelRatio(dpr);
   renderer.setSize(vw,vh,false);
   camera.aspect = vw/vh; camera.updateProjectionMatrix();
@@ -595,10 +625,9 @@ function frame(){
   }
   prevYaw = dragYaw; prevPitch = dragPitch;
 
-  // Linear interpolation with damping factor (0.065) for ultra-smooth 60fps tracking
-  const damping = 0.065;
-  mouse.x += (mouse.tx - mouse.x) * damping;
-  mouse.y += (mouse.ty - mouse.y) * damping;
+  // Damped linear interpolation with MathUtils.lerp at 0.05 factor for buttery smooth frame rate
+  mouse.x = T.MathUtils.lerp(mouse.x, mouse.tx, 0.05);
+  mouse.y = T.MathUtils.lerp(mouse.y, mouse.ty, 0.05);
   const idle = REDUCED ? 0 : 1;
   const rise = 1 - intro;
 
@@ -606,11 +635,11 @@ function frame(){
   const targetRotX = dragPitch - mouse.y * 0.11 + Math.sin(t * 0.19) * 0.026 * idle + rise * 0.28;
   const targetPosX = Math.sin(t * 0.21) * 0.05 * idle + mouse.x * 0.10;
 
-  group.rotation.y += (targetRotY - group.rotation.y) * damping;
-  group.rotation.x += (targetRotX - group.rotation.x) * damping;
+  group.rotation.y = T.MathUtils.lerp(group.rotation.y, targetRotY, 0.05);
+  group.rotation.x = T.MathUtils.lerp(group.rotation.x, targetRotX, 0.05);
   group.rotation.z = Math.sin(t * 0.27) * 0.018 * idle;
   group.position.y = Math.sin(t * 0.36) * 0.06 * idle - rise * 0.7;
-  group.position.x += (targetPosX - group.position.x) * damping;
+  group.position.x = T.MathUtils.lerp(group.position.x, targetPosX, 0.05);
   group.updateMatrixWorld();
 
   hover += (hoverTarget - hover) * Math.min(1, dt*4.5);

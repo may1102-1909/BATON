@@ -37,8 +37,9 @@ function AppRoutes() {
     )
   }
 
-  if (cleanPath === '/classic') {
-    return <ClassicApp initialScreen="landing" />
+  if (cleanPath === '/classic' || cleanPath.startsWith('/classic')) {
+    const isClassicDashboard = path.includes('view=dashboard') || cleanPath === '/classic/dashboard'
+    return <ClassicApp initialScreen={isClassicDashboard ? 'dashboard' : 'landing'} />
   }
 
   // Root URL ('/' or '/landing') is the dedicated standalone 3D Paper Landing Page
