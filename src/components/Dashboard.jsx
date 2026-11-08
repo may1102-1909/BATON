@@ -16,11 +16,11 @@ const C = {
 
 const initialMockDecisions = [
   {
-    id: 'dec-rls-supabase',
+    id: 'dec-rls-pgvector',
     decision: 'Chose Supabase Postgres over Firebase',
-    reason: 'Row-Level Security (RLS) requirements and fine-grained data access control.',
-    alternatives: ['Firebase Firestore', 'Custom PostgreSQL with Auth0'],
-    files_affected: ['supabase/schema.sql', 'src/lib/supabase.js', 'src/lib/db.js'],
+    reason: 'Strict Row-Level Security requirements and pgvector support for AI semantic search and agent memory indexing.',
+    alternatives: ['Firebase Firestore', 'Custom PostgreSQL with Auth0 and Pinecone'],
+    files_affected: ['supabase/schema.sql', 'src/lib/supabase.js', 'src/lib/db.js', '.env.local'],
     status: 'Verified',
     citation: 'baton:log_decision',
     timestamp: 'Just now'
