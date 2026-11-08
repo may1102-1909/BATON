@@ -6,12 +6,13 @@ function getSupabaseClient() {
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
-    'https://puohpeyfzpjmxnqkkgk.supabase.co'
+    'https://puohpeyfzpjmxnqkkkgh.supabase.co'
 
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    'sb_publishable_2STXI3jUoTBKQIIq67U3lw_El49ZsZb'
+    process.env.SUPABASE_ANON_KEY ||
+    ''
 
   return createClient(supabaseUrl, supabaseKey)
 }
