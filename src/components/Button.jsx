@@ -34,3 +34,4 @@ export function Button({ primary, style, children, ...props }) {
     </button>
   )
 }
+

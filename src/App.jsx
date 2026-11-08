@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react'
 import { Brand } from './components/Brand'
 import { Icon } from './components/Icon'
 import { Button } from './components/Button'
-import { Preview } from './components/Preview'
 import { Auth } from './components/Auth'
 
 const C = {
@@ -20,9 +19,7 @@ export default function App({
 }) {
   const [view, setView] = useState(initialScreen)
   const [mode, setMode] = useState('login')
-  const [expanded, setExpanded] = useState(-1)
 
-  const demoRef = useRef(null)
   const featuresRef = useRef(null)
   const architectureRef = useRef(null)
   const docsRef = useRef(null)
@@ -94,7 +91,6 @@ export default function App({
             {[
               ['Features', featuresRef],
               ['Architecture', architectureRef],
-              ['Live Demo', demoRef],
               ['Docs', docsRef]
             ].map(([label, ref]) => (
               <button
@@ -148,19 +144,20 @@ export default function App({
         <div className="bt-shell">
           {/* Hero Section */}
           <section className="bt-hero">
-            <div>
+            <div style={{ maxWidth: 780, margin: '0 auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <span
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 8,
-                  fontSize: 10,
+                  fontSize: 11,
                   color: '#b3b9b5',
                   border: '1px solid #284435',
                   background: '#10b98108',
                   borderRadius: 30,
-                  padding: '6px 12px',
-                  fontWeight: 500
+                  padding: '6px 14px',
+                  fontWeight: 500,
+                  marginBottom: 10
                 }}
               >
                 <span
@@ -185,11 +182,11 @@ export default function App({
 
               <p
                 style={{
-                  fontSize: 14,
+                  fontSize: 16,
                   color: C.muted,
                   lineHeight: 1.85,
-                  maxWidth: 440,
-                  margin: '0 0 26px'
+                  maxWidth: 580,
+                  margin: '0 auto 30px'
                 }}
               >
                 When engineers leave, the code stays but the reasoning
@@ -199,19 +196,14 @@ export default function App({
                 door.
               </p>
 
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <Button primary onClick={() => auth('signup')}>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <Button primary onClick={() => auth('signup')} style={{ padding: '14px 26px', fontSize: 14 }}>
                   Get Started
                   <Icon size={16} />
                 </Button>
-                <Button
-                  onClick={() => {
-                    setExpanded(0)
-                    scroll(demoRef)
-                  }}
-                >
-                  View Live Demo
-                  <Icon name="external" size={14} />
+                <Button onClick={() => scroll(featuresRef)} style={{ padding: '14px 24px', fontSize: 14 }}>
+                  Explore Features
+                  <Icon size={16} />
                 </Button>
               </div>
 
@@ -222,41 +214,12 @@ export default function App({
                   gap: 6,
                   fontSize: 11,
                   color: '#747982',
-                  marginTop: 22
+                  marginTop: 26
                 }}
               >
                 <Icon name="shield" size={12} />
                 Project-scoped. Secret-redacted. Always cited.
               </p>
-            </div>
-
-            {/* Interactive Handover Card Demo */}
-            <div ref={demoRef}>
-              <Preview expanded={expanded} setExpanded={setExpanded} />
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 7,
-                  color: '#69716f',
-                  fontSize: 9,
-                  marginTop: 15,
-                  fontFamily: 'monospace',
-                  letterSpacing: 0.5
-                }}
-              >
-                <span
-                  style={{
-                    width: 4,
-                    height: 4,
-                    background: C.green,
-                    borderRadius: 10,
-                    display: 'inline-block'
-                  }}
-                />
-                REAL CONTEXT. TRACEABLE SOURCES. ZERO GUESSWORK.
-              </div>
             </div>
           </section>
 
@@ -491,7 +454,7 @@ export default function App({
                   userSelect: 'none'
                 }}
               >
-                Developer notes · How this demo works
+                Developer notes · How this works
               </summary>
               <p
                 style={{
@@ -502,12 +465,7 @@ export default function App({
                   marginTop: 12
                 }}
               >
-                Explore the handover by selecting any claim or source tag. The
-                citations are illustrative sample data. Authentication is
-                simulated locally: GitHub never connects, magic links are not
-                sent, and no personal data is stored. Production integration
-                requires connecting an authentication provider and project-scoped
-                sources.
+                Baton captures architectural decisions and citations from pull requests, commit traces, and agent conversation context. Authentication is simulated locally: GitHub never connects, magic links are not sent, and no personal data is stored. Production integration requires connecting an authentication provider and project-scoped sources.
               </p>
             </details>
           </section>

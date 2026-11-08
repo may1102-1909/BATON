@@ -64,12 +64,13 @@ button:disabled {
 }
 
 .bt-hero {
-  display: grid;
-  grid-template-columns: 1.05fr 1fr;
-  gap: 56px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding-top: 83px;
-  padding-bottom: 76px;
+  justify-content: center;
+  text-align: center;
+  padding-top: 104px;
+  padding-bottom: 84px;
 }
 
 .bt-title {
@@ -116,9 +117,6 @@ button:disabled {
   .bt-shell {
     max-width: 1240px;
   }
-  .bt-hero {
-    gap: 80px;
-  }
 }
 
 @media (max-width: 950px) {
@@ -127,9 +125,6 @@ button:disabled {
   }
   .bt-round {
     display: none !important;
-  }
-  .bt-hero {
-    gap: 30px;
   }
   .bt-title {
     font-size: 49px;
@@ -148,10 +143,8 @@ button:disabled {
     padding: 0 22px;
   }
   .bt-hero {
-    grid-template-columns: 1fr;
-    padding-top: 48px;
+    padding-top: 56px;
     padding-bottom: 50px;
-    gap: 44px;
   }
   .bt-title {
     font-size: 42px;
@@ -188,3 +181,4 @@ button:disabled {
     scroll-behavior: auto !important;
   }
 }
+

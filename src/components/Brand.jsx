@@ -32,3 +32,4 @@ export function Brand({ size = 23 }) {
     </span>
   )
 }
+

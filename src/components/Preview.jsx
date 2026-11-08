@@ -54,7 +54,6 @@ export function Preview({ expanded, setExpanded }) {
         overflow: 'hidden'
       }}
     >
-      {/* Code window title bar */}
       <div
         style={{
           padding: '15px 20px',
@@ -86,7 +85,6 @@ export function Preview({ expanded, setExpanded }) {
         </span>
       </div>
 
-      {/* Handover preview header */}
       <div
         style={{
           padding: '24px 22px 20px',
@@ -107,8 +105,7 @@ export function Preview({ expanded, setExpanded }) {
               fontSize: 10,
               color: C.green,
               letterSpacing: 1.5,
-              fontFamily: 'monospace',
-              fontWeight: 600
+              fontFamily: 'monospace'
             }}
           >
             HANDOVER PREVIEW
@@ -145,12 +142,11 @@ export function Preview({ expanded, setExpanded }) {
 
         <div style={{ fontSize: 11, color: '#92959e', marginTop: 7 }}>
           Backend role{' '}
-          <span style={{ color: '#45484f', margin: '0 7px' }}>/</span> Project:
+          <span style={{ color: '#45484f', margin: '0 7px' }}>/</span> Project:{' '}
           core-platform
         </div>
       </div>
 
-      {/* Claims List */}
       <div style={{ padding: '4px 20px' }}>
         {claims.map((c, i) => (
           <div
@@ -192,8 +188,7 @@ export function Preview({ expanded, setExpanded }) {
                     background: `${c.color}12`,
                     border: `1px solid ${c.color}27`,
                     padding: '3px 6px',
-                    borderRadius: 4,
-                    fontWeight: 500
+                    borderRadius: 4
                   }}
                 >
                   {i === 0 ? (
@@ -210,16 +205,7 @@ export function Preview({ expanded, setExpanded }) {
                   )}
                   {c.status}
                 </span>
-                <span
-                  style={{
-                    transform: expanded === i ? 'rotate(90deg)' : 'none',
-                    transition: 'transform 0.2s ease',
-                    display: 'inline-flex',
-                    color: '#85888e'
-                  }}
-                >
-                  <Icon name="chevron" size={12} />
-                </span>
+                <Icon name="chevron" size={12} />
               </div>
               <div style={{ fontSize: 12, lineHeight: 1.7, maxWidth: 350 }}>
                 {c.title}
@@ -251,21 +237,16 @@ export function Preview({ expanded, setExpanded }) {
                   borderRadius: 5,
                   fontSize: 11,
                   lineHeight: 1.8,
-                  color: '#a7b6ae',
-                  animation: 'fadeIn 0.2s ease-out'
+                  color: '#a7b6ae'
                 }}
               >
                 <div
                   style={{
                     color: C.green,
                     fontFamily: 'monospace',
-                    marginBottom: 5,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6
+                    marginBottom: 5
                   }}
                 >
-                  <Icon name="code" size={12} />
                   {c.file}
                 </div>
                 {c.snippet}
@@ -275,7 +256,6 @@ export function Preview({ expanded, setExpanded }) {
         ))}
       </div>
 
-      {/* Footer bar */}
       <div
         style={{
           padding: '14px 20px',
@@ -289,9 +269,9 @@ export function Preview({ expanded, setExpanded }) {
         }}
       >
         <Icon name="lock" size={11} />
-        <span>3 secrets redacted</span>
+        3 secrets redacted
         <span style={{ margin: '0 3px' }}>·</span>
-        <span>2 items hidden for role clearance</span>
+        2 items hidden for role clearance
       </div>
     </div>
   )

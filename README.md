@@ -50,3 +50,4 @@
 - **Vite 6**
 - **Inter & JetBrains Mono Fonts**
 - **Custom SVG Icons & Components**
+
