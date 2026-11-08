@@ -8,7 +8,6 @@ import { TerminalDemo } from './components/TerminalDemo'
 import { Comparison } from './components/Comparison'
 import { CtaBanner } from './components/CtaBanner'
 import { supabase } from './lib/supabase'
-import { useRouter } from './router'
 
 const C = {
   bg: '#0c0d0e',
@@ -25,7 +24,6 @@ export default function App({
   primaryActionLabel = 'Get Started',
   onPrimaryAction = null
 }) {
-  const { navigate } = useRouter()
   // Support deep-linking to /dashboard or /auth based on pathname
   const [view, setView] = useState(() => {
     if (typeof window !== 'undefined' && window.location.pathname === '/dashboard') {
@@ -80,28 +78,16 @@ export default function App({
   function auth(m = 'signup') {
     setMode(m)
     setView('auth')
-    navigate('/auth')
+    if (window.location.pathname !== '/auth') {
+      window.history.pushState(null, '', '/auth')
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function navigateTo(path, targetView) {
-    if (path === '/' || path === '/landing') {
-      navigate('/')
-      return
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, '', path)
     }
-    if (path === '/dashboard') {
-      navigate('/dashboard')
-      return
-    }
-    if (path === '/review') {
-      navigate('/review')
-      return
-    }
-    if (path === '/tasks') {
-      navigate('/tasks')
-      return
-    }
-    navigate(path)
     setView(targetView)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -176,20 +162,7 @@ export default function App({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button
-              onClick={() => navigateTo('/', 'landing')}
-              style={{
-                background: 'none',
-                border: 0,
-                padding: 0,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center'
-              }}
-              title="Return to 3D Paper"
-            >
-              <Brand />
-            </button>
+            <Brand />
             <span
               className="bt-round"
               style={{
@@ -206,40 +179,6 @@ export default function App({
           </div>
 
           <nav className="bt-navlinks" aria-label="Main navigation">
-            <button
-              className="bt-text"
-              onClick={() => navigateTo('/', 'landing')}
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: C.green,
-                border: 0,
-                padding: 0,
-                background: 'none',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5
-              }}
-            >
-              <Icon name="back" size={12} />
-              3D Paper
-            </button>
-            <button
-              className="bt-text"
-              onClick={() => navigateTo('/dashboard', 'dashboard')}
-              style={{
-                fontSize: 12,
-                fontWeight: 500,
-                color: C.muted,
-                border: 0,
-                padding: 0,
-                background: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              Dashboard
-            </button>
             {[
               ['Features', featuresRef],
               ['Workflow', workflowRef],
