@@ -4,7 +4,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0b0d'/%3E%3Ccircle cx='13' cy='19' r='6' fill='%23fff'/%3E%3Ccircle cx='25' cy='23' r='2.6' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Syne:wght@700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{ --bg:#08080a; --ink:#f2f2f0; --dim:rgba(242,242,240,.38); }
 *{margin:0;padding:0;box-sizing:border-box}
@@ -20,11 +20,41 @@ body{
 /* ---------- background: one giant word, nothing else ---------- */
 #bg{position:fixed;inset:0;z-index:1;overflow:hidden}
 #bg h1{
-  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  font-family:"Inter Tight",sans-serif;font-weight:600;letter-spacing:-.055em;
-  font-size:clamp(96px,18.6vw,420px);line-height:.8;white-space:nowrap;
-  color:rgba(242,242,240,.125);
-  -webkit-user-select:none;user-select:none;
+  position:absolute;left:50%;top:50%;
+  font-family:"Syne", "Space Grotesk", sans-serif;font-weight:900;letter-spacing:-0.055em;
+  font-size:clamp(100px, 21.5vw, 450px);line-height:.8;white-space:nowrap;
+  color:rgba(16, 185, 129, 0.24);
+  text-shadow: 0 0 60px rgba(16, 185, 129, 0.32), 0 0 140px rgba(52, 211, 153, 0.18);
+  -webkit-user-select:none;user-select:none;pointer-events:none;
+  animation: batonBgIntro 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+             batonBgPulse 7s ease-in-out 1.2s infinite alternate;
+  will-change: transform, opacity, filter;
+}
+
+@keyframes batonBgIntro {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.92);
+    filter: blur(12px);
+  }
+  100% {
+    opacity: 0.38;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0px);
+  }
+}
+
+@keyframes batonBgPulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.38;
+    text-shadow: 0 0 60px rgba(16, 185, 129, 0.32), 0 0 140px rgba(52, 211, 153, 0.18);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.025);
+    opacity: 0.44;
+    text-shadow: 0 0 80px rgba(16, 185, 129, 0.44), 0 0 160px rgba(52, 211, 153, 0.26);
+  }
 }
 
 /* ---------- layers over it ---------- */
@@ -39,7 +69,7 @@ body{
 #grain2{opacity:.02}
 #vig{position:fixed;inset:0;z-index:5;pointer-events:none;
      background:radial-gradient(120% 90% at 50% 45%,rgba(0,0,0,0) 42%,rgba(0,0,0,.52) 100%)}
-#hint{position:fixed;left:0;right:0;bottom:64px;z-index:6;pointer-events:none;
+#hint{display:none !important;position:fixed;left:0;right:0;bottom:64px;z-index:6;pointer-events:none;
       text-align:center;font-size:10px;letter-spacing:.22em;text-transform:uppercase;
       color:rgba(242,242,240,.30);opacity:0;transition:opacity .8s ease}
 #hint b{font-weight:500;color:rgba(242,242,240,.58)}
@@ -54,7 +84,7 @@ body{
 <div id="grain"></div>
 <div id="grain2"></div>
 <div id="vig"></div>
-<div id="hint"><b>Drag</b> to turn it<span class="ptr"> &nbsp;·&nbsp; <b>Hover</b> to light it</span></div>
+<div id="hint" style="display:none !important"></div>
 
 <script>/**
  * @license
@@ -113,189 +143,152 @@ function signature(ctx,x,y,s,seed,color){
 function drawGlass(ctx){
   ctx.scale(TW/1200, TH/1656);
 
-  ctx.fillStyle='rgba(255,255,255,.030)'; ctx.fillRect(0,0,1200,1656);
-  // a whisper of frost behind the headline
-  const fr=ctx.createLinearGradient(0,180,0,940);
-  fr.addColorStop(0,'rgba(255,255,255,0)');
-  fr.addColorStop(.25,'rgba(255,255,255,.065)');
-  fr.addColorStop(.75,'rgba(255,255,255,.065)');
-  fr.addColorStop(1,'rgba(255,255,255,0)');
-  ctx.fillStyle=fr; ctx.fillRect(40,180,1120,760);
+  ctx.fillStyle="rgba(255,255,255,.030)"; ctx.fillRect(0,0,1200,1656);
+  // Soft luminous frost
+  const fr=ctx.createLinearGradient(0,220,0,980);
+  fr.addColorStop(0,"rgba(255,255,255,0)");
+  fr.addColorStop(.25,"rgba(255,255,255,.060)");
+  fr.addColorStop(.75,"rgba(255,255,255,.060)");
+  fr.addColorStop(1,"rgba(255,255,255,0)");
+  ctx.fillStyle=fr; ctx.fillRect(40,220,1120,760);
 
-  // Outer and inner borders
-  ctx.strokeStyle='rgba(255,255,255,.34)'; ctx.lineWidth=2;
+  // Dual frosted hairline glass borders
+  ctx.strokeStyle="rgba(255,255,255,.34)"; ctx.lineWidth=2;
   rr(ctx,20,20,1160,1616,14); ctx.stroke();
-  ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1;
+  ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1;
   rr(ctx,36,36,1128,1584,10); ctx.stroke();
 
-  const M=74;
+  const M=76;
 
-  // --- Top Monogram / Header: BATON ---
+  // --- Top Monogram / Brand Header in Space Grotesk ---
   ctx.save();
-  ctx.translate(M, 96);
+  ctx.translate(M, 110);
+  ctx.fillStyle="#34d399";
   ctx.beginPath();
-  ctx.fillStyle='#34d399';
   ctx.moveTo(3, 27); ctx.lineTo(19, 5); ctx.lineTo(29, 11); ctx.lineTo(13, 33); ctx.closePath();
   ctx.fill();
-  ctx.fillStyle='#10b981';
+  ctx.fillStyle="#10b981";
+  ctx.beginPath();
   ctx.moveTo(9, 35); ctx.lineTo(25, 13); ctx.lineTo(35, 19); ctx.lineTo(19, 41); ctx.closePath();
   ctx.fill();
   ctx.restore();
 
-  ctx.fillStyle='#ffffff';
-  ctx.font='800 52px "Inter Tight", Inter, sans-serif';
-  ctx.fillText('BATON', M + 48, 134);
-  const bw = ctx.measureText('BATON').width;
-  ctx.fillStyle='#888888';
-  ctx.font='600 22px Inter, sans-serif';
-  ctx.fillText('®', M + 48 + bw + 4, 110);
+  // Wordmark BATON
+  ctx.fillStyle="#ffffff";
+  ctx.font="700 56px \"Space Grotesk\", sans-serif";
+  ctx.fillText("BATON", M + 50, 155);
+  const bw = ctx.measureText("BATON").width;
+  ctx.fillStyle="rgba(255,255,255,.36)";
+  ctx.font="600 20px \"Space Grotesk\", sans-serif";
+  ctx.fillText("®", M + 50 + bw + 4, 126);
 
-  // Top right status indicator
-  ctx.fillStyle='rgba(52, 211, 153, 0.15)';
-  rr(ctx, 1200 - M - 200, 100, 200, 38, 6); ctx.fill();
-  ctx.strokeStyle='rgba(52, 211, 153, 0.4)'; ctx.lineWidth=1;
-  rr(ctx, 1200 - M - 200, 100, 200, 38, 6); ctx.stroke();
-  ctx.fillStyle='#34d399';
-  ctx.beginPath(); ctx.arc(1200 - M - 180, 119, 4, 0, 7); ctx.fill();
-  ctx.font='600 13px "JetBrains Mono", monospace';
-  ctx.fillStyle='#6ee7b7';
-  ctx.fillText('VERIFIED AGENT', 1200 - M - 165, 124);
+  // Top right sub-badge: TEAM MUMBAI_WALE
+  ctx.fillStyle="rgba(16, 185, 129, 0.10)";
+  rr(ctx, 1200 - M - 250, 116, 250, 42, 6); ctx.fill();
+  ctx.strokeStyle="rgba(16, 185, 129, 0.32)"; ctx.lineWidth=1;
+  rr(ctx, 1200 - M - 250, 116, 250, 42, 6); ctx.stroke();
+  ctx.fillStyle="#10b981";
+  ctx.beginPath(); ctx.arc(1200 - M - 232, 137, 4, 0, 7); ctx.fill();
+  ctx.font="600 13px \"JetBrains Mono\", monospace";
+  ctx.fillStyle="#6ee7b7";
+  ctx.fillText("TEAM MUMBAI_WALE", 1200 - M - 220, 142);
 
-  // --- Sub-Badge: TEAM MUMBAI_WALE ---
-  ctx.fillStyle='rgba(255, 255, 255, 0.08)';
-  rr(ctx, M, 172, 260, 36, 6); ctx.fill();
-  ctx.strokeStyle='rgba(255, 255, 255, 0.22)'; ctx.lineWidth=1;
-  rr(ctx, M, 172, 260, 36, 6); ctx.stroke();
-  ctx.fillStyle='#34d399';
-  ctx.beginPath(); ctx.arc(M + 16, 190, 4, 0, 7); ctx.fill();
-  ctx.font='600 14px "JetBrains Mono", monospace';
-  ctx.fillStyle='#f4f4f5';
-  ctx.fillText('TEAM MUMBAI_WALE', M + 28, 195);
+  // Separator line
+  ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(M, 220); ctx.lineTo(1200 - M, 220); ctx.stroke();
 
-  // --- Big Title (Main Headline): Pass the knowledge, not just the code. ---
-  ctx.font='700 82px "Inter Tight", Inter, sans-serif';
-  ctx.fillStyle='#ffffff';
-  ctx.fillText('Pass the knowledge,', M, 310);
-  ctx.fillStyle='rgba(255, 255, 255, 0.45)';
-  ctx.fillText('not just ', M, 395);
-  const njw = ctx.measureText('not just ').width;
-  ctx.fillStyle='#34d399';
-  ctx.fillText('the code.', M + njw, 395);
+  // --- Main Heading: Pass the knowledge, not just the code. (Space Grotesk) ---
+  ctx.font="700 86px \"Space Grotesk\", sans-serif";
+  ctx.fillStyle="#ffffff";
+  ctx.fillText("Pass the knowledge,", M, 370);
+  ctx.fillStyle="rgba(255, 255, 255, 0.44)";
+  ctx.fillText("not just ", M, 465);
+  const njw = ctx.measureText("not just ").width;
+  ctx.fillStyle="#10b981";
+  ctx.fillText("the code.", M + njw, 465);
 
-  // --- Project Details / Sub-Text: CodersInPune Hackathon 2026 · Track: Full Stack ---
-  ctx.font='600 28px Inter, sans-serif';
-  ctx.fillStyle='rgba(255, 255, 255, 0.90)';
-  ctx.fillText('CodersInPune Hackathon 2026', M, 480);
-  const cipW = ctx.measureText('CodersInPune Hackathon 2026').width;
-  ctx.fillStyle='#6b7280';
-  ctx.fillText(' · ', M + cipW, 480);
-  const dotW = ctx.measureText(' · ').width;
-  ctx.fillStyle='#34d399';
-  ctx.fillText('Track: Full Stack', M + cipW + dotW, 480);
+  // --- Subtext: Automated developer reasoning capture & context handover. (Space Grotesk) ---
+  ctx.font="500 32px \"Space Grotesk\", sans-serif";
+  ctx.fillStyle="rgba(255, 255, 255, 0.78)";
+  wrapL(ctx, "Automated developer reasoning capture & context handover.", M, 565, 1000, 46);
 
-  // --- Body Note: Autonomous developer handover platform powered by MCP & Supabase. ---
-  ctx.font='500 23px Inter, sans-serif';
-  ctx.fillStyle='rgba(255, 255, 255, 0.70)';
-  wrapL(ctx, 'Autonomous developer handover platform powered by MCP & Supabase. Captures agent reasoning directly from git and LLM activity, redacts credentials, and verifies claims.', M, 535, 1020, 36);
+  // Separator line
+  ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(M, 660); ctx.lineTo(1200 - M, 660); ctx.stroke();
 
-  // --- Key Value Chips / Pillars ---
-  const chips = [
-    { label: '0% Context Decay', color: '#34d399' },
-    { label: 'Secret Redaction Active', color: '#60a5fa' },
-    { label: 'Bus-Factor Shield', color: '#f59e0b' }
+  // --- Developer Manifest & Technical Spec Details (JetBrains Mono) ---
+  ctx.font="700 18px \"JetBrains Mono\", monospace";
+  ctx.fillStyle="#10b981";
+  ctx.fillText("// GROUNDED REASONING INVENTORY & VERIFICATION SPEC", M, 715);
+
+  const specRows = [
+    { tag: "DECISION #42", file: "auth/supabase.ts", hash: "SHA: 8ec1b71c", status: "VERIFIED", color: "#34d399" },
+    { tag: "INFERRED #18", file: "api/webhooks/pay.ts", hash: "COMMIT: c82f91a", status: "STALE BRANCH", color: "#e8b86d" },
+    { tag: "SECURITY #03", file: "env/production.jwt", hash: "REDACTED", status: "0 LEAKS DETECTED", color: "#60a5fa" },
+    { tag: "PROTOCOL #01", file: "daemon/mcp-sync.ts", hash: "MCP SSE v2.4", status: "ACTIVE DAEMON", color: "#34d399" }
   ];
-  let chipX = M;
-  chips.forEach((ch) => {
-    ctx.font='600 15px "JetBrains Mono", monospace';
-    const txtW = ctx.measureText(ch.label).width;
-    const cw = txtW + 36;
-    ctx.fillStyle='rgba(255, 255, 255, 0.05)';
-    rr(ctx, chipX, 640, cw, 34, 6); ctx.fill();
-    ctx.strokeStyle='rgba(255, 255, 255, 0.16)'; ctx.lineWidth=1;
-    rr(ctx, chipX, 640, cw, 34, 6); ctx.stroke();
-    ctx.fillStyle = ch.color;
-    ctx.beginPath(); ctx.arc(chipX + 14, 657, 3.5, 0, 7); ctx.fill();
-    ctx.fillStyle='#e4e4e7';
-    ctx.fillText(ch.label, chipX + 24, 662);
-    chipX += cw + 14;
+
+  let specY = 755;
+  specRows.forEach((r) => {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
+    rr(ctx, M, specY, 1048, 52, 8); ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)"; ctx.lineWidth = 1;
+    rr(ctx, M, specY, 1048, 52, 8); ctx.stroke();
+
+    // Tag
+    ctx.font = "700 14px \"JetBrains Mono\", monospace";
+    ctx.fillStyle = r.color;
+    ctx.fillText(r.tag, M + 24, specY + 32);
+
+    // File
+    ctx.font = "500 15px \"JetBrains Mono\", monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(r.file, M + 220, specY + 32);
+
+    // Hash
+    ctx.font = "400 14px \"JetBrains Mono\", monospace";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
+    ctx.fillText(r.hash, M + 560, specY + 32);
+
+    // Status pill
+    ctx.fillStyle = r.color + "18";
+    rr(ctx, 1200 - M - 210, specY + 12, 186, 28, 4); ctx.fill();
+    ctx.strokeStyle = r.color + "40"; ctx.lineWidth = 1;
+    rr(ctx, 1200 - M - 210, specY + 12, 186, 28, 4); ctx.stroke();
+
+    ctx.font = "700 11px \"JetBrains Mono\", monospace";
+    ctx.fillStyle = r.color;
+    ctx.fillText(r.status, 1200 - M - 196, specY + 30);
+
+    specY += 66;
   });
 
-  // --- CTA Buttons on Card Face ---
-  // Button 1: "Explore Dashboard"
-  const btn1Grad = ctx.createLinearGradient(M, 715, M + 360, 715);
-  btn1Grad.addColorStop(0, '#34d399');
-  btn1Grad.addColorStop(1, '#10b981');
-  ctx.fillStyle = btn1Grad;
-  rr(ctx, M, 715, 360, 68, 12); ctx.fill();
-  ctx.fillStyle = '#0a0d0c';
-  ctx.font = '700 22px Inter, sans-serif';
-  ctx.fillText('Explore Dashboard  →', M + 44, 757);
+  // --- Official Hackathon Certification & Signatures ---
+  const px = M, py = 1060;
+  ctx.font="700 18px \"JetBrains Mono\", monospace"; ctx.fillStyle="#10b981";
+  ctx.fillText("CODERSINPUNE HACKATHON 2026 // FULL STACK TRACK", px, py);
 
-  // Button 2: "View Handover Review"
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.09)';
-  rr(ctx, M + 380, 715, 390, 68, 12); ctx.fill();
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)'; ctx.lineWidth = 1.5;
-  rr(ctx, M + 380, 715, 390, 68, 12); ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '600 22px Inter, sans-serif';
-  ctx.fillText('View Handover Review  🔍', M + 420, 757);
+  ctx.font="500 20px \"Space Grotesk\", sans-serif"; ctx.fillStyle="rgba(255, 255, 255, 0.62)";
+  wrapL(ctx, "Continuous developer reasoning indexing powered by Model Context Protocol & Supabase Auth.", px, py + 32, 680, 28);
 
-  // Divider line
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(M, 830); ctx.lineTo(1200 - M, 830); ctx.stroke();
-
-  // --- Lower Certificate / Handover Protocol Details ---
-  const px = M, py = 880;
-  ctx.font='700 22px "JetBrains Mono", monospace'; ctx.fillStyle='#34d399';
-  ctx.fillText('HANDOVER SPECIFICATION // SESSION INSPECT', px, py);
-
-  ctx.font='600 32px Inter, sans-serif'; ctx.fillStyle='#ffffff';
-  ctx.fillText('Rahul S.   ⟶   Priya M.', px, py + 48);
-
-  ctx.font='500 18px "JetBrains Mono", monospace'; ctx.fillStyle='rgba(255,255,255,.62)';
-  ctx.fillText('ROLE: Backend Platform Engineer · REPO: core-api-v2', px, py + 86);
-
-  // 3 Verified claims snapshot
-  const claimsY = py + 120;
-  const sampleClaims = [
-    { tag: 'VERIFIED', col: '#34d399', text: 'Auth migrated from Firebase to Supabase (approved PR #42)' },
-    { tag: 'INFERRED', col: '#e8b86d', text: 'Payment webhook incomplete on feat/pay (unmerged commit c82f)' },
-    { tag: 'REDACTED', col: '#60a5fa', text: '3 production JWT secrets & environment tokens quarantined' }
-  ];
-  sampleClaims.forEach((cl, i) => {
-    const cy = claimsY + i * 44;
-    ctx.fillStyle = cl.col + '18';
-    rr(ctx, px, cy, 96, 26, 4); ctx.fill();
-    ctx.strokeStyle = cl.col + '40'; ctx.lineWidth = 1;
-    rr(ctx, px, cy, 96, 26, 4); ctx.stroke();
-    ctx.font = '700 11px "JetBrains Mono", monospace';
-    ctx.fillStyle = cl.col;
-    ctx.fillText(cl.tag, px + 12, cy + 17);
-
-    ctx.font = '500 18px Inter, sans-serif';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.fillText(cl.text, px + 112, cy + 18);
-  });
-
-  // Official hackathon seal & signatures on bottom right
-  const endY = claimsY + 160;
-  [0, 1, 2].forEach(i => signature(ctx, 1200 - M - 280 + i * 90, endY + 45, 0.82, i * 7 + 5, 'rgba(52, 211, 153, 0.65)'));
-  ctx.font = '500 14px "JetBrains Mono", monospace'; ctx.fillStyle = 'rgba(255,255,255,.45)';
-  ctx.fillText('VERIFIED AGENT SIGNATURES', 1200 - M - 280, endY + 80);
+  // Signatures on right
+  [0, 1, 2].forEach(i => signature(ctx, 1200 - M - 260 + i * 86, py + 42, 0.82, i * 7 + 4, "rgba(16, 185, 129, 0.52)"));
+  ctx.font = "500 12px \"JetBrains Mono\", monospace"; ctx.fillStyle = "rgba(255, 255, 255, 0.40)";
+  ctx.fillText("CRYPTOGRAPHIC SIGNATURES", 1200 - M - 260, py + 78);
 
   // Vertical watermark on right edge
-  ctx.save(); ctx.translate(1200 - M - 12, 1140); ctx.rotate(Math.PI / 2);
-  ctx.font = '600 20px "JetBrains Mono", monospace'; ctx.fillStyle = 'rgba(52, 211, 153, 0.55)';
-  ctx.fillText('— BATON VERIFIED HANDOVER —', 0, 0);
+  ctx.save(); ctx.translate(1200 - M - 12, 1180); ctx.rotate(Math.PI / 2);
+  ctx.font = "600 20px \"JetBrains Mono\", monospace"; ctx.fillStyle = "rgba(16, 185, 129, 0.35)";
+  ctx.fillText("— BATON VERIFIED MANIFEST —", 0, 0);
   ctx.restore();
 
   // --- Bottom Monospace Footer: BATON // MUMBAI_WALE // ROUND 2 BUILD ---
-  ctx.font='700 22px "JetBrains Mono", monospace';
-  ctx.fillStyle='#34d399';
-  ctx.fillText('BATON', M, 1530);
-  const bFw = ctx.measureText('BATON').width;
-  ctx.fillStyle='rgba(255, 255, 255, 0.52)';
-  ctx.fillText(' // MUMBAI_WALE // ROUND 2 BUILD', M + bFw, 1530);
+  ctx.font="700 22px \"JetBrains Mono\", monospace";
+  ctx.fillStyle="#10b981";
+  ctx.fillText("BATON", M, 1530);
+  const bFw = ctx.measureText("BATON").width;
+  ctx.fillStyle="rgba(255, 255, 255, 0.50)";
+  ctx.fillText(" // MUMBAI_WALE // ROUND 2 BUILD", M + bFw, 1530);
 }
 
 function makeCertTexture(){
@@ -545,7 +538,7 @@ function inQuad(px,py){
   }
   return true;
 }
-function useHint(){ hintUsed=true; hintEl.style.opacity='0'; }
+function useHint(){ hintUsed=true; if(hintEl) hintEl.style.opacity='0'; }
 
 window.addEventListener('pointermove', e=>{
   mouse.tx = (e.clientX/window.innerWidth  - 0.5)*2;
@@ -602,10 +595,12 @@ function frame(){
   const t  = clock.elapsedTime;
   uni.uTime.value = REDUCED ? 2.4 : t;
 
-  intro += (1 - intro) * Math.min(1, dt*1.9);
+  if (t > 0.28) {
+    intro += (1 - intro) * Math.min(1, dt*1.75);
+  }
   mat.opacity = intro;
   halo.material.opacity = intro*0.30;
-  if(intro > 0.7 && !hintUsed) hintEl.style.opacity='1';
+  if(intro > 0.7 && !hintUsed && hintEl) hintEl.style.opacity='1';
 
   if(dragging){
     // measure the throw as an angular velocity, smoothed over a few frames
@@ -660,19 +655,19 @@ function boot(){
   const t2 = makeCertTexture();
   tex.dispose(); mat.map = t2; mat.needsUpdate = true;
   resize();
-  mesh.visible = true; mat.opacity = 0.002;
+  mesh.visible = true; mat.opacity = 0;
   renderer.compile(scene,camera); renderer.render(scene,camera);
-  mat.opacity = 1;
+  mat.opacity = 0;
   frame();
 }
 
 if(document.fonts && document.fonts.ready){
   Promise.race([
     Promise.all([
-      document.fonts.load('700 104px "Inter Tight"'),
-      document.fonts.load('600 110px "Inter Tight"'),
-      document.fonts.load('600 34px "Inter"'),
-      document.fonts.load('500 22px "Inter"')
+      document.fonts.load('700 86px "Space Grotesk"'),
+      document.fonts.load('900 120px "Syne"'),
+      document.fonts.load('500 32px "Space Grotesk"'),
+      document.fonts.load('600 18px "JetBrains Mono"')
     ]).then(()=>document.fonts.ready),
     new Promise(r=>setTimeout(r,2500))
   ]).then(boot);

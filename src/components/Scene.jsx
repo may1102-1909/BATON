@@ -11,3 +11,4 @@ export function Scene({ variant = "original", className = "", style, onAction })
 }
 
 export default Scene;
+

@@ -1,37 +1,54 @@
-import React, { useState, useEffect } from 'react'
-import { BatonLandingPage } from './components/BatonLandingPage'
+import React from 'react'
+import { RouterProvider, useRouter } from './router'
+import { LandingPage } from './pages/LandingPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { ReviewPage } from './pages/ReviewPage'
+import { TasksPage } from './pages/TasksPage'
+import { Auth } from './components/Auth'
 import ClassicApp from './ClassicApp'
 
-export default function App({ initialScreen = 'landing' }) {
-  const [route, setRoute] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash.toLowerCase()
-      if (hash.includes('classic')) return 'classic'
-      if (hash.includes('auth')) return 'auth'
-      return '3d-paper'
-    }
-    return initialScreen
-  })
+function AppRoutes() {
+  const { path, navigate } = useRouter()
+  const cleanPath = path.split('?')[0].toLowerCase()
 
-  useEffect(() => {
-    function onHashChange() {
-      const hash = window.location.hash.toLowerCase()
-      if (hash.includes('classic')) {
-        setRoute('classic')
-      } else if (hash.includes('auth')) {
-        setRoute('auth')
-      } else {
-        setRoute('3d-paper')
-      }
-    }
+  // Query parameters parsing
+  const isSignup = path.includes('mode=signup') || cleanPath === '/signup'
+  const isLogin = path.includes('mode=login') || cleanPath === '/login'
 
-    window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
-  }, [])
+  if (cleanPath === '/dashboard') {
+    return <DashboardPage />
+  }
 
-  if (route === 'classic') {
+  if (cleanPath === '/review' || cleanPath === '/inspect') {
+    return <ReviewPage />
+  }
+
+  if (cleanPath === '/tasks' || cleanPath === '/claims') {
+    return <TasksPage />
+  }
+
+  if (cleanPath === '/auth' || isLogin || isSignup) {
+    return (
+      <Auth
+        mode={isSignup ? 'signup' : 'login'}
+        setMode={() => {}}
+        back={() => navigate('/')}
+      />
+    )
+  }
+
+  if (cleanPath === '/classic') {
     return <ClassicApp initialScreen="landing" />
   }
 
-  return <BatonLandingPage initialTab={route} />
+  // Root URL ('/' or '/landing') is the dedicated standalone 3D Paper Landing Page
+  return <LandingPage />
+}
+
+export default function App() {
+  return (
+    <RouterProvider>
+      <AppRoutes />
+    </RouterProvider>
+  )
 }
