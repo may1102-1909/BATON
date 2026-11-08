@@ -7,7 +7,6 @@ import { TasksPage } from './pages/TasksPage'
 import { UsagePage } from './pages/UsagePage'
 import { Auth } from './components/Auth'
 import ClassicApp from './ClassicApp'
-import HandoverReviewPage from '../app/handover/[id]/page'
 
 function AppRoutes() {
   const { path, navigate } = useRouter()
@@ -16,16 +15,6 @@ function AppRoutes() {
   // Query parameters parsing
   const isSignup = path.includes('mode=signup') || cleanPath === '/signup'
   const isLogin = path.includes('mode=login') || cleanPath === '/login'
-
-  if (cleanPath.startsWith('/dashboard/handover')) {
-    const id = cleanPath.replace(/^\/dashboard\/handover\/?/, '') || 'active'
-    return <HandoverReviewPage params={{ id }} />
-  }
-
-  if (cleanPath.startsWith('/handover')) {
-    const id = cleanPath.replace(/^\/handover\/?/, '') || 'active'
-    return <HandoverReviewPage params={{ id }} />
-  }
 
   if (cleanPath === '/dashboard') {
     return <DashboardPage />
@@ -54,8 +43,9 @@ function AppRoutes() {
     )
   }
 
-  if (cleanPath === '/classic') {
-    return <ClassicApp initialScreen="landing" />
+  if (cleanPath === '/classic' || cleanPath.startsWith('/classic')) {
+    const isClassicDashboard = path.includes('view=dashboard') || cleanPath === '/classic/dashboard'
+    return <ClassicApp initialScreen={isClassicDashboard ? 'dashboard' : 'landing'} />
   }
 
   // Root URL ('/' or '/landing') is the dedicated standalone 3D Paper Landing Page

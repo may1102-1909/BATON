@@ -1,4 +1,4 @@
-import { supabase } from './supabase.js'
+import { supabase } from './supabase'
 
 /**
  * Fetch all decisions from Supabase with graceful fallback

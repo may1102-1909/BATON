@@ -19,13 +19,11 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
   const [usePassword, setUsePassword] = useState(false)
   const [show, setShow] = useState(false)
   const [touched, setTouched] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  const isEmailInvalid = (submitted || (touched && email.length > 0)) && !valid
 
   // 1. Sign Up Handler via Supabase
   const handleSignUp = async (emailToSubmit, passwordToSubmit) => {
@@ -86,7 +84,6 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
 
   async function submit(e) {
     e.preventDefault()
-    setSubmitted(true)
     setTouched(true)
     setErrorMessage('')
     setMessage('')
@@ -262,50 +259,6 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
 
           {/* Form */}
           <form onSubmit={submit} noValidate>
-            {/* Quick auth method switcher */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setUsePassword(false)
-                  setErrorMessage('')
-                }}
-                style={{
-                  flex: 1,
-                  padding: '7px 10px',
-                  fontSize: 11,
-                  borderRadius: 6,
-                  border: `1px solid ${!usePassword ? '#34d39966' : C.line}`,
-                  background: !usePassword ? '#10b98118' : '#0f1113',
-                  color: !usePassword ? C.green : C.muted,
-                  cursor: 'pointer',
-                  fontWeight: !usePassword ? 600 : 400
-                }}
-              >
-                Magic Link
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUsePassword(true)
-                  setErrorMessage('')
-                }}
-                style={{
-                  flex: 1,
-                  padding: '7px 10px',
-                  fontSize: 11,
-                  borderRadius: 6,
-                  border: `1px solid ${usePassword ? '#34d39966' : C.line}`,
-                  background: usePassword ? '#10b98118' : '#0f1113',
-                  color: usePassword ? C.green : C.muted,
-                  cursor: 'pointer',
-                  fontWeight: usePassword ? 600 : 400
-                }}
-              >
-                Password
-              </button>
-            </div>
-
             <label
               htmlFor="baton-email"
               style={{ fontSize: 12, display: 'block', marginBottom: 8 }}
@@ -318,6 +271,7 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
               </span>
               <input
                 id="baton-email"
+                autoFocus
                 type="email"
                 autoComplete="email"
                 value={email}
@@ -325,17 +279,16 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
                   setEmail(e.target.value)
                   setMessage('')
                   setErrorMessage('')
-                  if (submitted) setSubmitted(false)
                 }}
                 onBlur={() => setTouched(true)}
-                aria-invalid={isEmailInvalid}
-                aria-describedby={isEmailInvalid ? 'bt-email-error' : undefined}
+                aria-invalid={touched && !valid}
+                aria-describedby={touched && !valid ? 'bt-email-error' : undefined}
                 placeholder="you@company.com"
                 style={{
                   width: '100%',
                   background: '#0f1113',
                   border: `1px solid ${
-                    isEmailInvalid ? '#b85d65' : C.line
+                    touched && !valid ? '#b85d65' : C.line
                   }`,
                   borderRadius: 6,
                   padding: '13px 12px 13px 38px',
@@ -345,12 +298,12 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
                 }}
               />
             </div>
-            {isEmailInvalid && (
+            {touched && !valid && (
               <p
                 id="bt-email-error"
                 style={{ fontSize: 11, color: '#ef8585', margin: '6px 0 0' }}
               >
-                Enter a valid email address.
+                Enter a valid work email address.
               </p>
             )}
 
