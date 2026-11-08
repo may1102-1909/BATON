@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "baton": {
+      "command": "node",
+      "args": ["./mcp-server/dist/index.js"],
+      "env": {
+        "BATON_API_URL": "http://localhost:3000"
+      }
+    }
+  }
+}
