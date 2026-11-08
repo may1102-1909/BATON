@@ -23,8 +23,8 @@ body{
   position:absolute;left:50%;top:50%;
   font-family:"Syne", "Space Grotesk", sans-serif;font-weight:900;letter-spacing:-0.055em;
   font-size:clamp(100px, 21.5vw, 450px);line-height:.8;white-space:nowrap;
-  color:rgba(16, 185, 129, 0.24);
-  text-shadow: 0 0 60px rgba(16, 185, 129, 0.32), 0 0 140px rgba(52, 211, 153, 0.18);
+  color:rgba(16, 215, 138, 0.35);
+  text-shadow: 0 0 70px rgba(16, 215, 138, 0.45), 0 0 160px rgba(52, 225, 160, 0.30);
   -webkit-user-select:none;user-select:none;pointer-events:none;
   animation: batonBgIntro 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards,
              batonBgPulse 7s ease-in-out 1.2s infinite alternate;
@@ -38,7 +38,7 @@ body{
     filter: blur(12px);
   }
   100% {
-    opacity: 0.38;
+    opacity: 0.46;
     transform: translate(-50%, -50%) scale(1);
     filter: blur(0px);
   }
@@ -47,13 +47,13 @@ body{
 @keyframes batonBgPulse {
   0% {
     transform: translate(-50%, -50%) scale(1);
-    opacity: 0.38;
-    text-shadow: 0 0 60px rgba(16, 185, 129, 0.32), 0 0 140px rgba(52, 211, 153, 0.18);
+    opacity: 0.46;
+    text-shadow: 0 0 70px rgba(16, 215, 138, 0.45), 0 0 160px rgba(52, 225, 160, 0.30);
   }
   100% {
     transform: translate(-50%, -50%) scale(1.025);
-    opacity: 0.44;
-    text-shadow: 0 0 80px rgba(16, 185, 129, 0.44), 0 0 160px rgba(52, 211, 153, 0.26);
+    opacity: 0.55;
+    text-shadow: 0 0 95px rgba(16, 225, 145, 0.56), 0 0 190px rgba(52, 235, 168, 0.38);
   }
 }
 
@@ -198,28 +198,33 @@ function drawGlass(ctx){
   ctx.beginPath(); ctx.moveTo(M, 220); ctx.lineTo(1200 - M, 220); ctx.stroke();
 
   // --- Main Heading: Pass the knowledge, not just the code. (Space Grotesk) ---
-  ctx.font="700 86px \"Space Grotesk\", sans-serif";
+  ctx.font="700 84px \"Space Grotesk\", sans-serif";
   ctx.fillStyle="#ffffff";
-  ctx.fillText("Pass the knowledge,", M, 370);
+  ctx.fillText("Pass the knowledge,", M, 345);
   ctx.fillStyle="rgba(255, 255, 255, 0.44)";
-  ctx.fillText("not just ", M, 465);
+  ctx.fillText("not just ", M, 435);
   const njw = ctx.measureText("not just ").width;
-  ctx.fillStyle="#10b981";
-  ctx.fillText("the code.", M + njw, 465);
+  ctx.fillStyle="#34d399";
+  ctx.fillText("the code.", M + njw, 435);
 
-  // --- Subtext: Automated developer reasoning capture & context handover. (Space Grotesk) ---
-  ctx.font="500 32px \"Space Grotesk\", sans-serif";
-  ctx.fillStyle="rgba(255, 255, 255, 0.78)";
-  wrapL(ctx, "Automated developer reasoning capture & context handover.", M, 565, 1000, 46);
+  // --- Meta Subtitle ---
+  ctx.font="600 16px \"JetBrains Mono\", monospace";
+  ctx.fillStyle="#34d399";
+  ctx.fillText("CodersInPune Hackathon 2026 · Track: Full Stack", M, 495);
+
+  // --- Description ---
+  ctx.font="500 28px \"Space Grotesk\", sans-serif";
+  ctx.fillStyle="rgba(255, 255, 255, 0.85)";
+  wrapL(ctx, "Autonomous developer handover platform powered by MCP & Supabase.", M, 540, 1000, 38);
 
   // Separator line
   ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(M, 660); ctx.lineTo(1200 - M, 660); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(M, 615); ctx.lineTo(1200 - M, 615); ctx.stroke();
 
   // --- Developer Manifest & Technical Spec Details (JetBrains Mono) ---
-  ctx.font="700 18px \"JetBrains Mono\", monospace";
+  ctx.font="700 17px \"JetBrains Mono\", monospace";
   ctx.fillStyle="#10b981";
-  ctx.fillText("// GROUNDED REASONING INVENTORY & VERIFICATION SPEC", M, 715);
+  ctx.fillText("// GROUNDED REASONING INVENTORY & VERIFICATION SPEC", M, 660);
 
   const specRows = [
     { tag: "DECISION #42", file: "auth/supabase.ts", hash: "SHA: 8ec1b71c", status: "VERIFIED", color: "#34d399" },
@@ -228,67 +233,111 @@ function drawGlass(ctx){
     { tag: "PROTOCOL #01", file: "daemon/mcp-sync.ts", hash: "MCP SSE v2.4", status: "ACTIVE DAEMON", color: "#34d399" }
   ];
 
-  let specY = 755;
+  let specY = 695;
   specRows.forEach((r) => {
     ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
-    rr(ctx, M, specY, 1048, 52, 8); ctx.fill();
+    rr(ctx, M, specY, 1048, 48, 8); ctx.fill();
     ctx.strokeStyle = "rgba(255, 255, 255, 0.12)"; ctx.lineWidth = 1;
-    rr(ctx, M, specY, 1048, 52, 8); ctx.stroke();
+    rr(ctx, M, specY, 1048, 48, 8); ctx.stroke();
 
     // Tag
     ctx.font = "700 14px \"JetBrains Mono\", monospace";
     ctx.fillStyle = r.color;
-    ctx.fillText(r.tag, M + 24, specY + 32);
+    ctx.fillText(r.tag, M + 24, specY + 30);
 
     // File
     ctx.font = "500 15px \"JetBrains Mono\", monospace";
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(r.file, M + 220, specY + 32);
+    ctx.fillText(r.file, M + 220, specY + 30);
 
     // Hash
     ctx.font = "400 14px \"JetBrains Mono\", monospace";
     ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
-    ctx.fillText(r.hash, M + 560, specY + 32);
+    ctx.fillText(r.hash, M + 560, specY + 30);
 
     // Status pill
     ctx.fillStyle = r.color + "18";
-    rr(ctx, 1200 - M - 210, specY + 12, 186, 28, 4); ctx.fill();
+    rr(ctx, 1200 - M - 210, specY + 10, 186, 28, 4); ctx.fill();
     ctx.strokeStyle = r.color + "40"; ctx.lineWidth = 1;
-    rr(ctx, 1200 - M - 210, specY + 12, 186, 28, 4); ctx.stroke();
+    rr(ctx, 1200 - M - 210, specY + 10, 186, 28, 4); ctx.stroke();
 
     ctx.font = "700 11px \"JetBrains Mono\", monospace";
     ctx.fillStyle = r.color;
-    ctx.fillText(r.status, 1200 - M - 196, specY + 30);
+    ctx.fillText(r.status, 1200 - M - 196, specY + 28);
 
-    specY += 66;
+    specY += 58;
   });
 
   // --- Official Hackathon Certification & Signatures ---
-  const px = M, py = 1060;
-  ctx.font="700 18px \"JetBrains Mono\", monospace"; ctx.fillStyle="#10b981";
+  const px = M, py = 955;
+  ctx.font="700 16px \"JetBrains Mono\", monospace"; ctx.fillStyle="#10b981";
   ctx.fillText("CODERSINPUNE HACKATHON 2026 // FULL STACK TRACK", px, py);
 
-  ctx.font="500 20px \"Space Grotesk\", sans-serif"; ctx.fillStyle="rgba(255, 255, 255, 0.62)";
-  wrapL(ctx, "Continuous developer reasoning indexing powered by Model Context Protocol & Supabase Auth.", px, py + 32, 680, 28);
+  ctx.font="500 17px \"Space Grotesk\", sans-serif"; ctx.fillStyle="rgba(255, 255, 255, 0.62)";
+  wrapL(ctx, "Continuous developer reasoning indexing powered by Model Context Protocol & Supabase Auth.", px, py + 24, 680, 24);
 
   // Signatures on right
-  [0, 1, 2].forEach(i => signature(ctx, 1200 - M - 260 + i * 86, py + 42, 0.82, i * 7 + 4, "rgba(16, 185, 129, 0.52)"));
-  ctx.font = "500 12px \"JetBrains Mono\", monospace"; ctx.fillStyle = "rgba(255, 255, 255, 0.40)";
-  ctx.fillText("CRYPTOGRAPHIC SIGNATURES", 1200 - M - 260, py + 78);
+  [0, 1, 2].forEach(i => signature(ctx, 1200 - M - 260 + i * 86, py + 30, 0.78, i * 7 + 4, "rgba(16, 185, 129, 0.52)"));
+  ctx.font = "500 11px \"JetBrains Mono\", monospace"; ctx.fillStyle = "rgba(255, 255, 255, 0.40)";
+  ctx.fillText("CRYPTOGRAPHIC SIGNATURES", 1200 - M - 260, py + 62);
+
+  // --- Team Roster Block (Monospace) ---
+  const ry = 1045;
+  ctx.fillStyle = "rgba(16, 185, 129, 0.05)";
+  rr(ctx, M, ry, 1048, 270, 10); ctx.fill();
+  ctx.strokeStyle = "rgba(52, 211, 153, 0.22)"; ctx.lineWidth = 1;
+  rr(ctx, M, ry, 1048, 270, 10); ctx.stroke();
+
+  ctx.font = "700 16px \"JetBrains Mono\", monospace";
+  ctx.fillStyle = "#34d399";
+  ctx.fillText("// TEAM MUMBAI_WALE", M + 28, ry + 40);
+
+  const teamMembers = [
+    { name: "Vikrant GP", role: "Frontend & Design Lead" },
+    { name: "Tanmay Khurpe", role: "Backend Developer" },
+    { name: "Krishna Gupta", role: "UI/UX Designer & Business Analyst" },
+    { name: "Komal Chaurasiya", role: "QA & User Experience Lead" }
+  ];
+
+  let memberY = ry + 82;
+  teamMembers.forEach(m => {
+    ctx.font = "700 16px \"JetBrains Mono\", monospace";
+    ctx.fillStyle = "#10b981";
+    ctx.fillText("•", M + 32, memberY);
+
+    ctx.font = "600 16px \"JetBrains Mono\", monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(" " + m.name, M + 48, memberY);
+    const nw = ctx.measureText(" " + m.name).width;
+
+    ctx.font = "400 15px \"JetBrains Mono\", monospace";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+    ctx.fillText(" — " + m.role, M + 48 + nw, memberY);
+
+    memberY += 42;
+  });
 
   // Vertical watermark on right edge
   ctx.save(); ctx.translate(1200 - M - 12, 1180); ctx.rotate(Math.PI / 2);
-  ctx.font = "600 20px \"JetBrains Mono\", monospace"; ctx.fillStyle = "rgba(16, 185, 129, 0.35)";
+  ctx.font = "600 18px \"JetBrains Mono\", monospace"; ctx.fillStyle = "rgba(16, 185, 129, 0.35)";
   ctx.fillText("— BATON VERIFIED MANIFEST —", 0, 0);
   ctx.restore();
 
   // --- Bottom Monospace Footer: BATON // MUMBAI_WALE // ROUND 2 BUILD ---
   ctx.font="700 22px \"JetBrains Mono\", monospace";
   ctx.fillStyle="#10b981";
-  ctx.fillText("BATON", M, 1530);
+  ctx.fillText("BATON", M, 1420);
   const bFw = ctx.measureText("BATON").width;
   ctx.fillStyle="rgba(255, 255, 255, 0.50)";
-  ctx.fillText(" // MUMBAI_WALE // ROUND 2 BUILD", M + bFw, 1530);
+  ctx.fillText(" // MUMBAI_WALE // ROUND 2 BUILD", M + bFw, 1420);
+
+  // --- Interaction Cue: DRAG TO TURN IT · HOVER TO LIGHT IT ---
+  ctx.save();
+  ctx.font="600 15px \"JetBrains Mono\", monospace";
+  ctx.fillStyle="rgba(52, 211, 153, 0.85)";
+  ctx.textAlign="center";
+  ctx.fillText("DRAG TO TURN IT · HOVER TO LIGHT IT", 600, 1520);
+  ctx.restore();
 }
 
 function makeCertTexture(){
