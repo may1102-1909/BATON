@@ -39,12 +39,6 @@ export function LandingPage() {
         <Link to="/" className="flex items-center gap-3 no-underline">
           <Brand size={22} />
         </Link>
-
-        {/* Top-Right CTA Button: Get Started → */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleGetStarted}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/60 text-emerald-400 font-medium text-[13px] font-sans shadow-[0_0_15px_rgba(16,185,129,0.15)] transition-all duration-200 cursor-pointer"
           >
             <span>Get Started &rarr;</span>
             <Icon size={12} style={{ color: '#34d399' }} />
@@ -61,7 +55,7 @@ export function LandingPage() {
               setIsTransitioning(true)
             }
           }}
-        />
+
       </div>
 
       {/* 0-100% Developer Transition Overlay */}

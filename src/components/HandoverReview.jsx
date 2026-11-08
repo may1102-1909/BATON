@@ -414,7 +414,7 @@ ${
           </Button>
 
           <a
-            href={`/handover/${handover.id || 'active'}`}
+            href={`/dashboard/handover/${handover.id || 'active'}`}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
