@@ -20,7 +20,9 @@ const C = {
 
 export default function App({
   initialScreen = 'landing',
-  headline = 'Pass the knowledge, not just the code.'
+  headline = 'Pass the knowledge, not just the code.',
+  primaryActionLabel = 'Get Started',
+  onPrimaryAction = null
 }) {
   // Support deep-linking to /dashboard or /auth based on pathname
   const [view, setView] = useState(() => {
@@ -259,10 +261,10 @@ export default function App({
                 </button>
                 <Button
                   primary
-                  onClick={() => auth('signup')}
+                  onClick={onPrimaryAction || (() => auth('signup'))}
                   style={{ padding: '9px 15px', fontSize: 12 }}
                 >
-                  Get Started
+                  {primaryActionLabel}
                   <Icon size={13} />
                 </Button>
               </>
@@ -347,10 +349,10 @@ export default function App({
               >
                 <Button
                   primary
-                  onClick={() => auth('signup')}
+                  onClick={onPrimaryAction || (() => auth('signup'))}
                   style={{ padding: '14px 26px', fontSize: 14 }}
                 >
-                  Get Started
+                  {primaryActionLabel}
                   <Icon size={16} />
                 </Button>
                 <Button
@@ -598,7 +600,10 @@ export default function App({
           <Comparison />
 
           {/* Call to Action Banner */}
-          <CtaBanner onGetStarted={() => auth('signup')} />
+          <CtaBanner
+            onGetStarted={onPrimaryAction || (() => auth('signup'))}
+            actionLabel={primaryActionLabel}
+          />
 
           {/* Developer Notes / Docs Section */}
           <section

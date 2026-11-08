@@ -4,6 +4,7 @@ import { LandingPage } from './pages/LandingPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { TasksPage } from './pages/TasksPage'
+import { UsagePage } from './pages/UsagePage'
 import { Auth } from './components/Auth'
 import ClassicApp from './ClassicApp'
 import HandoverReviewPage from '../app/handover/[id]/page'
@@ -30,6 +31,10 @@ function AppRoutes() {
     return <DashboardPage />
   }
 
+  if (cleanPath === '/usage' || cleanPath === '/usgae') {
+    return <UsagePage />
+  }
+
   if (cleanPath === '/review' || cleanPath === '/inspect') {
     return <ReviewPage />
   }
@@ -44,7 +49,7 @@ function AppRoutes() {
         mode={isSignup ? 'signup' : 'login'}
         setMode={() => {}}
         back={() => navigate('/')}
-        onAuthSuccess={() => navigate('/dashboard')}
+        onAuthSuccess={() => navigate('/usage')}
       />
     )
   }

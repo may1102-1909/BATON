@@ -2,7 +2,7 @@ import React from 'react'
 import { Button } from './Button'
 import { Icon } from './Icon'
 
-export function CtaBanner({ onGetStarted }) {
+export function CtaBanner({ onGetStarted, actionLabel = 'Get Started' }) {
   return (
     <section
       style={{
@@ -60,7 +60,7 @@ export function CtaBanner({ onGetStarted }) {
           onClick={onGetStarted}
           style={{ padding: '13px 26px', fontSize: 13 }}
         >
-          Get Started
+          {actionLabel}
           <Icon size={15} />
         </Button>
       </div>
