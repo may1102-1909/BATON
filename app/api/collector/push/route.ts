@@ -76,6 +76,10 @@ export async function POST(req: Request) {
     } else if (type === 'blocker') {
       targetType = 'mcp_blocker'
       contentString = `Problem: ${data.problem || 'N/A'}\nStatus: ${data.status || 'active'}\nWorkaround Notes: ${data.workaround_notes || 'None'}`
+    } else if (type === 'commit') {
+      targetType = 'commit'
+      const shortSha = data.sha ? String(data.sha).slice(0, 8) : 'HEAD'
+      contentString = `Git Commit: [${shortSha}] ${data.message || 'Update'}\nAuthor: ${data.author || 'Engineer'}`
     } else {
       targetType = `mcp_${type || 'general'}`
       contentString = typeof data === 'string' ? data : JSON.stringify(data, null, 2)

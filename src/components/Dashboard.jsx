@@ -4,6 +4,7 @@ import { Icon } from './Icon'
 import { Button } from './Button'
 import { supabase } from '../lib/supabase'
 import { getDecisions, insertDecision, getBlockers, insertBlocker, getSources } from '../lib/db'
+import { HandoverReview } from './HandoverReview'
 
 const C = {
   bg: '#0c0d0e',
@@ -83,6 +84,9 @@ export function Dashboard({ user, onBack, onSignOut }) {
   const [blockers, setBlockers] = useState(initialMockBlockers)
   const [sources, setSources] = useState([])
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false)
+  const [showSimulateModal, setShowSimulateModal] = useState(false)
+  const [simulating, setSimulating] = useState(false)
+  const [simulateSuccess, setSimulateSuccess] = useState('')
 
   // Load from Supabase on mount & listen to Realtime changes
   useEffect(() => {
@@ -323,8 +327,9 @@ ${blockers.map((b, i) => `### ${i + 1}. ${b.problem}
             marginBottom: 28
           }}
         >
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {[
+              ['review', '⚡ Review Handover'],
               ['decisions', `Decisions (${decisions.length})`],
               ['sources', `Agent Sources (${sources.length})`],
               ['blockers', `Blockers (${blockers.length})`],
@@ -369,6 +374,9 @@ ${blockers.map((b, i) => `### ${i + 1}. ${b.problem}
             />
           </div>
         </div>
+
+        {/* Tab 0: Handover Review */}
+        {activeTab === 'review' && <HandoverReview user={user} />}
 
         {/* Tab 1: Decisions */}
         {activeTab === 'decisions' && (

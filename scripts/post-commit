@@ -1,0 +1,21 @@
+#!/bin/sh
+# Baton auto-sync post-commit hook
+# Install with: cp scripts/post-commit .git/hooks/post-commit && chmod +x .git/hooks/post-commit
+
+LAST_HASH=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+LAST_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "Commit")
+AUTHOR_NAME=$(git config user.name 2>/dev/null || echo "Engineer")
+NOW_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
+
+curl -s -X POST http://localhost:3000/api/collector/push \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer baton_dev_secret" \
+  -d "{
+    \"type\": \"commit\",
+    \"data\": {
+      \"sha\": \"$LAST_HASH\",
+      \"message\": \"$LAST_MSG\",
+      \"author\": \"$AUTHOR_NAME\"
+    },
+    \"timestamp\": \"$NOW_TS\"
+  }" > /dev/null 2>&1 &
