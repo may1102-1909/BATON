@@ -44,9 +44,20 @@
 ### 4. Preservation & Route Support
 - Clean independent routing:
   - `http://localhost:3000/` or `#/paper` — 3D Paper Landing Experience.
-  - `#/dashboard` or `#/review` — Handover Inspection Dashboard.
-  - `#/classic` — Original Framer-style build.
-  - `#/auth` — Simulated Auth workflow (Magic link, GitHub OAuth, password).
+  - `/dashboard` — Handover Continuity Hub (Decisions, Agent Sources, Blockers, MCP Status, Review).
+  - `/handover/:id` — Interactive Handover Review Screen with expandable sections & shareable acknowledgment.
+  - `/classic` — Original Framer-style build.
+  - `/auth` — Supabase Email/Password, Magic link, and GitHub OAuth with auto-redirect to `/dashboard`.
+
+### 5. Baton Local MCP Server & Automatic Capture
+- **StdioServerTransport MCP Server** in `mcp-server/dist/index.js`
+- **Client-Side Secret Redaction**: Shannon entropy (>4.5 threshold) + regex signatures stripping JWTs, OpenAI keys, GitHub tokens, AWS credentials, and Stripe secrets before dispatch.
+- **Exposed MCP Tools**:
+  - `baton:log_decision`: Indexes architectural decisions, rationales, alternatives, and affected files.
+  - `baton:log_blocker`: Logs operational blockers, status, and workaround notes.
+  - `baton:get_context`: Query historical decisions to prevent recurring dead ends.
+- **Git Post-Commit Hook**: Automatically pushes commit SHAs, author, and commit messages to `/api/collector/push`.
+- **Handover Synthesis Engine**: `/api/handover/generate` transforms raw sources into categorized claims (`why_decisions`, `unfinished_work`, `conflicts`, `risks`, `next_actions`) with claim citations.
 
 ---
 
@@ -57,17 +68,25 @@
    npm install
    ```
 
-2. **Start the local development server:**
+2. **Configure Environment (`.env.local`):**
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+   NEXT_PUBLIC_SUPABASE_ANON_KEY="your_supabase_anon_key"
+   SUPABASE_SERVICE_ROLE_KEY="your_supabase_service_role_key"
+   BATON_PROJECT_KEY="your_baton_project_key"
+   ```
+
+3. **Start the local development server:**
    ```bash
    npm run dev
    ```
 
-3. **Open in browser:**
+4. **Open in browser:**
    ```
-   http://localhost:3000
+   http://localhost:5173
    ```
 
-4. **Production Build:**
+5. **Production Build:**
    ```bash
    npm run build
    ```
