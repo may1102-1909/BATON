@@ -43,6 +43,28 @@ export async function insertDecision(record) {
 }
 
 /**
+ * Fetch all collector dispatched sources from Supabase
+ */
+export async function getSources() {
+  try {
+    const { data, error } = await supabase
+      .from('sources')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(30)
+
+    if (error) {
+      console.warn('Supabase sources table not available yet:', error.message)
+      return null
+    }
+    return data
+  } catch (err) {
+    console.warn('Error fetching sources from Supabase:', err)
+    return null
+  }
+}
+
+/**
  * Fetch all blockers from Supabase with graceful fallback
  */
 export async function getBlockers() {

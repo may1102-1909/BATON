@@ -3,7 +3,7 @@ import { Brand } from './Brand'
 import { Icon } from './Icon'
 import { Button } from './Button'
 import { supabase } from '../lib/supabase'
-import { getDecisions, insertDecision, getBlockers, insertBlocker } from '../lib/db'
+import { getDecisions, insertDecision, getBlockers, insertBlocker, getSources } from '../lib/db'
 
 const C = {
   bg: '#0c0d0e',
@@ -15,6 +15,16 @@ const C = {
 }
 
 const initialMockDecisions = [
+  {
+    id: 'dec-rls-supabase',
+    decision: 'Chose Supabase Postgres over Firebase',
+    reason: 'Row-Level Security (RLS) requirements and fine-grained data access control.',
+    alternatives: ['Firebase Firestore', 'Custom PostgreSQL with Auth0'],
+    files_affected: ['supabase/schema.sql', 'src/lib/supabase.js', 'src/lib/db.js'],
+    status: 'Verified',
+    citation: 'baton:log_decision',
+    timestamp: 'Just now'
+  },
   {
     id: 'dec-1',
     decision: 'Migrated auth from Firebase to Supabase',
