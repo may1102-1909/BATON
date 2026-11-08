@@ -239,6 +239,77 @@ export function HandoverReview({ user }) {
     setTimeout(() => setMessage(''), 3000)
   }
 
+  // 7. Export Handover as Markdown
+  function handleExportMarkdown() {
+    const verified = claims.filter((c) => c.confidence === 'verified')
+    const inferred = claims.filter((c) => c.confidence === 'inferred')
+    const conflicts = claims.filter((c) => c.confidence === 'conflicting')
+
+    const md = `# Baton Engineering Handover Report
+**Leaver:** ${handover.leaver_name || 'Rahul S.'}  
+**Incoming Engineer:** ${handover.incoming_name || 'Priya M.'}  
+**Status:** ${handover.status?.toUpperCase() || 'DRAFT'} (v${handover.version || 1})  
+**Generated At:** ${new Date().toISOString()}  
+
+---
+
+## 1. Verified Architectural Decisions (Why Decisions Were Made)
+${
+  verified
+    .map(
+      (c, i) =>
+        `${i + 1}. **[${c.status?.toUpperCase() || 'VERIFIED'}]** ${c.claim_text}\n   - *Evidence / Citation:* ${
+          c.citation || 'Agent MCP Session'
+        }`
+    )
+    .join('\n\n') || 'None recorded.'
+}
+
+---
+
+## 2. Unfinished Work & Inferred Tasks
+${
+  inferred
+    .map(
+      (c, i) =>
+        `${i + 1}. **[${c.status?.toUpperCase() || 'INFERRED'}]** ${c.claim_text}\n   - *Evidence / Citation:* ${
+          c.citation || 'Git Branch / PR'
+        }`
+    )
+    .join('\n\n') || 'None recorded.'
+}
+
+---
+
+## 3. Operational Blockers & Conflicts
+${
+  conflicts
+    .map(
+      (c, i) =>
+        `${i + 1}. **[${c.status?.toUpperCase() || 'CONFLICTING'}]** ${c.claim_text}\n   - *Evidence / Citation:* ${
+          c.citation || 'Project Task Spec'
+        }`
+    )
+    .join('\n\n') || 'None recorded.'
+}
+
+---
+*Generated with [Baton](https://github.com/may1102-1909/BATON) — Continuous agentic knowledge transfer.*
+`
+
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `BATON_HANDOVER_v${handover.version || 1}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setMessage('Handover exported as BATON_HANDOVER.md!')
+    setTimeout(() => setMessage(''), 3000)
+  }
+
   const confidenceBadge = (confidence) => {
     switch (confidence?.toLowerCase()) {
       case 'verified':

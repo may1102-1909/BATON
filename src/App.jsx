@@ -6,6 +6,7 @@ import { ReviewPage } from './pages/ReviewPage'
 import { TasksPage } from './pages/TasksPage'
 import { Auth } from './components/Auth'
 import ClassicApp from './ClassicApp'
+import HandoverReviewPage from '../app/handover/[id]/page'
 
 function AppRoutes() {
   const { path, navigate } = useRouter()
@@ -14,6 +15,11 @@ function AppRoutes() {
   // Query parameters parsing
   const isSignup = path.includes('mode=signup') || cleanPath === '/signup'
   const isLogin = path.includes('mode=login') || cleanPath === '/login'
+
+  if (cleanPath.startsWith('/handover')) {
+    const id = cleanPath.replace(/^\/handover\/?/, '') || '3f3dac72-cb00-4067-b310-4e8270eada98'
+    return <HandoverReviewPage params={{ id }} />
+  }
 
   if (cleanPath === '/dashboard') {
     return <DashboardPage />
