@@ -14,6 +14,7 @@ export async function pushMemory(type, rawPayload) {
     const sanitizedPayload = redactData(rawPayload);
     const memoryEvent = {
         type,
+        data: sanitizedPayload,
         payload: sanitizedPayload,
         timestamp: new Date().toISOString(),
         source: 'baton-mcp-server'
@@ -23,8 +24,9 @@ export async function pushMemory(type, rawPayload) {
         const headers = {
             'Content-Type': 'application/json'
         };
-        if (process.env.BATON_API_KEY) {
-            headers['Authorization'] = `Bearer ${process.env.BATON_API_KEY}`;
+        const authToken = process.env.BATON_PROJECT_KEY || process.env.BATON_API_KEY;
+        if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
         }
         const response = await fetch(endpoint, {
             method: 'POST',

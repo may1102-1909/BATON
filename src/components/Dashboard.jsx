@@ -3,6 +3,7 @@ import { Brand } from './Brand'
 import { Icon } from './Icon'
 import { Button } from './Button'
 import { supabase } from '../lib/supabase'
+import { getDecisions, insertDecision, getBlockers, insertBlocker } from '../lib/db'
 
 const C = {
   bg: '#0c0d0e',
@@ -13,7 +14,7 @@ const C = {
   green: '#34d399'
 }
 
-const mockDecisions = [
+const initialMockDecisions = [
   {
     id: 'dec-1',
     decision: 'Migrated auth from Firebase to Supabase',
@@ -46,7 +47,7 @@ const mockDecisions = [
   }
 ]
 
-const mockBlockers = [
+const initialMockBlockers = [
   {
     id: 'blk-1',
     problem: 'Payment webhook retry handler pending verification on staging environment',
@@ -68,36 +69,101 @@ export function Dashboard({ user, onBack, onSignOut }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [copiedHandoff, setCopiedHandoff] = useState(false)
   const [newDecision, setNewDecision] = useState({ decision: '', reason: '', files: '' })
-  const [decisions, setDecisions] = useState(mockDecisions)
-  const [blockers, setBlockers] = useState(mockBlockers)
+  const [decisions, setDecisions] = useState(initialMockDecisions)
+  const [blockers, setBlockers] = useState(initialMockBlockers)
+  const [isSupabaseConnected, setIsSupabaseConnected] = useState(false)
+
+  // Load from Supabase on mount & listen to Realtime changes
+  useEffect(() => {
+    let channel
+
+    async function loadData() {
+      const remoteDecisions = await getDecisions()
+      if (remoteDecisions && remoteDecisions.length > 0) {
+        setDecisions(remoteDecisions)
+        setIsSupabaseConnected(true)
+      } else if (remoteDecisions) {
+        setIsSupabaseConnected(true)
+      }
+
+      const remoteBlockers = await getBlockers()
+      if (remoteBlockers && remoteBlockers.length > 0) {
+        setBlockers(remoteBlockers)
+      }
+    }
+
+    loadData()
+
+    // Realtime channel listener
+    try {
+      channel = supabase
+        .channel('baton-realtime-dashboard')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'decisions' },
+          (payload) => {
+            setDecisions((prev) => [payload.new, ...prev.filter((d) => d.id !== payload.new.id)])
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'blockers' },
+          (payload) => {
+            setBlockers((prev) => [payload.new, ...prev.filter((b) => b.id !== payload.new.id)])
+          }
+        )
+        .subscribe()
+    } catch (e) {
+      console.warn('Realtime subscription not active:', e)
+    }
+
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
+  }, [])
 
   const filteredDecisions = decisions.filter(
     (d) =>
-      d.decision.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.reason.toLowerCase().includes(searchQuery.toLowerCase())
+      d.decision?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      d.reason?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const filteredBlockers = blockers.filter(
     (b) =>
-      b.problem.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.workaround_notes.toLowerCase().includes(searchQuery.toLowerCase())
+      b.problem?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.workaround_notes?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  function handleCreateDecision(e) {
+  async function handleCreateDecision(e) {
     e.preventDefault()
     if (!newDecision.decision || !newDecision.reason) return
-    const created = {
+    const filesArray = newDecision.files ? newDecision.files.split(',').map((f) => f.trim()) : []
+    const localRecord = {
       id: `dec-${Date.now()}`,
       decision: newDecision.decision,
       reason: newDecision.reason,
       alternatives: ['Evaluated during session'],
-      files_affected: newDecision.files ? newDecision.files.split(',').map((f) => f.trim()) : [],
+      files_affected: filesArray,
       status: 'Verified',
       citation: 'Agent Session',
+      created_at: new Date().toISOString(),
       timestamp: 'Just now'
     }
-    setDecisions([created, ...decisions])
+
+    // Optimistically update UI
+    setDecisions([localRecord, ...decisions])
     setNewDecision({ decision: '', reason: '', files: '' })
+
+    // Insert into Supabase if connected
+    await insertDecision({
+      user_id: user?.id,
+      decision: localRecord.decision,
+      reason: localRecord.reason,
+      alternatives: localRecord.alternatives,
+      files_affected: localRecord.files_affected,
+      status: 'Verified',
+      citation: 'Agent Session'
+    })
   }
 
   function copyHandoverMarkdown() {
@@ -526,3 +592,4 @@ ${blockers.map((b, i) => `### ${i + 1}. ${b.problem}
     </div>
   )
 }
+

@@ -31,8 +31,9 @@ export async function pushMemory(
   // 1. Redact all sensitive credentials, tokens, and high-entropy secrets client-side
   const sanitizedPayload = redactData(rawPayload);
 
-  const memoryEvent: MemoryPayload = {
+  const memoryEvent = {
     type,
+    data: sanitizedPayload,
     payload: sanitizedPayload,
     timestamp: new Date().toISOString(),
     source: 'baton-mcp-server'
@@ -45,8 +46,9 @@ export async function pushMemory(
       'Content-Type': 'application/json'
     };
 
-    if (process.env.BATON_API_KEY) {
-      headers['Authorization'] = `Bearer ${process.env.BATON_API_KEY}`;
+    const authToken = process.env.BATON_PROJECT_KEY || process.env.BATON_API_KEY;
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
     }
 
     const response = await fetch(endpoint, {
