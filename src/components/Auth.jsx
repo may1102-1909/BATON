@@ -40,8 +40,8 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
       console.log('Check your email for confirmation or user created:', data)
       setMessage('Account created successfully! Check your email for confirmation.')
       alert('Account created successfully!')
-      if (data?.user && onAuthSuccess) {
-        onAuthSuccess(data.user)
+      if (onAuthSuccess) {
+        onAuthSuccess(data?.user || { email: emailToSubmit })
       }
     }
   }
@@ -60,9 +60,8 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
     } else {
       console.log('Signed in successfully:', data.user)
       setMessage(`Signed in successfully as ${data.user.email}!`)
-      alert('Signed in successfully!')
       if (onAuthSuccess) {
-        onAuthSuccess(data.user)
+        onAuthSuccess(data?.user || { email: emailToSubmit })
       }
     }
   }

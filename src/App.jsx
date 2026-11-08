@@ -3,6 +3,7 @@ import { Brand } from './components/Brand'
 import { Icon } from './components/Icon'
 import { Button } from './components/Button'
 import { Auth } from './components/Auth'
+import { Dashboard } from './components/Dashboard'
 import { TerminalDemo } from './components/TerminalDemo'
 import { Comparison } from './components/Comparison'
 import { CtaBanner } from './components/CtaBanner'
@@ -21,7 +22,16 @@ export default function App({
   initialScreen = 'landing',
   headline = 'Pass the knowledge, not just the code.'
 }) {
-  const [view, setView] = useState(initialScreen)
+  // Support deep-linking to /dashboard or /auth based on pathname
+  const [view, setView] = useState(() => {
+    if (typeof window !== 'undefined' && window.location.pathname === '/dashboard') {
+      return 'dashboard'
+    }
+    if (typeof window !== 'undefined' && window.location.pathname === '/auth') {
+      return 'auth'
+    }
+    return initialScreen
+  })
   const [mode, setMode] = useState('login')
   const [currentUser, setCurrentUser] = useState(null)
 
@@ -45,20 +55,45 @@ export default function App({
       setCurrentUser(session?.user ?? null)
     })
 
+    // 3. Listen to browser popstate (back/forward)
+    const handlePopState = () => {
+      if (window.location.pathname === '/dashboard') {
+        setView('dashboard')
+      } else if (window.location.pathname === '/auth') {
+        setView('auth')
+      } else {
+        setView('landing')
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+
     return () => {
       subscription.unsubscribe()
+      window.removeEventListener('popstate', handlePopState)
     }
   }, [])
 
   function auth(m = 'signup') {
     setMode(m)
     setView('auth')
+    if (window.location.pathname !== '/auth') {
+      window.history.pushState(null, '', '/auth')
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function navigateTo(path, targetView) {
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, '', path)
+    }
+    setView(targetView)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   async function handleSignOut() {
     await supabase.auth.signOut()
     setCurrentUser(null)
+    navigateTo('/', 'landing')
   }
 
   function scroll(ref) {
@@ -67,16 +102,29 @@ export default function App({
     }
   }
 
+  // View: Auth Screen
   if (view === 'auth') {
     return (
       <Auth
         mode={mode}
         setMode={setMode}
-        back={() => setView('landing')}
+        back={() => navigateTo('/', 'landing')}
         onAuthSuccess={(user) => {
           setCurrentUser(user)
-          setView('landing')
+          // Land on /dashboard immediately after signin / create account
+          navigateTo('/dashboard', 'dashboard')
         }}
+      />
+    )
+  }
+
+  // View: Dashboard Screen
+  if (view === 'dashboard') {
+    return (
+      <Dashboard
+        user={currentUser}
+        onBack={() => navigateTo('/', 'landing')}
+        onSignOut={handleSignOut}
       />
     )
   }
@@ -157,6 +205,14 @@ export default function App({
           <div style={{ display: 'flex', gap: 17, alignItems: 'center' }}>
             {currentUser ? (
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <Button
+                  primary
+                  onClick={() => navigateTo('/dashboard', 'dashboard')}
+                  style={{ padding: '7px 14px', fontSize: 11 }}
+                >
+                  Dashboard
+                  <Icon size={13} />
+                </Button>
                 <span
                   style={{
                     fontSize: 11,
