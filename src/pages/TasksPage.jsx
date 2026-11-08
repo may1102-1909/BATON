@@ -92,6 +92,12 @@ export function TasksPage() {
               Dashboard
             </Link>
             <Link
+              to="/classic"
+              className="text-[12px] font-medium text-[#999ba5] hover:text-[#34d399] transition-colors no-underline"
+            >
+              Classic App
+            </Link>
+            <Link
               to="/review"
               className="text-[12px] font-medium text-[#999ba5] hover:text-[#34d399] transition-colors no-underline"
             >

@@ -17,21 +17,35 @@ export function RouterProvider({ children }) {
   })
 
   useEffect(() => {
-    function onPopState() {
+    function updatePath() {
       const p = window.location.pathname.toLowerCase()
       const h = window.location.hash.replace(/^#\/?/, '').toLowerCase()
-      if (h) {
-        setPath('/' + h)
-      } else {
-        setPath(p || '/')
-      }
+      setPath(h ? '/' + h : (p || '/'))
     }
 
-    window.addEventListener('popstate', onPopState)
-    window.addEventListener('hashchange', onPopState)
+    window.addEventListener('popstate', updatePath)
+    window.addEventListener('hashchange', updatePath)
+
+    // Intercept pushState & replaceState so URL changes anywhere trigger re-renders
+    const origPush = window.history.pushState
+    const origReplace = window.history.replaceState
+
+    window.history.pushState = function (...args) {
+      const res = origPush.apply(this, args)
+      updatePath()
+      return res
+    }
+    window.history.replaceState = function (...args) {
+      const res = origReplace.apply(this, args)
+      updatePath()
+      return res
+    }
+
     return () => {
-      window.removeEventListener('popstate', onPopState)
-      window.removeEventListener('hashchange', onPopState)
+      window.removeEventListener('popstate', updatePath)
+      window.removeEventListener('hashchange', updatePath)
+      window.history.pushState = origPush
+      window.history.replaceState = origReplace
     }
   }, [])
 
@@ -42,6 +56,8 @@ export function RouterProvider({ children }) {
       window.history.pushState({}, '', normalized)
       setPath(normalized)
       window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else {
+      setPath(normalized)
     }
   }
 
@@ -80,5 +96,3 @@ export function Link({ to, href, children, className = '', style, onClick, ...pr
     </a>
   )
 }
-
-
