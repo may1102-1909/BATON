@@ -179,7 +179,7 @@ export async function getExitInterviews() {
     const scope = getRepositoryScope();
     if (!scope.success)
         return { success: false, message: scope.message };
-    const params = new URLSearchParams({ repository_id: scope.repositoryId });
+    const params = new URLSearchParams({ org_id: scope.orgId, repository_id: scope.repositoryId });
     return request(`/api/mcp/interviews?${params}`, { method: 'GET' });
 }
 export async function answerExitQuestion(interviewId, questionId, answer) {
@@ -190,6 +190,6 @@ export async function answerExitQuestion(interviewId, questionId, answer) {
         return { success: false, message: 'Interview and question IDs are required.' };
     return request(`/api/mcp/interviews/${encodeURIComponent(interviewId)}/answers`, {
         method: 'POST',
-        body: JSON.stringify({ questionId: questionId.slice(0, 200), answer: String(safe(answer)).slice(0, 10_000), repository_id: scope.repositoryId })
+        body: JSON.stringify({ questionId: questionId.slice(0, 200), answer: String(safe(answer)).slice(0, 10_000) })
     });
 }
