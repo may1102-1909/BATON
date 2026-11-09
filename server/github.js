@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, sign, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, sign, timingSafeEqual } from 'node:crypto';
 import { redactData } from './redact.js';
 
 const API_URL = 'https://api.github.com';
@@ -80,7 +80,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
 
   function appJwt() {
     const appId = required(env, 'GITHUB_APP_ID');
-    const privateKey = required(env, 'GITHUB_PRIVATE_KEY').replace(/\\n/g, '\n');
+    const privateKey = required(env, 'GITHUB_APP_PRIVATE_KEY').replace(/\\n/g, '\n');
     const now = Math.floor(Date.now() / 1000);
     const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
     const payload = Buffer.from(JSON.stringify({ iat: now - 60, exp: now + 8 * 60, iss: appId })).toString('base64url');
@@ -98,7 +98,35 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
 
   async function accountFor(userId, orgId) {
     const rows = await store.list('github_accounts', { user_id: userId, org_id: orgId });
-    return rows[0] ?? null;
+    const account = rows[0] ?? null;
+    return account ? { ...account, access_token: decryptToken(account.access_token_encrypted) } : null;
+  }
+
+  function encryptionKey() {
+    const encoded = required(env, 'TOKEN_ENCRYPTION_KEY');
+    const key = Buffer.from(encoded, 'base64');
+    if (key.length !== 32 || key.toString('base64') !== encoded) {
+      throw new Error('TOKEN_ENCRYPTION_KEY must be canonical base64 encoding of exactly 32 bytes');
+    }
+    return key;
+  }
+
+  function encryptToken(token) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', encryptionKey(), iv);
+    const ciphertext = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+    return `v1:${iv.toString('base64')}:${cipher.getAuthTag().toString('base64')}:${ciphertext.toString('base64')}`;
+  }
+
+  function decryptToken(encrypted) {
+    if (typeof encrypted !== 'string') throw new Error('Stored GitHub account token is not encrypted');
+    const [version, iv64, tag64, ciphertext64, extra] = encrypted.split(':');
+    if (version !== 'v1' || !iv64 || !tag64 || !ciphertext64 || extra !== undefined) {
+      throw new Error('Stored GitHub account token has an unsupported encrypted format');
+    }
+    const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(iv64, 'base64'));
+    decipher.setAuthTag(Buffer.from(tag64, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(ciphertext64, 'base64')), decipher.final()]).toString('utf8');
   }
 
   async function upsertSource(repository, source) {
@@ -197,7 +225,8 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
   async function startLink({ userId, orgId }) {
     if (!userId || !orgId) throw new TypeError('userId and orgId are required');
     const clientId = required(env, 'GITHUB_CLIENT_ID');
-    const redirectUri = required(env, 'GITHUB_OAUTH_CALLBACK_URL');
+    const publicAppUrl = required(env, 'PUBLIC_APP_URL').replace(/\/+$/, '');
+    const redirectUri = new URL(`${publicAppUrl}/api/github/callback`).toString();
     const state = randomBytes(32).toString('base64url');
     const now = Date.now();
     await store.insert('github_states', {
@@ -232,6 +261,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
 
     const clientId = required(env, 'GITHUB_CLIENT_ID');
     const clientSecret = required(env, 'GITHUB_CLIENT_SECRET');
+    encryptionKey();
     const tokenResponse = await fetchImpl('https://github.com/login/oauth/access_token', {
       method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json' },
       body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
@@ -251,7 +281,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     const now = new Date().toISOString();
     const account = {
       user_id: pending.user_id, org_id: pending.org_id, github_user_id: String(user.id),
-      github_login: user.login, access_token: tokenData.access_token,
+      github_login: user.login, access_token_encrypted: encryptToken(tokenData.access_token),
       token_type: tokenData.token_type ?? 'bearer', scope: tokenData.scope ?? '', updated_at: now,
       ...(current ? {} : { created_at: now }),
     };
@@ -335,16 +365,29 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     const deliveryId = responseHeader(headers, 'x-github-delivery');
     const event = responseHeader(headers, 'x-github-event');
     if (!deliveryId || !event) throw new Error('GitHub webhook delivery and event headers are required');
-    const existing = await store.list('github_deliveries', { delivery_id: deliveryId });
-    if (existing.length) return { processed: false, duplicate: true };
     let payload;
     try { payload = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : rawBody); }
     catch { throw new Error('Invalid GitHub webhook JSON body'); }
+    let delivery;
+    try {
+      delivery = await store.insert('github_deliveries', { delivery_id: deliveryId, event, status: 'processing' });
+    } catch (error) {
+      const duplicate = await store.list('github_deliveries', { delivery_id: deliveryId });
+      if (duplicate.length) return { processed: false, duplicate: true };
+      throw error;
+    }
+    try {
     const name = payload.repository?.full_name;
-    if (!name || !['push', 'pull_request', 'issues'].includes(event)) return { processed: false, reason: 'unsupported_event' };
+    if (!name || !['push', 'pull_request', 'issues'].includes(event)) {
+      await store.update('github_deliveries', delivery.id, { status: 'ignored', result: 'unsupported_event', processed_at: new Date().toISOString() });
+      return { processed: false, reason: 'unsupported_event' };
+    }
     const repos = await store.list('repositories', { full_name: name.toLowerCase() });
     const repo = repos.find((item) => String(item.installation_id) === String(payload.installation?.id));
-    if (!repo) return { processed: false, reason: 'repository_not_connected' };
+    if (!repo) {
+      await store.update('github_deliveries', delivery.id, { status: 'ignored', result: 'repository_not_connected', processed_at: new Date().toISOString() });
+      return { processed: false, reason: 'repository_not_connected' };
+    }
     let count = 0;
     const actor = payload.sender ?? {};
     if (event === 'push') {
@@ -366,10 +409,14 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       await upsertSource(repo, issueSource(repo, payload.issue));
       count = 1;
     }
-    await store.insert('github_deliveries', {
-      delivery_id: deliveryId, event, repository_id: repo.id, processed_at: new Date().toISOString(),
+    await store.update('github_deliveries', delivery.id, {
+      repository_id: repo.id, status: 'processed', processed_at: new Date().toISOString(), result: { count },
     });
     return { processed: true, count };
+    } catch (error) {
+      await store.remove('github_deliveries', delivery.id).catch(() => {});
+      throw error;
+    }
   }
 
   return { startLink, finishLink, installations, connect, sync, webhook };
