@@ -162,8 +162,11 @@ test('sync imports commits, closed and merged PRs with file paths, and non-PR is
   const github = createGithub({ store, env: environment(), fetchImpl: async (url, options = {}) => {
     const parsed = new URL(url);
     if (parsed.pathname === '/app/installations/41/access_tokens') return json({ token: 'installation-token' });
+    if (parsed.pathname === '/repos/acme/project') return json({default_branch:'main'});
+    if (parsed.pathname.endsWith('/branches')) return json([{name:'main',commit:{sha:'abc123'}},{name:'unmerged',commit:{sha:'def456'}}]);
+    if (parsed.pathname.includes('/compare/')) return json({ahead_by:1,behind_by:0});
     if (parsed.pathname.endsWith('/commits')) return json([{
-      sha: 'abc123', html_url: 'https://github.com/acme/project/commit/abc123',
+      sha: parsed.searchParams.get('sha') === 'unmerged' ? 'def456' : 'abc123', html_url: 'https://github.com/acme/project/commit/abc123',
       author: { id: 5, login: 'octocat' }, commit: { message: 'Fix thing', author: { date: '2024-01-02T03:04:05Z' } },
     }]);
     if (parsed.pathname.endsWith('/pulls') && parsed.searchParams.get('state') === 'all') return json([{
@@ -180,17 +183,19 @@ test('sync imports commits, closed and merged PRs with file paths, and non-PR is
     assert.ok(options.headers.authorization);
     throw new Error(`Unexpected URL ${url}`);
   } });
-  assert.deepEqual(await github.sync({ repository, actorId: 'actor' }), { commits: 1, pullRequests: 1, issues: 1, actorId: 'actor' });
+  assert.deepEqual(await github.sync({ repository, actorId: 'actor' }), { commits: 2, pullRequests: 1, issues: 1, actorId: 'actor' });
   const sources = store.rows('sources');
-  assert.equal(sources.length, 3);
+  assert.equal(sources.length, 5);
   const pr = sources.find((source) => source.metadata.kind === 'pull_request');
+  assert.equal(pr.type, 'pull_request');
+  assert.equal(sources.find(source=>source.type==='branch').metadata.ahead_by,1);
   assert.equal(pr.metadata.merged, true);
   assert.equal(pr.metadata.head_sha, 'head123');
   assert.equal(pr.metadata.files[0].filename, 'src/file.js');
   assert.equal(pr.author_id, 'user-6');
   assert.equal(sources.find((source) => source.metadata.kind === 'commit').created_at, '2024-01-02T03:04:05.000Z');
   await github.sync({ repository, actorId: 'actor' });
-  assert.equal(store.rows('sources').length, 3);
+  assert.equal(store.rows('sources').length, 5);
   assert.ok(store.rows('repositories')[0].last_synced_at);
 });
 

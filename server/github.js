@@ -5,15 +5,17 @@ const API_URL = 'https://api.github.com';
 const API_VERSION = '2022-11-28';
 const STATE_TTL_MS = 10 * 60 * 1000;
 
+function fail(status, message) {return Object.assign(new Error(redactData(message)), {status});}
+
 function required(env, name) {
   const value = env[name];
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`Missing ${name}`);
+  if (typeof value !== 'string' || !value.trim()) throw fail(503, `Missing ${name}`);
   return value.trim();
 }
 
 function normalizeFullName(value) {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) {
-    throw new Error('Repository must be in owner/name format');
+    throw fail(400, 'Repository must be in owner/name format');
   }
   return value.toLowerCase();
 }
@@ -50,13 +52,14 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(30000),
     });
     const text = await response.text();
     let data;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
     if (!response.ok) {
       const message = typeof data?.message === 'string' ? data.message : `GitHub API returned ${response.status}`;
-      throw new Error(`GitHub API ${method} ${path} failed (${response.status}): ${message}`);
+      throw fail(502, `GitHub API ${method} ${path} failed (${response.status}): ${message}`);
     }
     return data;
   }
@@ -141,7 +144,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       author_id: author?.user_id ?? null,
       author: source.author_login ?? 'GitHub',
       author_login: source.author_login ?? null,
-      type: 'github_evidence',
+      type: source.type,
       content: (source.content ?? '').slice(0, 100_000),
       metadata: source.metadata ?? {},
       external_id: source.external_id,
@@ -164,7 +167,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     return {
       external_id: `github:${repository.full_name}:commit:${commit.sha}`,
       author_id: author.id == null ? null : String(author.id),
-      author_login: author.login ?? details.author?.name ?? null,
+      author_login: author.login ?? null,
       type: 'commit',
       content: details.message ?? '',
       url: commit.html_url,
@@ -179,7 +182,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       external_id: `github:${repository.full_name}:pull_request:${pr.number}`,
       author_id: author.id == null ? null : String(author.id),
       author_login: author.login ?? null,
-      type: 'github_evidence',
+      type: 'pull_request',
       content: [pr.title, pr.body].filter(Boolean).join('\n\n'),
       url: pr.html_url,
       created_at: pr.created_at,
@@ -199,7 +202,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       external_id: `github:${repository.full_name}:issue:${issue.number}`,
       author_id: author.id == null ? null : String(author.id),
       author_login: author.login ?? null,
-      type: 'github_evidence',
+      type: 'issue',
       content: [issue.title, issue.body].filter(Boolean).join('\n\n'),
       url: issue.html_url,
       created_at: issue.created_at,
@@ -251,16 +254,16 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     for (const [usedHash, expiresAt] of consumedStates) {
       if (expiresAt <= Date.now()) consumedStates.delete(usedHash);
     }
-    if (consumedStates.has(hash)) throw new Error('OAuth state is invalid or has already been used');
+    if (consumedStates.has(hash)) throw fail(400, 'OAuth state is invalid or has already been used');
     const states = await store.list('github_states', { state_hash: hash });
     const pending = states[0];
     if (!pending || new Date(pending.expires_at).getTime() <= Date.now()) {
       if (pending) await store.remove('github_states', pending.id);
-      throw new Error('OAuth state is invalid or expired');
+      throw fail(400, 'OAuth state is invalid or expired');
     }
     consumedStates.set(hash, Date.now() + STATE_TTL_MS);
     const consumed = await store.remove('github_states', pending.id);
-    if (!consumed) throw new Error('OAuth state is invalid or has already been used');
+    if (!consumed) throw fail(400, 'OAuth state is invalid or has already been used');
 
     const clientId = required(env, 'GITHUB_CLIENT_ID');
     const clientSecret = required(env, 'GITHUB_CLIENT_SECRET');
@@ -277,18 +280,18 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     if (!user?.id || !user?.login) throw new Error('GitHub did not return a valid user identity');
     const memberships = await store.list('members', { org_id: pending.org_id, user_id: pending.user_id });
     const membership = memberships.find((member) => !member.disabled_at);
-    if (!membership) throw new Error('An active organization membership is required to link GitHub');
+    if (!membership) throw fail(403, 'An active organization membership is required to link GitHub');
     if (membership.github_login && membership.github_login.toLowerCase() !== user.login.toLowerCase()) {
-      throw new Error('This member is already linked to a different GitHub login; disconnect it before relinking');
+      throw fail(409, 'This member is already linked to a different GitHub login; disconnect it before relinking');
     }
     const owners = (await store.list('members', { org_id: pending.org_id })).filter((member) =>
       !member.disabled_at && member.user_id !== pending.user_id &&
       typeof member.github_login === 'string' && member.github_login.toLowerCase() === user.login.toLowerCase());
-    if (owners.length) throw new Error('This GitHub login is already linked to another organization member');
+    if (owners.length) throw fail(409, 'This GitHub login is already linked to another organization member');
     const current = await accountFor(pending.user_id, pending.org_id);
     if (current && (String(current.github_user_id) !== String(user.id) ||
       current.github_login.toLowerCase() !== user.login.toLowerCase())) {
-      throw new Error('This member is already linked to a different GitHub account; disconnect it before relinking');
+      throw fail(409, 'This member is already linked to a different GitHub account; disconnect it before relinking');
     }
     if (!membership.github_login) {
       await store.update('members', membership.id, { github_login: user.login });
@@ -307,7 +310,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
 
   async function installations({ userId, orgId }) {
     const account = await accountFor(userId, orgId);
-    if (!account) throw new Error('Link a GitHub account before listing installations');
+    if (!account) throw fail(409, 'Link a GitHub account before listing installations');
     const list = await paginate('/user/installations', account.access_token);
     return list.map((item) => ({
       id: item.id, account: item.account ? { login: item.account.login, type: item.account.type } : null,
@@ -318,14 +321,14 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
   async function connect({ userId, orgId, installationId, fullName }) {
     if (!userId || !orgId || installationId == null) throw new TypeError('userId, orgId, and installationId are required');
     const account = await accountFor(userId, orgId);
-    if (!account) throw new Error('Link a GitHub account before connecting a repository');
+    if (!account) throw fail(409, 'Link a GitHub account before connecting a repository');
     const name = normalizeFullName(fullName);
     const authorizedInstallations = await paginate('/user/installations', account.access_token);
     const installation = authorizedInstallations.find((item) => String(item.id) === String(installationId));
-    if (!installation) throw new Error('GitHub installation is not accessible to the linked user');
+    if (!installation) throw fail(403, 'GitHub installation is not accessible to the linked user');
     const repos = await paginate(`/user/installations/${encodeURIComponent(installationId)}/repositories`, account.access_token);
     if (!repos.some((repo) => typeof repo.full_name === 'string' && repo.full_name.toLowerCase() === name)) {
-      throw new Error('Repository is not accessible through the authorized GitHub installation');
+      throw fail(403, 'Repository is not accessible through the authorized GitHub installation');
     }
     const rows = await store.list('repositories', { org_id: orgId, full_name: name });
     const data = { org_id: orgId, full_name: name, installation_id: String(installationId) };
@@ -345,9 +348,32 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     const token = await installationToken(repository.installation_id);
     let commits = 0, pullRequests = 0, issues = 0;
     const repoPath = repositoryPath(fullName);
-    const commitList = await paginate(`/repos/${repoPath}/commits`, token);
-    for (const commit of commitList) {
-      await upsertSource(current, commitSource(current, commit));
+    const details = await request(`/repos/${repoPath}`, { token });
+    const branches = await paginate(`/repos/${repoPath}/branches`, token);
+    const allCommits = new Map();
+    for (const branch of branches) {
+      const branchCommits = await paginate(`/repos/${repoPath}/commits?sha=${encodeURIComponent(branch.name)}`, token);
+      for (const commit of branchCommits) {
+        const entry = allCommits.get(commit.sha) ?? { commit, branches: [] };
+        entry.branches.push(branch.name);
+        allCommits.set(commit.sha, entry);
+      }
+      if (branch.name !== details.default_branch) {
+        const comparison = await request(`/repos/${repoPath}/compare/${encodeURIComponent(details.default_branch)}...${encodeURIComponent(branch.name)}`, { token });
+        await upsertSource(current, {
+          type: 'branch', external_id: `github:${current.full_name}:branch:${branch.name}`,
+          author_login: branchCommits[0]?.author?.login ?? null,
+          content: `Branch ${branch.name}: ${comparison.ahead_by} commits ahead of ${details.default_branch}, ${comparison.behind_by} behind.`,
+          metadata: { kind: 'branch', name: branch.name, base: details.default_branch, ahead_by: comparison.ahead_by, behind_by: comparison.behind_by, sha: branch.commit?.sha },
+          url: `https://github.com/${current.full_name}/tree/${encodeURIComponent(branch.name)}`,
+          created_at: branchCommits[0]?.commit?.author?.date,
+        });
+      }
+    }
+    for (const { commit, branches: refs } of allCommits.values()) {
+      const source = commitSource(current, commit);
+      source.metadata.branches = refs;
+      await upsertSource(current, source);
       commits += 1;
     }
     const prs = await paginate(`/repos/${repoPath}/pulls?state=all&sort=updated&direction=desc`, token);
@@ -376,13 +402,13 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
 
   async function webhook({ rawBody, headers }) {
     if (!(typeof rawBody === 'string' || Buffer.isBuffer(rawBody))) throw new TypeError('rawBody must be the unparsed request body');
-    if (!verifyWebhook(rawBody, headers)) throw new Error('Invalid GitHub webhook signature');
+    if (!verifyWebhook(rawBody, headers)) throw fail(401, 'Invalid GitHub webhook signature');
     const deliveryId = responseHeader(headers, 'x-github-delivery');
     const event = responseHeader(headers, 'x-github-event');
-    if (!deliveryId || !event) throw new Error('GitHub webhook delivery and event headers are required');
+    if (!deliveryId || !event) throw fail(400, 'GitHub webhook delivery and event headers are required');
     let payload;
     try { payload = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : rawBody); }
-    catch { throw new Error('Invalid GitHub webhook JSON body'); }
+    catch { throw fail(400, 'Invalid GitHub webhook JSON body'); }
     let delivery;
     try {
       delivery = await store.insert('github_deliveries', { delivery_id: deliveryId, event, status: 'processing' });
