@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 const MAX_BODY_BYTES = 1024 * 1024;
-const roles = new Set(['admin', 'member', 'team']);
+const roles = new Set(['admin', 'member']);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const isoNow = () => new Date().toISOString();
 const safeToken = () => randomBytes(32).toString('base64url');
@@ -87,7 +87,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       if ((await store.list('organizations')).length) return;
       const organization = await store.insert('organizations', { id: 'demo-org', name: 'Demo Organization', created_by: 'demo-admin' });
       await store.insert('members', { org_id: organization.id, user_id: 'demo-admin', role: 'admin', email: 'demo@example.invalid' });
-      await store.insert('members', { org_id: organization.id, user_id: 'demo-member', role: 'team', email: 'member@example.invalid' });
+      await store.insert('members', { org_id: organization.id, user_id: 'demo-member', role: 'member', email: 'member@example.invalid' });
       await store.insert('sources', { org_id: organization.id, author_id: 'demo-admin', author: 'Demo Admin', type: 'decision', content: 'Demo workspace is ready.', visibility: 'team', metadata: {} });
     })();
     return demoReady;
@@ -139,7 +139,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     let match;
 
     if (method === 'GET' && url.pathname === '/api/health') {
-      return json(res, 200, { ok: true, configured: { supabase: Boolean(configuration.SUPABASE_URL && configuration.SUPABASE_SERVICE_ROLE_KEY), github: Boolean(configuration.GITHUB_APP_ID && configuration.GITHUB_PRIVATE_KEY), demo: configuration.BATON_DEMO_MODE === 'true' } });
+      return json(res, 200, { ok: true, demo: configuration.BATON_DEMO_MODE === 'true', configured: { supabase: Boolean(configuration.SUPABASE_URL && configuration.SUPABASE_SERVICE_ROLE_KEY), github: Boolean(configuration.GITHUB_APP_ID && configuration.GITHUB_APP_PRIVATE_KEY && configuration.GITHUB_CLIENT_ID && configuration.GITHUB_CLIENT_SECRET && configuration.TOKEN_ENCRYPTION_KEY), gemini: Boolean(configuration.GEMINI_API_KEY), demo: configuration.BATON_DEMO_MODE === 'true' } });
     }
     if (method === 'GET' && url.pathname === '/api/me') {
       const organizations = [];
@@ -166,14 +166,14 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       ]);
       const sources = allSources.filter(source => sourceVisible(source, actor));
       const visibleHandovers = handoverRows.filter(row => actor.role === 'admin' || row.leaver_id === actor.id || (row.incoming_id === actor.id && row.status === 'approved'));
-      const tokens = tokenRows.map(({ token_hash, ...token }) => token);
+      const tokens = tokenRows.filter(token=>actor.role === 'admin' || token.user_id === actor.id).map(({ token_hash, ...token }) => token);
       return json(res, 200, { organization, members, repositories, sources, tasks, handovers: visibleHandovers, tokens });
     }
 
     if ((match = /^\/api\/orgs\/([^/]+)\/invites$/.exec(url.pathname)) && method === 'POST') {
       const actor = await requireOrg(auth, match[1], true);
       const role = body.role ?? 'member';
-      if (!['member', 'team'].includes(role)) throw new HttpError(400, 'Invite role must be member or team');
+      if (!['member', 'admin'].includes(role)) throw new HttpError(400, 'Invite role must be member or admin');
       const token = safeToken();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const invite = await store.insert('invites', { org_id: actor.org_id, token_hash: hash(token), role, email: typeof body.email === 'string' ? body.email.trim().toLowerCase() : null, created_by: actor.id, expires_at: expiresAt });
@@ -197,7 +197,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     }
 
     if ((match = /^\/api\/orgs\/([^/]+)\/tokens$/.exec(url.pathname)) && method === 'POST') {
-      const actor = await requireOrg(auth, match[1], true);
+      const actor = await requireOrg(auth, match[1]);
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       if (!name || name.length > 100) throw new HttpError(400, 'Token name must be 1–100 characters');
       const token = `baton_${safeToken()}`;
@@ -402,7 +402,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       const handover = await store.get('handovers', match[1]);
       if (!handover) throw new HttpError(404, 'Handover not found');
       const actor = await requireOrg(auth, handover.org_id);
-      const module = handovers ?? await maybeIntegration('handover', configuration, fetchImpl);
+      const module = handovers ?? await maybeIntegration('handover', store, configuration, fetchImpl);
       return json(res, 200, await module.reviewClaim({ handoverId: handover.id, actor, claimId: match[2], status: body.status, text: body.text }));
     }
     if ((match = /^\/api\/mcp\/interviews(?:\/([^/]+)\/answers)?$/.exec(url.pathname)) && (method === 'GET' || method === 'POST')) {
@@ -424,13 +424,14 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     }
 
     if ((match = /^\/api\/orgs\/([^/]+)\/github\/connect$/.exec(url.pathname)) && method === 'GET') {
-      const actor = await requireOrg(auth, match[1], true);
+      const actor = await requireOrg(auth, match[1]);
       const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
       return json(res, 200, await module.startLink({ userId: actor.id, orgId: actor.org_id }));
     }
     if (method === 'GET' && url.pathname === '/api/github/callback') {
       const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
-      return json(res, 200, await module.finishLink({ code: url.searchParams.get('code'), state: url.searchParams.get('state') }));
+      await module.finishLink({ code: url.searchParams.get('code'), state: url.searchParams.get('state') });
+      return res.writeHead(303, {Location:'/dashboard?github=connected', 'Cache-Control':'no-store'}).end();
     }
     if ((match = /^\/api\/orgs\/([^/]+)\/github\/installations$/.exec(url.pathname)) && method === 'GET') {
       const actor = await requireOrg(auth, match[1], true);
@@ -484,9 +485,10 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
         return await routes(req, res, url, { user: { id: 'github-webhook' }, memberships: [], demo: false }, {});
       }
       const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : {};
-      const auth = url.pathname === '/api/health' ? { user: { id: 'health' }, memberships: [], demo: configuration.BATON_DEMO_MODE === 'true' } : await authenticate(req);
+      const auth = ['/api/health','/api/github/callback'].includes(url.pathname) ? { user: { id: 'health' }, memberships: [], demo: configuration.BATON_DEMO_MODE === 'true' } : await authenticate(req);
       if (auth.apiToken && !['/api/collector/push', '/api/collector/search', '/api/mcp/interviews'].includes(url.pathname)
-        && !/^\/api\/mcp\/interviews\/[^/]+\/answers$/.test(url.pathname)) throw new HttpError(403, 'API tokens are limited to collector and MCP interview access');
+        && !/^\/api\/mcp\/interviews\/[^/]+\/answers$/.test(url.pathname)
+        && !(req.method === 'GET' && /^\/api\/orgs\/[^/]+\/state$/.test(url.pathname))) throw new HttpError(403, 'API tokens are limited to collector and MCP interview access');
       return await routes(req, res, url, auth, body);
     } catch (error) {
       if (res.headersSent) return res.end();
