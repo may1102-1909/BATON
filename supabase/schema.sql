@@ -213,13 +213,16 @@ create table if not exists public.github_accounts (
   org_id uuid not null references public.organizations(id) on delete cascade,
   github_user_id text not null,
   github_login text not null,
-  access_token text not null,
+  access_token_encrypted text not null,
   token_type text not null default 'bearer',
   scope text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (org_id, user_id)
 );
+alter table public.github_accounts add column if not exists access_token_encrypted text;
+alter table public.github_accounts drop column if exists access_token;
+
 create table if not exists public.github_states (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -235,6 +238,9 @@ create table if not exists public.github_deliveries (
   repository_id uuid references public.repositories(id) on delete set null,
   processed_at timestamptz not null default now()
 );
+
+alter table public.github_deliveries add column if not exists status text not null default 'processed';
+alter table public.github_deliveries add column if not exists result jsonb;
 
 create table if not exists public.github_link_states (
   id uuid primary key default gen_random_uuid(),
@@ -350,29 +356,20 @@ drop policy if exists decisions_member_access on public.decisions;
 drop policy if exists blockers_member_access on public.blockers;
 
 create policy organizations_member_read on public.organizations for select to authenticated using (public.is_org_member(id));
-create policy organizations_member_insert on public.organizations for insert to authenticated with check (created_by = auth.uid());
-create policy organizations_admin_update on public.organizations for update to authenticated using (public.is_org_admin(id)) with check (public.is_org_admin(id));
 create policy memberships_org_read on public.org_memberships for select to authenticated using (public.is_org_member(org_id));
-create policy memberships_admin_write on public.org_memberships for all to authenticated using (public.is_org_admin(org_id)) with check (public.is_org_admin(org_id));
 create policy repositories_member_access on public.repositories for select to authenticated using (public.is_org_member(org_id));
 create policy sources_member_read on public.sources for select to authenticated using (
   public.is_org_member(org_id) and (visibility <> 'admin' or public.is_org_admin(org_id))
   and (visibility <> 'private' or author_id = auth.uid()::text or public.is_org_admin(org_id))
 );
-create policy sources_member_insert on public.sources for insert to authenticated with check (public.is_org_member(org_id) and author_id = auth.uid()::text);
-create policy sources_owner_update on public.sources for update to authenticated using (public.is_org_member(org_id) and author_id = auth.uid()::text and external_id is null and type <> 'github_evidence') with check (public.is_org_member(org_id) and author_id = auth.uid()::text and external_id is null and type <> 'github_evidence');
-create policy sources_owner_delete on public.sources for delete to authenticated using (public.is_org_member(org_id) and author_id = auth.uid()::text and external_id is null and type <> 'github_evidence');
-create policy tasks_member_access on public.tasks for all to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
-create policy task_comments_member_access on public.task_comments for all to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
-create policy handovers_member_read on public.handovers for select to authenticated using (public.is_org_member(org_id));
-create policy handovers_admin_insert on public.handovers for insert to authenticated with check (public.is_org_admin(org_id));
-create policy handovers_admin_update on public.handovers for update to authenticated using (public.is_org_admin(org_id)) with check (public.is_org_admin(org_id));
-create policy handover_claims_member_access on public.handover_claims for select to authenticated using (public.is_org_member(org_id));
-create policy handover_questions_member_access on public.handover_questions for select to authenticated using (public.is_org_member(org_id));
-create policy handover_versions_member_read on public.handover_versions for select to authenticated using (public.is_org_member(org_id));
-create policy handover_events_member_read on public.handover_events for select to authenticated using (public.is_org_member(org_id));
 create policy decisions_member_access on public.decisions for select to authenticated using (org_id is not null and public.is_org_member(org_id));
 create policy blockers_member_access on public.blockers for select to authenticated using (org_id is not null and public.is_org_member(org_id));
 
 -- Invites, API tokens, GitHub OAuth/account state, deliveries and installations have no client policies;
 -- access is only through the server's service-role client.
+
+-- Mutations and handover internals are served only through the policy-aware API.
+drop policy if exists tasks_member_read on public.tasks;
+create policy tasks_member_read on public.tasks for select to authenticated using (public.is_org_member(org_id));
+drop policy if exists task_comments_member_read on public.task_comments;
+create policy task_comments_member_read on public.task_comments for select to authenticated using (public.is_org_member(org_id));
