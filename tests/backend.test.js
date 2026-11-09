@@ -147,7 +147,7 @@ test('organization invites are hashed and accepted only once', async () => {
   const app = createApp({ store, env: { BATON_DEMO_MODE: 'true' } });
   await serve(app, async url => {
     const created = await jsonRequest(url, `/api/orgs/${orgId}/invites`, {
-      method: 'POST', headers: { 'x-baton-demo-user': userId }, body: { role: 'team' },
+      method: 'POST', headers: { 'x-baton-demo-user': userId }, body: { role: 'member' },
     });
     assert.equal(created.status, 201);
     const { token, invite } = await created.json();
@@ -194,4 +194,14 @@ test('last active organization admin cannot be offboarded', async () => {
     });
     assert.equal(response.status, 409);
   });
+});
+
+test('OAuth callback uses one-use state without requiring a browser bearer header',async()=>{
+  const {webHandler}=await import('../server/web.js');
+  let received;
+  const run=webHandler(createApp({store:fixture(),env:{},github:{async finishLink(value){received=value;return{orgId,userId,login:'verified-user'};}}}));
+  const response=await run(new Request('https://baton.example/api/github/callback?code=code&state=one-use-state'));
+  assert.equal(response.status,303);
+  assert.equal(response.headers.get('location'),'/dashboard?github=connected');
+  assert.deepEqual(received,{code:'code',state:'one-use-state'});
 });
