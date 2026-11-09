@@ -1,27 +1,18 @@
 #!/bin/sh
-# Baton auto-sync post-commit hook
-LAST_HASH=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
-LAST_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "Commit")
-AUTHOR_NAME=$(git config user.name 2>/dev/null || echo "Engineer")
-NOW_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
-
-PAYLOAD="{
-  \"type\": \"commit\",
-  \"data\": {
-    \"sha\": \"$LAST_HASH\",
-    \"message\": \"$LAST_MSG\",
-    \"author\": \"$AUTHOR_NAME\"
-  },
-  \"timestamp\": \"$NOW_TS\"
-}"
-
-# Dispatch to port 3000 and port 5173 (backgrounded)
-curl -s -X POST http://localhost:3000/api/collector/push \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer baton_dev_secret" \
-  -d "$PAYLOAD" > /dev/null 2>&1 &
-
-curl -s -X POST http://localhost:5173/api/collector/push \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer baton_dev_secret" \
-  -d "$PAYLOAD" > /dev/null 2>&1 &
+# Optional local capture; GitHub App webhooks are the primary repository source.
+[ -n "$BATON_API_KEY" ] && [ -n "$BATON_API_URL" ] && [ -n "$BATON_ORG_ID" ] || exit 0
+node --input-type=module <<'JS' >/dev/null 2>&1 &
+import {execFileSync} from 'node:child_process';
+import {redactData} from './server/redact.js';
+try {
+  const git = (...args) => execFileSync('git',args,{encoding:'utf8'}).trim();
+  const sha=git('rev-parse','HEAD');
+  const content=redactData(git('log','-1','--format=%B'));
+  await fetch(`${process.env.BATON_API_URL.replace(/\/$/,'')}/api/collector/push`,{
+    method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.BATON_API_KEY}`},
+    body:JSON.stringify({type:'commit',content,org_id:process.env.BATON_ORG_ID,repository_id:process.env.BATON_REPOSITORY_ID,session_id:'git-hook',event_id:sha,metadata:{sha,source:'optional-local-hook'}}),
+    signal:AbortSignal.timeout(5000),
+  });
+} catch {}
+JS
+exit 0
