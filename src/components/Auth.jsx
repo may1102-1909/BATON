@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Brand } from './Brand'
 import { Icon } from './Icon'
 import { Button } from './Button'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 const C = {
   bg: '#0c0d0e',
@@ -229,15 +229,17 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
             style={{ width: '100%' }}
             onClick={async () => {
               try {
-                // Trigger Supabase GitHub OAuth
+                if (!supabase) throw new Error('Supabase is not configured')
                 const { error } = await supabase.auth.signInWithOAuth({
                   provider: 'github'
                 })
                 if (error) {
-                  setMessage('GitHub authorization simulated. No account was connected.')
+                  setStatus('error')
+                  setMessage('GitHub sign-in could not start. Check the Supabase GitHub provider configuration.')
                 }
               } catch {
-                setMessage('GitHub authorization simulated. No account was connected.')
+                setStatus('error')
+                  setMessage('GitHub sign-in could not start. Check the Supabase GitHub provider configuration.')
               }
             }}
           >
