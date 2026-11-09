@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Brand } from './Brand'
 import { Icon } from './Icon'
 import { Button } from './Button'
@@ -13,10 +13,38 @@ const C = {
   green: '#34d399'
 }
 
-export function Auth({ mode, setMode, back, onAuthSuccess }) {
+export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back, onAuthSuccess }) {
+  const [internalMode, setInternalMode] = useState(propMode || 'login')
+  const mode = internalMode
+
+  useEffect(() => {
+    if (propMode) {
+      setInternalMode(propMode)
+      if (propMode === 'signup') {
+        setUsePassword(true)
+      }
+    }
+  }, [propMode])
+
+  const handleModeChange = (m) => {
+    setInternalMode(m)
+    if (typeof externalSetMode === 'function') {
+      try {
+        externalSetMode(m)
+      } catch (err) {
+        console.warn('externalSetMode error:', err)
+      }
+    }
+    if (m === 'signup') {
+      setUsePassword(true)
+    }
+    setMessage('')
+    setErrorMessage('')
+  }
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [usePassword, setUsePassword] = useState(false)
+  const [usePassword, setUsePassword] = useState(propMode === 'signup')
   const [show, setShow] = useState(false)
   const [touched, setTouched] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -29,58 +57,69 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
 
   // 1. Sign Up Handler via Supabase
   const handleSignUp = async (emailToSubmit, passwordToSubmit) => {
-    const { data, error } = await supabase.auth.signUp({
-      email: emailToSubmit,
-      password: passwordToSubmit
-    })
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: emailToSubmit,
+        password: passwordToSubmit
+      })
 
-    if (error) {
-      console.error('Error signing up:', error.message)
-      setErrorMessage(error.message)
-      alert(error.message)
-    } else {
-      console.log('Check your email for confirmation or user created:', data)
-      setMessage('Account created successfully! Check your email for confirmation.')
-      alert('Account created successfully!')
-      if (onAuthSuccess) {
-        onAuthSuccess(data?.user || { email: emailToSubmit })
+      if (error) {
+        console.error('Error signing up:', error.message)
+        setErrorMessage(error.message)
+      } else {
+        console.log('User created:', data)
+        setMessage('Account created successfully!')
+        if (onAuthSuccess) {
+          onAuthSuccess(data?.user || { email: emailToSubmit })
+        }
       }
+    } catch (err) {
+      console.error('Sign up failed:', err)
+      setErrorMessage(err.message || 'Failed to create account.')
     }
   }
 
   // 2. Sign In Handler via Supabase
   const handleSignIn = async (emailToSubmit, passwordToSubmit) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: emailToSubmit,
-      password: passwordToSubmit
-    })
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailToSubmit,
+        password: passwordToSubmit
+      })
 
-    if (error) {
-      console.error('Error signing in:', error.message)
-      setErrorMessage(error.message)
-      alert(error.message)
-    } else {
-      console.log('Signed in successfully:', data.user)
-      setMessage(`Signed in successfully as ${data.user.email}!`)
-      if (onAuthSuccess) {
-        onAuthSuccess(data?.user || { email: emailToSubmit })
+      if (error) {
+        console.error('Error signing in:', error.message)
+        setErrorMessage(error.message)
+      } else {
+        console.log('Signed in successfully:', data.user)
+        setMessage(`Signed in successfully as ${data.user.email}!`)
+        if (onAuthSuccess) {
+          onAuthSuccess(data?.user || { email: emailToSubmit })
+        }
       }
+    } catch (err) {
+      console.error('Sign in failed:', err)
+      setErrorMessage(err.message || 'Failed to sign in.')
     }
   }
 
   // 3. Magic Link Handler via Supabase
   const handleMagicLink = async (emailToSubmit) => {
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email: emailToSubmit
-    })
+    try {
+      const { data, error } = await supabase.auth.signInWithOtp({
+        email: emailToSubmit
+      })
 
-    if (error) {
-      console.error('Error sending magic link:', error.message)
-      setErrorMessage(error.message)
-      alert(error.message)
-    } else {
-      console.log('Magic link sent:', data)
-      setMessage(`Magic link sent to ${emailToSubmit}. Please check your inbox.`)
+      if (error) {
+        console.error('Error sending magic link:', error.message)
+        setErrorMessage(error.message)
+      } else {
+        console.log('Magic link sent:', data)
+        setMessage(`Magic link sent to ${emailToSubmit}. Please check your inbox.`)
+      }
+    } catch (err) {
+      console.error('Magic link failed:', err)
+      setErrorMessage(err.message || 'Failed to send magic link.')
     }
   }
 
@@ -201,11 +240,7 @@ export function Auth({ mode, setMode, back, onAuthSuccess }) {
                 key={m}
                 role="tab"
                 aria-selected={mode === m}
-                onClick={() => {
-                  setMode(m)
-                  setMessage('')
-                  setErrorMessage('')
-                }}
+                onClick={() => handleModeChange(m)}
                 style={{
                   flex: 1,
                   padding: '0 0 14px',

@@ -9,6 +9,22 @@ import { Auth } from './components/Auth'
 import ClassicApp from './ClassicApp'
 import HandoverReviewPage from '../app/handover/[id]/page'
 
+function AuthPageWrapper() {
+  const { path, navigate } = useRouter()
+  const cleanPath = path.split('?')[0].toLowerCase()
+  const isSignup = path.includes('mode=signup') || cleanPath === '/signup'
+  const [mode, setMode] = React.useState(isSignup ? 'signup' : 'login')
+
+  return (
+    <Auth
+      mode={mode}
+      setMode={setMode}
+      back={() => navigate('/')}
+      onAuthSuccess={() => navigate('/usage')}
+    />
+  )
+}
+
 function AppRoutes() {
   const { path, navigate } = useRouter()
   const cleanPath = path.split('?')[0].toLowerCase()
@@ -44,14 +60,7 @@ function AppRoutes() {
   }
 
   if (cleanPath === '/auth' || isLogin || isSignup) {
-    return (
-      <Auth
-        mode={isSignup ? 'signup' : 'login'}
-        setMode={() => {}}
-        back={() => navigate('/')}
-        onAuthSuccess={() => navigate('/usage')}
-      />
-    )
+    return <AuthPageWrapper />
   }
 
   if (cleanPath === '/classic') {
