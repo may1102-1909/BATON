@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { redactData } from './redact.js';
 
 export type MemoryType = 'decision' | 'blocker' | 'context' | 'change';
@@ -53,6 +53,17 @@ function configuration(): { apiUrl: string; apiKey: string; orgId: string; repos
 
 function safe<T>(value: T): T {
   return redactData(value);
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record).sort().map((key) => [key, canonicalize(record[key])])
+    );
+  }
+  return value;
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
@@ -144,15 +155,22 @@ export async function pushMemory(type: MemoryType | 'bootstrap', payload: unknow
 
   const data = safe(payload);
   const content = typeof data === 'string' ? data : undefined;
+  const eventId = createHash('sha256').update(JSON.stringify(canonicalize({
+    type,
+    org_id: scope.orgId,
+    repository_id: scope.repositoryId,
+    session_id: scope.sessionId,
+    data
+  }))).digest('hex');
   const event = {
     type,
-    ...(content === undefined ? { data, payload: data } : { content, data, payload: data }),
+    ...(content === undefined ? { data } : { content, data }),
     timestamp: new Date().toISOString(),
     source: 'baton-mcp-server',
     org_id: scope.orgId,
     repository_id: scope.repositoryId,
     session_id: scope.sessionId,
-    event_id: randomUUID()
+    event_id: eventId
   };
   return request('/api/collector/push', { method: 'POST', body: JSON.stringify(event) });
 }
