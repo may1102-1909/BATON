@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { redactData } from './redact.js';
 const PROCESS_SESSION_ID = randomUUID();
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -35,6 +35,15 @@ function configuration() {
 }
 function safe(value) {
     return redactData(value);
+}
+function canonicalize(value) {
+    if (Array.isArray(value))
+        return value.map(canonicalize);
+    if (value && typeof value === 'object') {
+        const record = value;
+        return Object.fromEntries(Object.keys(record).sort().map((key) => [key, canonicalize(record[key])]));
+    }
+    return value;
 }
 async function request(path, init = {}) {
     let config;
@@ -130,6 +139,13 @@ export async function pushMemory(type, payload) {
         return { success: false, message: scope.message };
     const data = safe(payload);
     const content = typeof data === 'string' ? data : undefined;
+    const eventId = createHash('sha256').update(JSON.stringify(canonicalize({
+        type,
+        org_id: scope.orgId,
+        repository_id: scope.repositoryId,
+        session_id: scope.sessionId,
+        data
+    }))).digest('hex');
     const event = {
         type,
         ...(content === undefined ? { data, payload: data } : { content, data, payload: data }),
@@ -138,7 +154,7 @@ export async function pushMemory(type, payload) {
         org_id: scope.orgId,
         repository_id: scope.repositoryId,
         session_id: scope.sessionId,
-        event_id: randomUUID()
+        event_id: eventId
     };
     return request('/api/collector/push', { method: 'POST', body: JSON.stringify(event) });
 }
