@@ -82,12 +82,14 @@ export function createSupabaseStore(client, env = process.env) {
   return {
     async list(name, filters = {}) {
       const db = await clientPromise;
-      let query = db.from(tableName(name)).select('*');
-      for (const [key, value] of Object.entries(filters)) query = query.eq(key, value);
-      return (await run(`list ${name}`, query)).map(record => name === 'tokens' ? ({
-        ...record,
-        token_hash: record.token_hash,
-      }) : record);
+      const records = [];
+      for (let offset = 0; ; offset += 1000) {
+        let query = db.from(tableName(name)).select('*').order('id').range(offset, offset + 999);
+        for (const [key, value] of Object.entries(filters)) query = value === null ? query.is(key, null) : query.eq(key, value);
+        const page = await run(`list ${name}`, query);
+        records.push(...page);
+        if (page.length < 1000) return records;
+      }
     },
     async get(name, id) {
       const db = await clientPromise;
