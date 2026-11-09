@@ -1,98 +1,167 @@
+import { randomUUID } from 'node:crypto';
 import { redactData } from './redact.js';
-/**
- * Get the configured Baton Backend API base URL.
- */
-function getApiUrl() {
-    const url = process.env.BATON_API_URL || 'http://localhost:3000';
-    return url.replace(/\/+$/, '');
-}
-/**
- * Dispatch captured and redacted memory to the Next.js backend.
- */
-export async function pushMemory(type, rawPayload) {
-    // 1. Redact all sensitive credentials, tokens, and high-entropy secrets client-side
-    const sanitizedPayload = redactData(rawPayload);
-    const memoryEvent = {
-        type,
-        data: sanitizedPayload,
-        payload: sanitizedPayload,
-        timestamp: new Date().toISOString(),
-        source: 'baton-mcp-server'
+const PROCESS_SESSION_ID = randomUUID();
+function configuration() {
+    const apiUrl = process.env.BATON_API_URL?.trim();
+    const apiKey = process.env.BATON_API_KEY?.trim();
+    const orgId = process.env.BATON_ORG_ID?.trim();
+    const repositoryId = process.env.BATON_REPOSITORY_ID?.trim();
+    const missing = [
+        ['BATON_API_URL', apiUrl],
+        ['BATON_API_KEY', apiKey],
+        ['BATON_ORG_ID', orgId],
+        ['BATON_REPOSITORY_ID', repositoryId]
+    ].filter(([, value]) => !value).map(([name]) => name);
+    if (missing.length)
+        throw new Error(`Missing required Baton configuration: ${missing.join(', ')}`);
+    let parsed;
+    try {
+        parsed = new URL(apiUrl);
+    }
+    catch {
+        throw new Error('BATON_API_URL must be an absolute HTTP(S) URL');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+        throw new Error('BATON_API_URL must be an HTTP(S) base URL without credentials, query, or fragment');
+    }
+    return {
+        apiUrl: apiUrl.replace(/\/+$/, ''),
+        apiKey: apiKey,
+        orgId: orgId,
+        repositoryId: repositoryId,
+        sessionId: process.env.BATON_SESSION_ID?.trim() || PROCESS_SESSION_ID
     };
-    const endpoint = `${getApiUrl()}/api/collector/push`;
+}
+function safe(value) {
+    return redactData(value);
+}
+async function request(path, init = {}) {
+    let config;
     try {
-        const headers = {
-            'Content-Type': 'application/json'
-        };
-        const authToken = process.env.BATON_PROJECT_KEY || process.env.BATON_API_KEY;
-        if (authToken) {
-            headers['Authorization'] = `Bearer ${authToken}`;
-        }
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(memoryEvent)
-        });
-        if (!response.ok) {
-            const errText = await response.text();
-            return {
-                success: false,
-                message: `Backend push returned HTTP ${response.status}: ${errText}`
-            };
-        }
-        const json = (await response.json());
-        return {
-            success: true,
-            message: `Memory of type "${type}" successfully stored in Baton backend.`,
-            data: json
-        };
+        config = configuration();
     }
     catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
-        // If backend is not currently running, provide helpful fallback info rather than throwing unhandled rejection
-        return {
-            success: false,
-            message: `Baton backend unreachable at ${endpoint} (${errMsg}). Memory was sanitized client-side. Make sure Next.js backend is running.`,
-            data: { sanitizedEvent: memoryEvent }
-        };
+        return { success: false, message: safe(error instanceof Error ? error.message : 'Invalid Baton configuration') };
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    try {
+        const response = await fetch(`${config.apiUrl}${path}`, {
+            ...init,
+            signal: controller.signal,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${config.apiKey}`,
+                ...init.headers
+            }
+        });
+        const text = await response.text();
+        let body;
+        try {
+            body = text ? JSON.parse(text) : {};
+        }
+        catch {
+            body = text.slice(0, 1000);
+        }
+        if (!response.ok) {
+            const detail = typeof body === 'object' && body !== null && 'error' in body
+                ? String(body.error).slice(0, 500)
+                : `HTTP ${response.status}`;
+            return { success: false, message: safe(`Baton backend rejected the request (${response.status}): ${detail}`) };
+        }
+        return { success: true, message: 'Baton backend request succeeded.', data: safe(body) };
+    }
+    catch (error) {
+        const message = error instanceof Error && error.name === 'AbortError'
+            ? 'Baton backend request timed out.'
+            : 'Baton backend is unreachable; no data was saved.';
+        return { success: false, message };
+    }
+    finally {
+        clearTimeout(timer);
     }
 }
-/**
- * Query the Baton backend for relevant memory and architectural context.
- */
-export async function queryContext(query) {
-    const sanitizedQuery = redactData(query);
-    const endpoint = `${getApiUrl()}/api/collector/search?q=${encodeURIComponent(sanitizedQuery)}`;
+export function getRepositoryScope() {
     try {
-        const headers = {
-            'Content-Type': 'application/json'
-        };
-        if (process.env.BATON_API_KEY) {
-            headers['Authorization'] = `Bearer ${process.env.BATON_API_KEY}`;
-        }
-        const response = await fetch(endpoint, {
-            method: 'GET',
-            headers
-        });
-        if (!response.ok) {
-            const errText = await response.text();
-            return {
-                success: false,
-                message: `Backend search returned HTTP ${response.status}: ${errText}`
-            };
-        }
-        const json = (await response.json());
-        return {
-            success: true,
-            message: 'Context retrieved successfully from Baton memory.',
-            data: json
-        };
+        const { orgId, repositoryId, sessionId } = configuration();
+        return { success: true, orgId, repositoryId, sessionId };
     }
     catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
-        return {
-            success: false,
-            message: `Baton backend unreachable at ${endpoint} (${errMsg}). No remote context retrieved.`
-        };
+        return { success: false, message: safe(error instanceof Error ? error.message : 'Invalid Baton configuration') };
     }
+}
+export async function pushMemory(type, payload) {
+    let scope;
+    try {
+        scope = getRepositoryScope();
+    }
+    catch {
+        return { success: false, message: 'Baton configuration is invalid.' };
+    }
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    const data = safe(payload);
+    const content = typeof data === 'string' ? data : undefined;
+    const event = {
+        type,
+        ...(content === undefined ? { data, payload: data } : { content, data, payload: data }),
+        timestamp: new Date().toISOString(),
+        source: 'baton-mcp-server',
+        org_id: scope.orgId,
+        repository_id: scope.repositoryId,
+        session_id: scope.sessionId,
+        event_id: randomUUID()
+    };
+    return request('/api/collector/push', { method: 'POST', body: JSON.stringify(event) });
+}
+export async function queryContext(query) {
+    let scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    const params = new URLSearchParams({
+        q: String(safe(query)).slice(0, 1000),
+        org_id: scope.orgId,
+        repository_id: scope.repositoryId
+    });
+    return request(`/api/collector/search?${params}`, { method: 'GET' });
+}
+export async function getGithubActivity() {
+    const scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    const params = new URLSearchParams({ repository_id: scope.repositoryId });
+    const response = await request(`/api/orgs/${encodeURIComponent(scope.orgId)}/state?${params}`, { method: 'GET' });
+    if (!response.success)
+        return response;
+    const state = response.data && typeof response.data === 'object' ? response.data : {};
+    const repositories = Array.isArray(state.repositories) ? state.repositories : [];
+    const repository = repositories.find((item) => item && typeof item === 'object' &&
+        String(item.id ?? item.repository_id) === scope.repositoryId);
+    const sources = Array.isArray(state.sources) ? state.sources : [];
+    const scopedSources = sources.filter((source) => source && typeof source === 'object' &&
+        String(source.repository_id ?? source.repo_id ?? '') === scope.repositoryId)
+        .slice(0, 100);
+    return {
+        success: true,
+        message: 'Repository tracking state retrieved.',
+        data: safe({ repository: repository ?? null, activity: scopedSources })
+    };
+}
+export async function getExitInterviews() {
+    const scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    const params = new URLSearchParams({ repository_id: scope.repositoryId });
+    return request(`/api/mcp/interviews?${params}`, { method: 'GET' });
+}
+export async function answerExitQuestion(interviewId, questionId, answer) {
+    const scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    if (!interviewId.trim() || !questionId.trim())
+        return { success: false, message: 'Interview and question IDs are required.' };
+    return request(`/api/mcp/interviews/${encodeURIComponent(interviewId)}/answers`, {
+        method: 'POST',
+        body: JSON.stringify({ questionId: questionId.slice(0, 200), answer: String(safe(answer)).slice(0, 10_000), repository_id: scope.repositoryId })
+    });
 }
