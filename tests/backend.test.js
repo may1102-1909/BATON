@@ -147,7 +147,7 @@ test('organization invites are hashed and accepted only once', async () => {
   const app = createApp({ store, env: { BATON_DEMO_MODE: 'true' } });
   await serve(app, async url => {
     const created = await jsonRequest(url, `/api/orgs/${orgId}/invites`, {
-      method: 'POST', headers: { 'x-baton-demo-user': userId }, body: { role: 'team' },
+      method: 'POST', headers: { 'x-baton-demo-user': userId }, body: { role: 'member' },
     });
     assert.equal(created.status, 201);
     const { token, invite } = await created.json();
@@ -193,5 +193,28 @@ test('last active organization admin cannot be offboarded', async () => {
       method: 'PATCH', headers: { 'x-baton-demo-user': userId }, body: { offboarding: true },
     });
     assert.equal(response.status, 409);
+  });
+});
+
+test('OAuth callback uses one-use state without requiring a browser bearer header',async()=>{
+  const {webHandler}=await import('../server/web.js');
+  let received;
+  const run=webHandler(createApp({store:fixture(),env:{},github:{async finishLink(value){received=value;return{orgId,userId,login:'verified-user'};}}}));
+  const response=await run(new Request('https://baton.example/api/github/callback?code=code&state=one-use-state'));
+  assert.equal(response.status,303);
+  assert.equal(response.headers.get('location'),'/dashboard?github=connected');
+  assert.deepEqual(received,{code:'code',state:'one-use-state'});
+});
+
+
+test('handover participants must belong to the organization and members can link their own GitHub identity', async () => {
+  const store = fixture();
+  const app = createApp({store, env:{BATON_DEMO_MODE:'true'}, github:{startLink:async({userId})=>({url:`https://github.com/login?member=${userId}`})}});
+  await serve(app, async url => {
+    const invalid=await jsonRequest(url, `/api/orgs/${orgId}/handovers`, {method:'POST',headers:{'x-baton-demo-user':userId},body:{leaverId:'user-other',incomingId:'user-team'}});
+    assert.equal(invalid.status,400);
+    const link=await jsonRequest(url, `/api/orgs/${orgId}/github/connect`, {headers:{'x-baton-demo-user':'user-team'}});
+    assert.equal(link.status,200);
+    assert.match((await link.json()).url,/user-team/);
   });
 });
