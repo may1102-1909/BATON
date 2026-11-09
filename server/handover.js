@@ -18,6 +18,8 @@ const sourceText = source => trim(source.content);
 const metadata = source => source.metadata && typeof source.metadata === 'object' ? source.metadata : {};
 const sourceTitle = source => trim(metadata(source).title) || trim(metadata(source).number && `#${metadata(source).number}`) || trim(source.type) || 'source';
 const sourceById = (sources, ids) => ids.map(id => sources.find(source => source.id === id)).filter(Boolean);
+const branchAheadBy = source => lower(source.type) === 'branch' && Number(metadata(source).ahead_by) > 0
+  ? Math.floor(Number(metadata(source).ahead_by)) : 0;
 const scrub = value => redactData(value);
 
 function assertActor(actor, orgId) {
@@ -50,6 +52,11 @@ function evidenceQuestions(sources, leaverId) {
   for (const source of sources) {
     const meta = metadata(source);
     const isAdmin = source.visibility === 'admin';
+    if (branchAheadBy(source) > 0) {
+      const branch = trim(meta.name) || sourceTitle(source);
+      const base = trim(meta.base) || 'its base branch';
+      add(`Branch ${branch} is ahead of ${base} by ${branchAheadBy(source)} commit(s). Its status is unknown; should it be merged, rebased, cherry-picked, kept active, or closed, and who owns that decision?`, [source.id], 'high', isAdmin ? 'admin' : 'team');
+    }
     if (lower(source.type) === 'pull_request' && lower(meta.state) === 'open') {
       add(`What remains to merge or close ${sourceTitle(source)}${source.url ? ` (${source.url})` : ''}?`, [source.id], 'high', isAdmin ? 'admin' : 'team');
     }
@@ -74,6 +81,23 @@ function evidenceQuestions(sources, leaverId) {
   return questions.slice(0, 10);
 }
 
+function branchAheadClaims(sources) {
+  return sources.filter(source => branchAheadBy(source) > 0).map(source => {
+    const meta = metadata(source);
+    const branch = trim(meta.name) || sourceTitle(source);
+    const base = trim(meta.base) || 'its base branch';
+    const ahead = branchAheadBy(source);
+    const behind = Number.isFinite(Number(meta.behind_by)) ? Math.max(0, Math.floor(Number(meta.behind_by))) : null;
+    const behindText = behind == null ? '' : ` and ${behind} commit(s) behind`;
+    return {
+      section: 'unfinished_work',
+      text: `Branch ${branch} is ${ahead} commit(s) ahead of ${base}${behindText}. Its current intent and disposition have not been established; confirm with its owner before deciding whether to merge, rebase, retain, or close it.`,
+      source_ids: [source.id], confidence: 'verified', status: 'pending',
+      visibility: source.visibility === 'admin' ? 'admin' : 'team',
+    };
+  });
+}
+
 function deterministicClaims(sources) {
   const claims = [];
   for (const section of SECTIONS) {
@@ -81,8 +105,8 @@ function deterministicClaims(sources) {
       const type = lower(source.type);
       const meta = metadata(source);
       if (section === 'decisions') return type === 'decision';
-      if (section === 'unfinished_work') return type === 'blocker' || (['pull_request', 'issue'].includes(type) && lower(meta.state) === 'open');
-      if (section === 'risks') return type === 'blocker' || type === 'issue' || lower(meta.status) === 'blocked';
+      if (section === 'unfinished_work') return type === 'blocker' || branchAheadBy(source) > 0 || (['pull_request', 'issue'].includes(type) && lower(meta.state) === 'open');
+      if (section === 'risks') return type === 'blocker' || type === 'issue' || lower(meta.status) === 'blocked' || branchAheadBy(source) > 0;
       if (section === 'dependencies') return type === 'dependency' || Boolean(meta.dependencies?.length);
       return type === 'blocker' || (type === 'pull_request' && lower(meta.state) === 'open');
     });
@@ -95,7 +119,7 @@ function deterministicClaims(sources) {
       claims.push({ section, text, source_ids: [source.id], confidence: sourceText(source) ? 'verified' : 'missing' });
     }
   }
-  return claims;
+  return [...claims, ...branchAheadClaims(sources)];
 }
 
 function parseGeminiJson(text) {
@@ -329,7 +353,12 @@ export function createHandovers({ store, env = process.env, fetchImpl = fetch })
       } else {
         rawClaims = deterministicClaims(sources);
       }
-      const claims = mode === 'gemini' ? validateClaims(rawClaims, sources) : validateClaims(rawClaims, sources);
+      const claims = validateClaims(rawClaims, sources);
+      for (const branchClaim of branchAheadClaims(sources)) {
+        if (!claims.some(claim => claim.section === 'unfinished_work' && claim.source_ids.includes(branchClaim.source_ids[0]))) {
+          claims.push(branchClaim);
+        }
+      }
       for (const old of await store.list('handover_claims', { handover_id: handover.id, org_id: handover.org_id })) {
         await store.remove('handover_claims', old.id);
       }
@@ -451,6 +480,7 @@ export function createHandovers({ store, env = process.env, fetchImpl = fetch })
       const sources = await sourcesFor(orgId, { includeAdmin: actor.role === 'admin' });
       const blockers = sources.filter(source => lower(source.type) === 'blocker' && lower(metadata(source).status ?? metadata(source).state) !== 'resolved');
       const openPulls = sources.filter(source => lower(source.type) === 'pull_request' && lower(metadata(source).state) === 'open');
+      const aheadBranches = sources.filter(source => branchAheadBy(source) > 0);
       const contributors = new Map();
       const fileContributors = new Map();
       for (const source of sources.filter(item => lower(item.type) === 'commit')) {
@@ -502,8 +532,17 @@ export function createHandovers({ store, env = process.env, fetchImpl = fetch })
         risks: [
           ...blockers.map(source => ({ kind: 'blocker', risk: 'high', source_ids: [source.id], summary: sourceText(source).slice(0, 240) })),
           ...openPulls.map(source => ({ kind: 'open_pull_request', risk: 'high', source_ids: [source.id], summary: sourceTitle(source) })),
+          ...aheadBranches.map(source => {
+            const meta = metadata(source);
+            return {
+              kind: 'branch_ahead', risk: 'high', source_ids: [source.id],
+              summary: `Branch ${trim(meta.name) || sourceTitle(source)} is ahead of ${trim(meta.base) || 'its base branch'} by ${branchAheadBy(source)} commit(s); disposition and ownership need confirmation.`,
+              ahead_by: branchAheadBy(source),
+              ...(Number.isFinite(Number(meta.behind_by)) ? { behind_by: Math.max(0, Math.floor(Number(meta.behind_by))) } : {}),
+            };
+          }),
         ],
-        counts: { active_blockers: blockers.length, open_pull_requests: openPulls.length, source_records: sources.length },
+        counts: { active_blockers: blockers.length, open_pull_requests: openPulls.length, branches_ahead: aheadBranches.length, source_records: sources.length },
         bus_factor: busFactor,
       });
     },
