@@ -3,6 +3,15 @@ import { createHash } from 'node:crypto';
 import { redactData } from './redact.js';
 
 const SECTIONS = ['decisions', 'unfinished_work', 'risks', 'dependencies', 'next_actions'];
+class HandoverError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.name = 'HandoverError';
+    this.status = status;
+  }
+}
+
+const fail = (status, message) => new HandoverError(status, message);
 const GEMINI_SCHEMA = {
   type: 'OBJECT',
   properties: {
@@ -33,7 +42,7 @@ const scrub = value => redactData(value);
 
 function assertActor(actor, orgId) {
   if (!actor?.id || !['admin', 'member'].includes(actor.role) || actor.org_id !== orgId) {
-    throw new Error('Forbidden');
+    throw fail(403, 'Forbidden');
   }
 }
 
@@ -221,23 +230,27 @@ export function createHandovers({ store, env = process.env, fetchImpl = fetch })
     return { version, versionNumber };
   }
 
-  async function gemini(prompt, responseSchema) {
+  async function gemini(prompt) {
     const key = env.GEMINI_API_KEY;
     if (!key) return null;
-    const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
-    if (!/^[A-Za-z0-9._-]+$/.test(model)) throw new Error('Invalid GEMINI_MODEL');
-    const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+    const model = env.GEMINI_MODEL || 'gemini-3.5-flash';
+    if (!/^[A-Za-z0-9._-]+$/.test(model)) throw fail(400, 'Invalid GEMINI_MODEL');
+    const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: scrub(prompt) }] }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema, temperature: 0.2 },
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
       }),
     });
-    if (!response.ok) throw new Error(`Gemini request failed (${response.status})`);
+    if (!response.ok) throw fail(response.status >= 400 && response.status < 500 ? 502 : 503, `Gemini request failed (${response.status})`);
     const payload = await response.json();
     const text = payload?.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join('');
-    if (!text) throw new Error('Gemini returned no structured content');
-    return parseGeminiJson(text);
+    if (!text) throw fail(502, 'Gemini returned no structured content');
+    try {
+      return parseGeminiJson(text);
+    } catch {
+      throw fail(502, 'Gemini returned invalid JSON');
+    }
   }
 
   async function visibleHandover(handover, actor) {
