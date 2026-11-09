@@ -41,6 +41,11 @@ const SECRET_PATTERNS: { name: string; pattern: RegExp; replacement: string }[] 
     pattern: /xox[baprs]-[0-9a-zA-Z-]{10,48}/g,
     replacement: '[REDACTED_SLACK_TOKEN]'
   },
+  {
+    name: 'BEARER_TOKEN',
+    pattern: /\bBearer\s+[A-Za-z0-9._~+\/-]{16,}={0,2}/gi,
+    replacement: 'Bearer [REDACTED_TOKEN]'
+  },
   // RSA/EC/PGP Private Keys
   {
     name: 'PRIVATE_KEY',
@@ -56,8 +61,8 @@ const SECRET_PATTERNS: { name: string; pattern: RegExp; replacement: string }[] 
   // Generic key-value assignments for secrets
   {
     name: 'KEY_VALUE_SECRET',
-    pattern: /(?:api[_-]?key|secret(?:[_-]?key)?|auth(?:[_-]?token)?|password|access[_-]?token)\s*[:=]\s*["']?([a-zA-Z0-9_\-\.\/+=]{16,})["']?/gi,
-    replacement: '$1: "[REDACTED_SECRET]"'
+    pattern: /(?:api[_-]?key|secret(?:[_-]?key)?|auth(?:orization|[_-]?token)?|password|access[_-]?(?:token|key)|client[_-]?secret)\s*[:=]\s*["']?[^\s"',;}{]{4,}["']?/gi,
+    replacement: '[REDACTED_SECRET_ASSIGNMENT]'
   }
 ];
 
@@ -150,12 +155,8 @@ export function redactData<T>(data: T): T {
     for (const [key, value] of Object.entries(data)) {
       // Check if key itself indicates a sensitive value
       const lowerKey = key.toLowerCase();
-      const isSensitiveKey =
-        lowerKey.includes('secret') ||
-        lowerKey.includes('password') ||
-        lowerKey.includes('token') ||
-        lowerKey.includes('apikey') ||
-        lowerKey.includes('auth');
+      const isSensitiveKey = /(?:^|[_-])(?:secret|password|token|api[_-]?key|authorization|auth(?:entication)?|credentials?|private[_-]?key|cookie|client[_-]?secret)(?:$|[_-])/i.test(lowerKey) ||
+        /^(?:secret|password|token|apikey|authorization|credentials?)$/i.test(lowerKey);
 
       if (isSensitiveKey && typeof value === 'string' && value.length > 0) {
         result[key] = '[REDACTED_SECRET_KEY_VALUE]';
