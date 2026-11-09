@@ -257,3 +257,42 @@ test('risk dashboard uses GitHub pull-request file metadata when available', asy
   assert.equal(risks.bus_factor[0].measure, 'github_file_contributions');
   assert.equal(risks.bus_factor[0].single_contributor_files, 2);
 });
+
+test('ahead branches create high-risk follow-up, unfinished claim, and risk without asserting abandonment', async () => {
+  const { handovers } = setup({ sources: [
+    source({
+      id: 'branch-ahead', type: 'branch', content: 'Branch inventory',
+      metadata: { name: 'feature/queue-v2', base: 'main', ahead_by: 4, behind_by: 2, sha: 'deadbeef' },
+    }),
+    source({
+      id: 'branch-not-ahead', type: 'branch', content: 'Synchronized branch',
+      metadata: { name: 'feature/synced', base: 'main', ahead_by: 0, behind_by: 3, sha: 'cafebabe' },
+    }),
+  ] });
+  const started = await handovers.start({ orgId: ORG, actor: admin, leaverId: leaver.id, incomingId: incoming.id });
+  const question = started.questions.find(item => item.source_ids.includes('branch-ahead'));
+  assert.ok(question);
+  assert.equal(question.risk, 'high');
+  assert.match(question.question_text, /ahead of main by 4 commit\(s\)/);
+  assert.match(question.question_text, /status is unknown/i);
+  assert.doesNotMatch(question.question_text, /abandon/i);
+
+  const generated = await handovers.generate({ handoverId: started.handover.id, actor: admin });
+  const claim = generated.claims.find(item => item.section === 'unfinished_work' && item.source_ids.includes('branch-ahead'));
+  assert.ok(claim);
+  assert.equal(claim.confidence, 'verified');
+  assert.match(claim.text, /4 commit\(s\) ahead of main and 2 commit\(s\) behind/);
+  assert.match(claim.text, /intent and disposition have not been established/i);
+  assert.doesNotMatch(claim.text, /abandon/i);
+  assert.equal(generated.claims.some(item => item.source_ids.includes('branch-not-ahead')), false);
+
+  const risks = await handovers.risks({ orgId: ORG, actor: admin });
+  const branchRisk = risks.risks.find(item => item.kind === 'branch_ahead' && item.source_ids.includes('branch-ahead'));
+  assert.ok(branchRisk);
+  assert.equal(branchRisk.risk, 'high');
+  assert.equal(branchRisk.ahead_by, 4);
+  assert.equal(branchRisk.behind_by, 2);
+  assert.match(branchRisk.summary, /disposition and ownership need confirmation/i);
+  assert.doesNotMatch(branchRisk.summary, /abandon/i);
+  assert.equal(risks.counts.branches_ahead, 1);
+});
