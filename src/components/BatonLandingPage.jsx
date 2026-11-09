@@ -76,7 +76,7 @@ export function BatonLandingPage({ initialTab = '3d-paper' }) {
   }
 
   if (activeTab === 'auth') {
-    return <Auth mode={mode} setMode={setMode} back={() => setActiveTab('3d-paper')} />
+    return <Auth mode={mode} setMode={setMode} back={() => setActiveTab('3d-paper')} onAuthSuccess={() => { window.location.href = '/usage' }} />
   }
 
   return (

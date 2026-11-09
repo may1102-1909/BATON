@@ -38,3 +38,4 @@ flowchart TD
 
 ### 5. Product Frontend (`src/components/Workspace.jsx`)
 - 6 Interactive Tabs: Overview (continuous risk metrics), Memory & Decisions (searchable context feed), GitHub Integration (repo sync), Team & Tokens (RBAC & MCP tokens), Tasks (threaded discussions), Handovers (complete lifecycle & cited Q&A).
+

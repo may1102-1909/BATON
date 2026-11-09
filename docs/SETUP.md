@@ -98,3 +98,4 @@ Connect your favorite AI coding agent (Cursor, Claude Desktop, Antigravity, or C
 }
 ```
 Client-side redaction ensures API tokens, JWTs, and private keys never leave your machine unredacted.
+

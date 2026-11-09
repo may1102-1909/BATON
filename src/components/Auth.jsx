@@ -58,9 +58,15 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
   // 1. Sign Up Handler via Supabase
   const handleSignUp = async (emailToSubmit, passwordToSubmit) => {
     try {
+      const redirectUrl =
+        typeof window !== 'undefined' && window.location.hostname === 'localhost'
+          ? `${window.location.origin}/usage`
+          : 'https://baton-nu.vercel.app/usage'
+
       const { data, error } = await supabase.auth.signUp({
         email: emailToSubmit,
-        password: passwordToSubmit
+        password: passwordToSubmit,
+        options: { emailRedirectTo: redirectUrl }
       })
 
       if (error) {
@@ -68,9 +74,16 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
         setErrorMessage(error.message)
       } else {
         console.log('User created:', data)
-        setMessage('Account created successfully!')
+        setMessage('Account created successfully! Redirecting to usage...')
         if (onAuthSuccess) {
           onAuthSuccess(data?.user || { email: emailToSubmit })
+        }
+        if (typeof window !== 'undefined') {
+          setTimeout(() => {
+            if (window.location.pathname.toLowerCase() !== '/usage') {
+              window.location.href = '/usage'
+            }
+          }, 100)
         }
       }
     } catch (err) {
@@ -92,9 +105,16 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
         setErrorMessage(error.message)
       } else {
         console.log('Signed in successfully:', data.user)
-        setMessage(`Signed in successfully as ${data.user.email}!`)
+        setMessage(`Signed in successfully as ${data.user.email}! Redirecting...`)
         if (onAuthSuccess) {
           onAuthSuccess(data?.user || { email: emailToSubmit })
+        }
+        if (typeof window !== 'undefined') {
+          setTimeout(() => {
+            if (window.location.pathname.toLowerCase() !== '/usage') {
+              window.location.href = '/usage'
+            }
+          }, 100)
         }
       }
     } catch (err) {
@@ -106,8 +126,14 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
   // 3. Magic Link Handler via Supabase
   const handleMagicLink = async (emailToSubmit) => {
     try {
+      const redirectUrl =
+        typeof window !== 'undefined' && window.location.hostname === 'localhost'
+          ? `${window.location.origin}/usage`
+          : 'https://baton-nu.vercel.app/usage'
+
       const { data, error } = await supabase.auth.signInWithOtp({
-        email: emailToSubmit
+        email: emailToSubmit,
+        options: { emailRedirectTo: redirectUrl }
       })
 
       if (error) {
@@ -264,9 +290,15 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
             style={{ width: '100%' }}
             onClick={async () => {
               try {
+                const redirectUrl =
+                  typeof window !== 'undefined' && window.location.hostname === 'localhost'
+                    ? `${window.location.origin}/usage`
+                    : 'https://baton-nu.vercel.app/usage'
+
                 // Trigger Supabase GitHub OAuth
                 const { error } = await supabase.auth.signInWithOAuth({
-                  provider: 'github'
+                  provider: 'github',
+                  options: { redirectTo: redirectUrl }
                 })
                 if (error) {
                   setMessage('GitHub authorization simulated. No account was connected.')
