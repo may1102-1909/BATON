@@ -50,6 +50,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(30000),
     });
     const text = await response.text();
     let data;
@@ -141,7 +142,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       author_id: author?.user_id ?? null,
       author: source.author_login ?? 'GitHub',
       author_login: source.author_login ?? null,
-      type: 'github_evidence',
+      type: source.type,
       content: (source.content ?? '').slice(0, 100_000),
       metadata: source.metadata ?? {},
       external_id: source.external_id,
@@ -179,7 +180,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       external_id: `github:${repository.full_name}:pull_request:${pr.number}`,
       author_id: author.id == null ? null : String(author.id),
       author_login: author.login ?? null,
-      type: 'github_evidence',
+      type: 'pull_request',
       content: [pr.title, pr.body].filter(Boolean).join('\n\n'),
       url: pr.html_url,
       created_at: pr.created_at,
@@ -199,7 +200,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       external_id: `github:${repository.full_name}:issue:${issue.number}`,
       author_id: author.id == null ? null : String(author.id),
       author_login: author.login ?? null,
-      type: 'github_evidence',
+      type: 'issue',
       content: [issue.title, issue.body].filter(Boolean).join('\n\n'),
       url: issue.html_url,
       created_at: issue.created_at,
@@ -345,9 +346,32 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     const token = await installationToken(repository.installation_id);
     let commits = 0, pullRequests = 0, issues = 0;
     const repoPath = repositoryPath(fullName);
-    const commitList = await paginate(`/repos/${repoPath}/commits`, token);
-    for (const commit of commitList) {
-      await upsertSource(current, commitSource(current, commit));
+    const details = await request(`/repos/${repoPath}`, { token });
+    const branches = await paginate(`/repos/${repoPath}/branches`, token);
+    const allCommits = new Map();
+    for (const branch of branches) {
+      const branchCommits = await paginate(`/repos/${repoPath}/commits?sha=${encodeURIComponent(branch.name)}`, token);
+      for (const commit of branchCommits) {
+        const entry = allCommits.get(commit.sha) ?? { commit, branches: [] };
+        entry.branches.push(branch.name);
+        allCommits.set(commit.sha, entry);
+      }
+      if (branch.name !== details.default_branch) {
+        const comparison = await request(`/repos/${repoPath}/compare/${encodeURIComponent(details.default_branch)}...${encodeURIComponent(branch.name)}`, { token });
+        await upsertSource(current, {
+          type: 'branch', external_id: `github:${current.full_name}:branch:${branch.name}`,
+          author_login: branchCommits[0]?.author?.login ?? null,
+          content: `Branch ${branch.name}: ${comparison.ahead_by} commits ahead of ${details.default_branch}, ${comparison.behind_by} behind.`,
+          metadata: { kind: 'branch', name: branch.name, base: details.default_branch, ahead_by: comparison.ahead_by, behind_by: comparison.behind_by, sha: branch.commit?.sha },
+          url: `https://github.com/${current.full_name}/tree/${encodeURIComponent(branch.name)}`,
+          created_at: branchCommits[0]?.commit?.author?.date,
+        });
+      }
+    }
+    for (const { commit, branches: refs } of allCommits.values()) {
+      const source = commitSource(current, commit);
+      source.metadata.branches = refs;
+      await upsertSource(current, source);
       commits += 1;
     }
     const prs = await paginate(`/repos/${repoPath}/pulls?state=all&sort=updated&direction=desc`, token);
