@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { after, test } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { answerExitQuestion, getGithubActivity, pushMemory, queryContext } from '../dist/api.js';
+import { answerExitQuestion, getExitInterviews, getGithubActivity, pushMemory, queryContext } from '../dist/api.js';
 import { redactData, redactString } from '../dist/redact.js';
 import { bootstrapProject } from '../dist/snapshot.js';
 
@@ -58,6 +58,11 @@ test('API requests require credentials, apply repository scope, and redact backe
   assert.equal(captured.init.headers.Authorization, `Bearer ${process.env.BATON_API_KEY}`);
   assert.equal(JSON.stringify(search).includes('remote-secret-value-123456789'), false);
 
+  await getExitInterviews();
+  assert.equal(captured.url.pathname, '/api/mcp/interviews');
+  assert.equal(captured.url.searchParams.get('org_id'), 'org-test-1');
+  assert.equal(captured.url.searchParams.get('repository_id'), 'repo-test-1');
+
   delete process.env.BATON_API_KEY;
   let requestCount = 0;
   globalThis.fetch = async () => { requestCount++; return new Response('{}'); };
@@ -67,10 +72,15 @@ test('API requests require credentials, apply repository scope, and redact backe
   assert.equal(requestCount, 0);
 
   configure();
-  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Bearer remote-secret-token-value' }), { status: 401 });
+  let answerBody;
+  globalThis.fetch = async (_url, init) => {
+    answerBody = JSON.parse(init.body);
+    return new Response(JSON.stringify({ error: 'Bearer remote-secret-token-value' }), { status: 401 });
+  };
   const rejected = await answerExitQuestion('interview-1', 'question-1', 'safe answer');
   assert.equal(rejected.success, false);
   assert.equal(JSON.stringify(rejected).includes('remote-secret-token-value'), false);
+  assert.deepEqual(answerBody, { questionId: 'question-1', answer: 'safe answer' });
 });
 
 test('github activity includes only sources explicitly scoped to the configured repository', async () => {

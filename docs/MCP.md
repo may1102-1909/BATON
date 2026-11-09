@@ -51,8 +51,8 @@ The client calls:
 * `POST /api/collector/push` for `decision`, `blocker`, `context`, `change`, and `bootstrap` events. `event_id` identifies each submission; `session_id` is stable for one server process (or supplied by the client).
 * `GET /api/collector/search?q=…&org_id=…&repository_id=…` for repository-scoped context.
 * `GET /api/orgs/:orgId/state?repository_id=…` for tracked repository activity; the client returns only the configured repository and sources explicitly carrying that repository ID.
-* `GET /api/mcp/interviews?repository_id=…` for assigned questions.
-* `POST /api/mcp/interviews/:interviewId/answers` with `{ "questionId": "…", "answer": "…", "repository_id": "…" }` to answer a question.
+* `GET /api/mcp/interviews?org_id=…&repository_id=…` for assigned questions.
+* `POST /api/mcp/interviews/:interviewId/answers` with `{ "questionId": "…", "answer": "…" }` to answer a question.
 
 The API must validate that the bearer key is authorized for both supplied IDs and scope all reads/writes accordingly. A successful HTTP response is expected to be JSON. Unsupported routes or rejected scope are surfaced as failures; the MCP client cannot implement backend authorization or persistence itself.
 
