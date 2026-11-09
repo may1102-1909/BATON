@@ -63,7 +63,7 @@ function encryptTokenForTest(token, key) {
 }
 
 test('OAuth state is hashed, one-use, and linked tokens are never returned', async () => {
-  const store = makeStore({ members: [{ id: 'member-1', org_id: 'org-1', user_id: 'user-1', github_login: 'octocat' }] });
+  const store = makeStore({ members: [{ id: 'member-1', org_id: 'org-1', user_id: 'user-1' }] });
   const env = environment();
   const github = createGithub({ store, env, fetchImpl: async (url, options) => {
     if (url === 'https://github.com/login/oauth/access_token') return json({ access_token: 'private-oauth-token', scope: 'repo' });
@@ -83,6 +83,7 @@ test('OAuth state is hashed, one-use, and linked tokens are never returned', asy
   assert.equal(store.rows('github_accounts')[0].access_token, undefined);
   assert.match(store.rows('github_accounts')[0].access_token_encrypted, /^v1:/);
   assert.equal(Buffer.from(store.rows('github_accounts')[0].access_token_encrypted).includes(Buffer.from('private-oauth-token')), false);
+  assert.equal(store.rows('members')[0].github_login, 'octocat');
   assert.deepEqual(await github.installations({ userId: 'user-1', orgId: 'org-1' }), []);
   assert.equal(Buffer.from(store.rows('github_accounts')[0].access_token_encrypted).includes(Buffer.from('private-oauth-token')), false);
   await assert.rejects(github.finishLink({ code: 'code-1', state }), /already been used/);
@@ -97,8 +98,43 @@ test('OAuth cannot attach a different GitHub identity to a member', async () => 
     throw new Error(`Unexpected URL ${url}`);
   } });
   const { url } = await github.startLink({ userId: 'user-1', orgId: 'org-1' });
-  await assert.rejects(github.finishLink({ code: 'code-1', state: new URL(url).searchParams.get('state') }), /does not match/);
+  await assert.rejects(github.finishLink({ code: 'code-1', state: new URL(url).searchParams.get('state') }), /disconnect it before relinking/);
   assert.equal(store.rows('github_accounts').length, 0);
+  assert.equal(store.rows('members')[0].github_login, 'trusted-login');
+});
+
+test('OAuth rejects a login already linked to another active organization member', async () => {
+  const store = makeStore({ members: [
+    { id: 'member-1', org_id: 'org-1', user_id: 'user-1' },
+    { id: 'member-2', org_id: 'org-1', user_id: 'user-2', github_login: 'octocat' },
+  ] });
+  const github = createGithub({ store, env: environment(), fetchImpl: async (url) => {
+    if (url === 'https://github.com/login/oauth/access_token') return json({ access_token: 'private-oauth-token' });
+    if (url.endsWith('/user')) return json({ id: 8, login: 'octocat' });
+    throw new Error(`Unexpected URL ${url}`);
+  } });
+  const { url } = await github.startLink({ userId: 'user-1', orgId: 'org-1' });
+  await assert.rejects(github.finishLink({ code: 'code-1', state: new URL(url).searchParams.get('state') }), /already linked to another organization member/);
+  assert.equal(store.rows('members')[0].github_login, undefined);
+  assert.equal(store.rows('github_accounts').length, 0);
+});
+
+test('OAuth cannot overwrite an existing account linked to another GitHub identity', async () => {
+  const env = environment();
+  const encrypted = encryptTokenForTest('existing-token', Buffer.from(env.TOKEN_ENCRYPTION_KEY, 'base64'));
+  const store = makeStore({
+    members: [{ id: 'member-1', org_id: 'org-1', user_id: 'user-1' }],
+    github_accounts: [{ id: 'account-1', user_id: 'user-1', org_id: 'org-1', github_user_id: '7', github_login: 'old-login', access_token_encrypted: encrypted }],
+  });
+  const github = createGithub({ store, env, fetchImpl: async (url) => {
+    if (url === 'https://github.com/login/oauth/access_token') return json({ access_token: 'new-token' });
+    if (url.endsWith('/user')) return json({ id: 8, login: 'octocat' });
+    throw new Error(`Unexpected URL ${url}`);
+  } });
+  const { url } = await github.startLink({ userId: 'user-1', orgId: 'org-1' });
+  await assert.rejects(github.finishLink({ code: 'code-1', state: new URL(url).searchParams.get('state') }), /disconnect it before relinking/);
+  assert.equal(store.rows('members')[0].github_login, undefined);
+  assert.equal(store.rows('github_accounts')[0].github_login, 'old-login');
 });
 
 test('connect rejects installations and repositories not authorized to the linked user', async () => {
