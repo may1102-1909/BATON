@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash, createHmac, generateKeyPairSync } from 'node:crypto';
+import { createCipheriv, createHash, createHmac, generateKeyPairSync, randomBytes } from 'node:crypto';
 import { createGithub } from '../server/github.js';
 
 function makeStore(seed = {}) {
@@ -16,6 +16,9 @@ function makeStore(seed = {}) {
     },
     async insert(table, record) {
       tables[table] ??= [];
+      if (table === 'github_deliveries' && tables[table].some((row) => row.delivery_id === record.delivery_id)) {
+        throw new Error('duplicate key violates github_deliveries_delivery_id_key');
+      }
       const row = { id: `row-${nextId++}`, ...structuredClone(record) };
       tables[table].push(row);
       return structuredClone(row);
@@ -44,26 +47,44 @@ function environment(extra = {}) {
   const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   return {
     GITHUB_CLIENT_ID: 'oauth-client', GITHUB_CLIENT_SECRET: 'oauth-secret',
-    GITHUB_OAUTH_CALLBACK_URL: 'https://baton.example/api/github/callback',
-    GITHUB_APP_ID: 'app-123', GITHUB_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }).replaceAll('\n', '\\n'),
+    PUBLIC_APP_URL: 'https://baton.example/',
+    GITHUB_APP_ID: 'app-123', GITHUB_APP_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }),
     GITHUB_WEBHOOK_SECRET: 'webhook-secret', GITHUB_API_URL: 'https://api.github.test',
+    TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 9).toString('base64'),
     ...extra,
   };
 }
 
+function encryptTokenForTest(token, key) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+  return `v1:${iv.toString('base64')}:${cipher.getAuthTag().toString('base64')}:${ciphertext.toString('base64')}`;
+}
+
 test('OAuth state is hashed, one-use, and linked tokens are never returned', async () => {
   const store = makeStore({ members: [{ id: 'member-1', org_id: 'org-1', user_id: 'user-1', github_login: 'octocat' }] });
-  const github = createGithub({ store, env: environment(), fetchImpl: async (url) => {
+  const env = environment();
+  const github = createGithub({ store, env, fetchImpl: async (url, options) => {
     if (url === 'https://github.com/login/oauth/access_token') return json({ access_token: 'private-oauth-token', scope: 'repo' });
     if (url.endsWith('/user')) return json({ id: 8, login: 'octocat' });
+    if (url.includes('/user/installations?')) {
+      assert.equal(options.headers.authorization, 'Bearer private-oauth-token');
+      return json({ installations: [] });
+    }
     throw new Error(`Unexpected URL ${url}`);
   } });
   const { url } = await github.startLink({ userId: 'user-1', orgId: 'org-1' });
   const state = new URL(url).searchParams.get('state');
   assert.ok(state);
+  assert.equal(new URL(url).searchParams.get('redirect_uri'), 'https://baton.example/api/github/callback');
   assert.equal(store.rows('github_states')[0].state_hash, createHash('sha256').update(state).digest('hex'));
   assert.deepEqual(await github.finishLink({ code: 'code-1', state }), { orgId: 'org-1', userId: 'user-1', login: 'octocat' });
-  assert.equal(store.rows('github_accounts')[0].access_token, 'private-oauth-token');
+  assert.equal(store.rows('github_accounts')[0].access_token, undefined);
+  assert.match(store.rows('github_accounts')[0].access_token_encrypted, /^v1:/);
+  assert.equal(Buffer.from(store.rows('github_accounts')[0].access_token_encrypted).includes(Buffer.from('private-oauth-token')), false);
+  assert.deepEqual(await github.installations({ userId: 'user-1', orgId: 'org-1' }), []);
+  assert.equal(Buffer.from(store.rows('github_accounts')[0].access_token_encrypted).includes(Buffer.from('private-oauth-token')), false);
   await assert.rejects(github.finishLink({ code: 'code-1', state }), /already been used/);
   assert.equal(store.rows('github_states').length, 0);
 });
@@ -81,8 +102,9 @@ test('OAuth cannot attach a different GitHub identity to a member', async () => 
 });
 
 test('connect rejects installations and repositories not authorized to the linked user', async () => {
-  const store = makeStore({ github_accounts: [{ id: 'account-1', user_id: 'u1', org_id: 'o1', access_token: 'user-token' }] });
-  const github = createGithub({ store, env: environment(), fetchImpl: async (url) => {
+  const env = environment();
+  const store = makeStore({ github_accounts: [{ id: 'account-1', user_id: 'u1', org_id: 'o1', access_token_encrypted: encryptTokenForTest('user-token', Buffer.from(env.TOKEN_ENCRYPTION_KEY, 'base64')) }] });
+  const github = createGithub({ store, env, fetchImpl: async (url) => {
     if (url.includes('/user/installations?')) return json({ total_count: 1, installations: [{ id: 41 }] });
     if (url.includes('/user/installations/41/repositories?')) return json({ total_count: 1, repositories: [{ full_name: 'acme/allowed' }] });
     throw new Error(`Unexpected URL ${url}`);
@@ -149,7 +171,15 @@ test('webhooks use timing-safe signatures, ignore disconnected repositories, and
   const headers = { 'x-hub-signature-256': signature, 'x-github-delivery': 'delivery-1', 'x-github-event': 'pull_request' };
   await assert.rejects(github.webhook({ rawBody, headers: { ...headers, 'x-hub-signature-256': `sha256=${'0'.repeat(64)}` } }), /Invalid GitHub webhook signature/);
   assert.deepEqual(await github.webhook({ rawBody, headers }), { processed: true, count: 1 });
+  assert.equal(store.rows('github_deliveries')[0].status, 'processed');
   assert.deepEqual(await github.webhook({ rawBody, headers }), { processed: false, duplicate: true });
+  const raceHeaders = { ...headers, 'x-github-delivery': 'delivery-race' };
+  const race = await Promise.all([
+    github.webhook({ rawBody, headers: raceHeaders }),
+    github.webhook({ rawBody, headers: raceHeaders }),
+  ]);
+  assert.equal(race.filter((result) => result.processed).length, 1);
+  assert.equal(race.filter((result) => result.duplicate).length, 1);
   assert.equal(store.rows('sources')[0].metadata.head_sha, 'def456');
-  assert.equal(store.rows('github_deliveries').length, 1);
+  assert.equal(store.rows('github_deliveries').length, 2);
 });
