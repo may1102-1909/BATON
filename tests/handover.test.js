@@ -94,7 +94,7 @@ test('generation without Gemini uses source evidence and an explicit evidence-on
 test('Gemini output only keeps allowed citations and cannot elevate unsupported claims to verified', async () => {
   let request;
   const fetchImpl = async (url, init) => {
-    request = { url, body: JSON.parse(init.body) };
+    request = { url, headers: init.headers, body: JSON.parse(init.body) };
     return {
       ok: true,
       async json() {
@@ -108,8 +108,11 @@ test('Gemini output only keeps allowed citations and cannot elevate unsupported 
   const { handovers } = setup({ sources: [source()] }, { env: { GEMINI_API_KEY: 'test-key' }, fetchImpl });
   const started = await handovers.start({ orgId: ORG, actor: admin, leaverId: leaver.id, incomingId: incoming.id });
   const result = await handovers.generate({ handoverId: started.handover.id, actor: admin });
-  assert.match(request.url, /models\/gemini-2\.5-flash:generateContent\?key=/);
+  assert.match(request.url, /models\/gemini-3\.5-flash:generateContent$/);
+  assert.equal(new URL(request.url).searchParams.has('key'), false);
+  assert.equal(request.headers['x-goog-api-key'], 'test-key');
   assert.equal(request.body.generationConfig.responseMimeType, 'application/json');
+  assert.equal('responseSchema' in request.body.generationConfig, false);
   const decision = result.claims.find(claim => claim.section === 'decisions');
   assert.deepEqual(decision.source_ids, ['source-1']);
   assert.equal(decision.confidence, 'inferred');
@@ -175,6 +178,42 @@ test('changed or revoked cited evidence invalidates approval before the incoming
   assert.equal((await store.get('handovers', handoverId)).status, 'draft');
   assert.ok((await store.list('handover_claims', { handover_id: handoverId })).some(claim => claim.source_ids.includes('source-1') && claim.status === 'pending'));
   assert.ok((await store.list('handover_events', { handover_id: handoverId })).some(item => item.event_type === 'approval_invalidated'));
+});
+
+test('domain failures expose HTTP status and claim decisions use frontend statuses', async () => {
+  const { handovers } = setup({ sources: [source()] });
+  await assert.rejects(
+    () => handovers.start({ orgId: ORG, actor: leaver, leaverId: leaver.id, incomingId: incoming.id }),
+    error => error.status === 403,
+  );
+  await assert.rejects(() => handovers.get({ handoverId: 'missing', actor: admin }), error => error.status === 404);
+  const started = await handovers.start({ orgId: ORG, actor: admin, leaverId: leaver.id, incomingId: incoming.id });
+  const generated = await handovers.generate({ handoverId: started.handover.id, actor: admin });
+  const edited = await handovers.reviewClaim({
+    handoverId: started.handover.id, actor: admin, claimId: generated.claims[0].id, status: 'edited', text: 'Reviewed replacement claim.',
+  });
+  assert.equal(edited.status, 'approved');
+  assert.equal(edited.text, 'Reviewed replacement claim.');
+  for (const claim of generated.claims.slice(1)) {
+    await handovers.reviewClaim({ handoverId: started.handover.id, actor: admin, claimId: claim.id, status: 'rejected' });
+  }
+  const claims = await (await handovers.get({ handoverId: started.handover.id, actor: admin })).claims;
+  assert.ok(claims.every(claim => ['pending', 'approved', 'rejected'].includes(claim.status)));
+});
+
+test('history is returned to the leaver without admin-only source evidence in snapshots', async () => {
+  const privateSource = source({
+    id: 'admin-source', content: 'ADMIN_ONLY_CONFIDENTIAL_OPERATIONAL_DETAIL', type: 'decision', visibility: 'admin',
+  });
+  const { handovers } = setup({ sources: [source(), privateSource] });
+  const started = await handovers.start({ orgId: ORG, actor: admin, leaverId: leaver.id, incomingId: incoming.id });
+  await handovers.generate({ handoverId: started.handover.id, actor: admin });
+  const view = await handovers.get({ handoverId: started.handover.id, actor: leaver });
+  assert.ok(view.versions.length >= 2);
+  assert.ok(view.events.length > 0);
+  assert.doesNotMatch(JSON.stringify(view), /ADMIN_ONLY_CONFIDENTIAL_OPERATIONAL_DETAIL|admin-source/);
+  assert.ok(view.sources.every(item => item.visibility !== 'admin'));
+  assert.ok(view.versions.every(version => (version.source_ids ?? []).every(id => id !== 'admin-source')));
 });
 
 test('risk dashboard labels commit authors as a proxy and clearly reports missing data', async () => {
