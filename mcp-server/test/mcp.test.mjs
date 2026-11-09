@@ -83,6 +83,34 @@ test('API requests require credentials, apply repository scope, and redact backe
   assert.deepEqual(answerBody, { questionId: 'question-1', answer: 'safe answer' });
 });
 
+test('memory event IDs deduplicate identical redacted payloads within a scoped session', async () => {
+  configure();
+  const events = [];
+  globalThis.fetch = async (_url, init) => {
+    events.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ success: true }));
+  };
+
+  await pushMemory('change', { summary: 'same delta', details: { second: 2, first: 1 } });
+  await pushMemory('change', { details: { first: 1, second: 2 }, summary: 'same delta' });
+  await pushMemory('change', { summary: 'different delta' });
+  await pushMemory('decision', { summary: 'same delta', details: { second: 2, first: 1 } });
+  process.env.BATON_SESSION_ID = 'another-session';
+  await pushMemory('change', { summary: 'same delta', details: { second: 2, first: 1 } });
+
+  assert.equal(events[0].session_id, 'session-test-1');
+  assert.equal(events[0].repository_id, 'repo-test-1');
+  assert.equal('payload' in events[0], false);
+  assert.equal(events[0].event_id, events[1].event_id);
+  assert.notEqual(events[0].event_id, events[2].event_id);
+  assert.notEqual(events[0].event_id, events[3].event_id);
+  assert.notEqual(events[0].event_id, events[4].event_id);
+  process.env.BATON_SESSION_ID = 'session-test-1';
+  process.env.BATON_REPOSITORY_ID = 'another-repository';
+  await pushMemory('change', { summary: 'same delta', details: { second: 2, first: 1 } });
+  assert.notEqual(events[0].event_id, events[5].event_id);
+});
+
 test('github activity includes only sources explicitly scoped to the configured repository', async () => {
   configure();
   let requested;
