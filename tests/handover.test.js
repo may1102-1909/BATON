@@ -216,6 +216,27 @@ test('history is returned to the leaver without admin-only source evidence in sn
   assert.ok(view.versions.every(version => (version.source_ids ?? []).every(id => id !== 'admin-source')));
 });
 
+test('private sources never enter handover views, newcomer answers, or risk analysis', async () => {
+  const privateRecords = [
+    source({ id: 'private-decision', type: 'decision', content: 'PRIVATE_DATABASE_SECRET_CONTEXT', visibility: 'private' }),
+    source({ id: 'private-blocker', type: 'blocker', content: 'PRIVATE_BLOCKER_CONTEXT', visibility: 'private', metadata: { status: 'blocked' } }),
+    source({ id: 'private-commit', type: 'commit', content: 'PRIVATE_COMMIT_CONTEXT', visibility: 'private', author_login: 'private-only-owner' }),
+    source({ id: 'private-pr', type: 'pull_request', content: 'PRIVATE_PR_CONTEXT', visibility: 'private', author_login: 'private-only-owner', metadata: { state: 'open', files: [{ filename: 'private/only.js' }] } }),
+  ];
+  const { handovers } = setup({ sources: privateRecords });
+  const { handoverId } = await prepareApproval(handovers);
+
+  const incomingView = await handovers.get({ handoverId, actor: incoming });
+  assert.doesNotMatch(JSON.stringify(incomingView), /PRIVATE_|private-only-owner|private\/only\.js|private-(decision|blocker|commit|pr)/);
+  const answer = await handovers.ask({ handoverId, actor: incoming, question: 'What is PRIVATE_DATABASE_SECRET_CONTEXT?' });
+  assert.match(answer.answer, /not contain enough evidence/i);
+  assert.deepEqual(answer.source_ids, []);
+  const riskDashboard = await handovers.risks({ orgId: ORG, actor: admin });
+  assert.deepEqual(riskDashboard.risks, []);
+  assert.equal(riskDashboard.counts.source_records, 0);
+  assert.doesNotMatch(JSON.stringify(riskDashboard), /PRIVATE_|private-only-owner|private\/only\.js|private-(decision|blocker|commit|pr)/);
+});
+
 test('risk dashboard labels commit authors as a proxy and clearly reports missing data', async () => {
   const { handovers } = setup({ sources: [
     source({ type: 'commit', author_login: 'solo', repository_id: 'repo-1', content: 'commit one' }),
