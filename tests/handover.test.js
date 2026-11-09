@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMemoryStore } from '../server/store.js';
+import { randomUUID } from 'node:crypto';
 import { createHandovers } from '../server/handover.js';
 
 const ORG = 'org-1';
@@ -9,7 +9,36 @@ const leaver = { id: 'leaver-1', role: 'member', org_id: ORG };
 const incoming = { id: 'incoming-1', role: 'member', org_id: ORG };
 
 function setup(seed = {}, options = {}) {
-  const store = createMemoryStore(seed);
+  const tables = new Map(Object.entries(seed).map(([name, records]) => [name, structuredClone(records)]));
+  const table = name => {
+    if (!tables.has(name)) tables.set(name, []);
+    return tables.get(name);
+  };
+  const store = {
+    async list(name, filters = {}) {
+      return structuredClone(table(name).filter(record => Object.entries(filters).every(([key, value]) => record[key] === value)));
+    },
+    async get(name, id) {
+      return structuredClone(table(name).find(record => record.id === id) ?? null);
+    },
+    async insert(name, record) {
+      const row = { id: randomUUID(), created_at: new Date().toISOString(), ...structuredClone(record) };
+      table(name).push(row);
+      return structuredClone(row);
+    },
+    async update(name, id, patch) {
+      const records = table(name);
+      const index = records.findIndex(record => record.id === id);
+      if (index < 0) return null;
+      records[index] = { ...records[index], ...structuredClone(patch), id };
+      return structuredClone(records[index]);
+    },
+    async remove(name, id) {
+      const records = table(name);
+      const index = records.findIndex(record => record.id === id);
+      return index < 0 ? null : structuredClone(records.splice(index, 1)[0]);
+    },
+  };
   const handovers = createHandovers({ store, env: options.env ?? {}, fetchImpl: options.fetchImpl });
   return { store, handovers };
 }

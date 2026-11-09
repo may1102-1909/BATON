@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash, createHmac, generateKeyPairSync } from 'node:crypto';
+import { createCipheriv, createHash, createHmac, generateKeyPairSync, randomBytes } from 'node:crypto';
 import { createGithub } from '../server/github.js';
 
 function makeStore(seed = {}) {
@@ -44,11 +44,19 @@ function environment(extra = {}) {
   const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   return {
     GITHUB_CLIENT_ID: 'oauth-client', GITHUB_CLIENT_SECRET: 'oauth-secret',
-    GITHUB_OAUTH_CALLBACK_URL: 'https://baton.example/api/github/callback',
-    GITHUB_APP_ID: 'app-123', GITHUB_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }).replaceAll('\n', '\\n'),
+    PUBLIC_APP_URL: 'https://baton.example/',
+    GITHUB_APP_ID: 'app-123', GITHUB_APP_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }).replaceAll('\\n', '\\\\n'),
     GITHUB_WEBHOOK_SECRET: 'webhook-secret', GITHUB_API_URL: 'https://api.github.test',
+    TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 9).toString('base64'),
     ...extra,
   };
+}
+
+function encryptTokenForTest(token, key) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+  return `v1:${iv.toString('base64')}:${cipher.getAuthTag().toString('base64')}:${ciphertext.toString('base64')}`;
 }
 
 test('OAuth state is hashed, one-use, and linked tokens are never returned', async () => {
