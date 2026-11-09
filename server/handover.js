@@ -147,7 +147,7 @@ export function createHandovers({ store, env = process.env, fetchImpl = fetch })
 
   async function sourcesFor(orgId, { includeAdmin = true } = {}) {
     const sources = await store.list('sources', { org_id: orgId });
-    return sources.filter(source => includeAdmin || source.visibility !== 'admin').map(scrub);
+    return sources.filter(source => source.visibility !== 'private' && (includeAdmin || source.visibility !== 'admin')).map(scrub);
   }
 
   async function rows(handoverId, orgId) {
