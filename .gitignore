@@ -26,3 +26,8 @@ mcp-server/.env
 *.sln
 *.sw?
 
+
+.baton/
+.hoplite/attachments/
+.hoplite/artifacts/
+.hoplite/browser/
