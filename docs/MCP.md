@@ -54,7 +54,7 @@ The client calls:
 * `GET /api/mcp/interviews?org_id=…&repository_id=…` for assigned questions.
 * `POST /api/mcp/interviews/:interviewId/answers` with `{ "questionId": "…", "answer": "…" }` to answer a question.
 
-The API must validate that the bearer key is authorized for both supplied IDs and scope all reads/writes accordingly. A successful HTTP response is expected to be JSON. Unsupported routes or rejected scope are surfaced as failures; the MCP client cannot implement backend authorization or persistence itself.
+Personal keys are organization-scoped and inherit the member’s current role. Repository IDs select context; they are not a repository-level authorization boundary. A key can access all role-visible repositories within its organization, but never another organization. Use separate organizations where repository-level isolation is required. A successful HTTP response is expected to be JSON. Unsupported routes or rejected scope are surfaced as failures; the MCP client cannot implement backend authorization or persistence itself.
 
 ## Client setup
 
