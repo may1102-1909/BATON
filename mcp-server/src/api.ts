@@ -1,11 +1,7 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { redactData } from './redact.js';
 
-export interface MemoryPayload {
-  type: 'decision' | 'blocker';
-  payload: Record<string, unknown>;
-  timestamp: string;
-  source?: string;
-}
+export type MemoryType = 'decision' | 'blocker' | 'context' | 'change';
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -13,116 +9,217 @@ export interface ApiResponse<T = unknown> {
   data?: T;
 }
 
-/**
- * Get the configured Baton Backend API base URL.
- */
-function getApiUrl(): string {
-  const url = process.env.BATON_API_URL || 'http://localhost:3000';
-  return url.replace(/\/+$/, '');
+export interface MemoryEvent {
+  type: MemoryType | 'bootstrap';
+  content?: string;
+  data?: unknown;
+  metadata?: Record<string, unknown>;
 }
 
-/**
- * Dispatch captured and redacted memory to the Next.js backend.
- */
-export async function pushMemory(
-  type: 'decision' | 'blocker',
-  rawPayload: Record<string, unknown>
-): Promise<ApiResponse> {
-  // 1. Redact all sensitive credentials, tokens, and high-entropy secrets client-side
-  const sanitizedPayload = redactData(rawPayload);
+const PROCESS_SESSION_ID = randomUUID();
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 
-  const memoryEvent = {
-    type,
-    data: sanitizedPayload,
-    payload: sanitizedPayload,
-    timestamp: new Date().toISOString(),
-    source: 'baton-mcp-server'
+function configuration(): { apiUrl: string; apiKey: string; orgId: string; repositoryId: string; sessionId: string } {
+  const apiUrl = process.env.BATON_API_URL?.trim();
+  const apiKey = process.env.BATON_API_KEY?.trim();
+  const orgId = process.env.BATON_ORG_ID?.trim();
+  const repositoryId = process.env.BATON_REPOSITORY_ID?.trim();
+  const missing = [
+    ['BATON_API_URL', apiUrl],
+    ['BATON_API_KEY', apiKey],
+    ['BATON_ORG_ID', orgId],
+    ['BATON_REPOSITORY_ID', repositoryId]
+  ].filter(([, value]) => !value).map(([name]) => name);
+  if (missing.length) throw new Error(`Missing required Baton configuration: ${missing.join(', ')}`);
+
+  let parsed: URL;
+  try {
+    parsed = new URL(apiUrl!);
+  } catch {
+    throw new Error('BATON_API_URL must be an absolute HTTP(S) URL');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error('BATON_API_URL must be an HTTP(S) base URL without credentials, query, or fragment');
+  }
+
+  return {
+    apiUrl: apiUrl!.replace(/\/+$/, ''),
+    apiKey: apiKey!,
+    orgId: orgId!,
+    repositoryId: repositoryId!,
+    sessionId: process.env.BATON_SESSION_ID?.trim() || PROCESS_SESSION_ID
   };
+}
 
-  const endpoint = `${getApiUrl()}/api/collector/push`;
+function safe<T>(value: T): T {
+  return redactData(value);
+}
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record).sort().map((key) => [key, canonicalize(record[key])])
+    );
+  }
+  return value;
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
+  let config: ReturnType<typeof configuration>;
   try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
+    config = configuration();
+  } catch (error) {
+    return { success: false, message: safe(error instanceof Error ? error.message : 'Invalid Baton configuration') };
+  }
 
-    const authToken = process.env.BATON_PROJECT_KEY || process.env.BATON_API_KEY;
-    if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`;
-    }
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(memoryEvent)
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(`${config.apiUrl}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+        ...init.headers
+      }
     });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return {
-        success: false,
-        message: `Backend push returned HTTP ${response.status}: ${errText}`
-      };
+    const reader = response.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    if (reader) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > MAX_RESPONSE_BYTES) {
+            await reader.cancel();
+            return { success: false, message: 'Baton backend response exceeded 1 MiB and was discarded.' };
+          }
+          chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
     }
-
-    const json = (await response.json()) as Record<string, unknown>;
-    return {
-      success: true,
-      message: `Memory of type "${type}" successfully stored in Baton backend.`,
-      data: json
-    };
-  } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    // If backend is not currently running, provide helpful fallback info rather than throwing unhandled rejection
-    return {
-      success: false,
-      message: `Baton backend unreachable at ${endpoint} (${errMsg}). Memory was sanitized client-side. Make sure Next.js backend is running.`,
-      data: { sanitizedEvent: memoryEvent }
-    };
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const text = new TextDecoder().decode(bytes);
+    let body: unknown;
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      body = text.slice(0, 1000);
+    }
+    if (!response.ok) {
+      const detail = typeof body === 'object' && body !== null && 'error' in body
+        ? String((body as { error: unknown }).error).slice(0, 500)
+        : `HTTP ${response.status}`;
+      return { success: false, message: safe(`Baton backend rejected the request (${response.status}): ${detail}`) };
+    }
+    return { success: true, message: 'Baton backend request succeeded.', data: safe(body) as T };
+  } catch (error) {
+    const message = error instanceof Error && error.name === 'AbortError'
+      ? 'Baton backend request timed out.'
+      : 'Baton backend is unreachable; no data was saved.';
+    return { success: false, message };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-/**
- * Query the Baton backend for relevant memory and architectural context.
- */
+export function getRepositoryScope() {
+  try {
+    const { orgId, repositoryId, sessionId } = configuration();
+    return { success: true as const, orgId, repositoryId, sessionId };
+  } catch (error) {
+    return { success: false as const, message: safe(error instanceof Error ? error.message : 'Invalid Baton configuration') };
+  }
+}
+
+export async function pushMemory(type: MemoryType | 'bootstrap', payload: unknown): Promise<ApiResponse> {
+  let scope: ReturnType<typeof getRepositoryScope>;
+  try {
+    scope = getRepositoryScope();
+  } catch {
+    return { success: false, message: 'Baton configuration is invalid.' };
+  }
+  if (!scope.success) return { success: false, message: scope.message };
+
+  const data = safe(payload);
+  const content = typeof data === 'string' ? data : undefined;
+  const eventId = createHash('sha256').update(JSON.stringify(canonicalize({
+    type,
+    org_id: scope.orgId,
+    repository_id: scope.repositoryId,
+    session_id: scope.sessionId,
+    data
+  }))).digest('hex');
+  const event = {
+    type,
+    ...(content === undefined ? { data } : { content, data }),
+    timestamp: new Date().toISOString(),
+    source: 'baton-mcp-server',
+    org_id: scope.orgId,
+    repository_id: scope.repositoryId,
+    session_id: scope.sessionId,
+    event_id: eventId
+  };
+  return request('/api/collector/push', { method: 'POST', body: JSON.stringify(event) });
+}
+
 export async function queryContext(query: string): Promise<ApiResponse> {
-  const sanitizedQuery = redactData(query);
-  const endpoint = `${getApiUrl()}/api/collector/search?q=${encodeURIComponent(sanitizedQuery)}`;
-
-  try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-
-    if (process.env.BATON_API_KEY) {
-      headers['Authorization'] = `Bearer ${process.env.BATON_API_KEY}`;
-    }
-
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      headers
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return {
-        success: false,
-        message: `Backend search returned HTTP ${response.status}: ${errText}`
-      };
-    }
-
-    const json = (await response.json()) as Record<string, unknown>;
-    return {
-      success: true,
-      message: 'Context retrieved successfully from Baton memory.',
-      data: json
-    };
-  } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    return {
-      success: false,
-      message: `Baton backend unreachable at ${endpoint} (${errMsg}). No remote context retrieved.`
-    };
-  }
+  let scope = getRepositoryScope();
+  if (!scope.success) return { success: false, message: scope.message };
+  const params = new URLSearchParams({
+    q: String(safe(query)).slice(0, 1000),
+    org_id: scope.orgId,
+    repository_id: scope.repositoryId
+  });
+  return request(`/api/collector/search?${params}`, { method: 'GET' });
 }
 
+export async function getGithubActivity(): Promise<ApiResponse> {
+  const scope = getRepositoryScope();
+  if (!scope.success) return { success: false, message: scope.message };
+  const params = new URLSearchParams({ repository_id: scope.repositoryId });
+  const response = await request<Record<string, unknown>>(`/api/orgs/${encodeURIComponent(scope.orgId)}/state?${params}`, { method: 'GET' });
+  if (!response.success) return response;
+  const state = response.data && typeof response.data === 'object' ? response.data : {};
+  const repositories = Array.isArray(state.repositories) ? state.repositories : [];
+  const repository = repositories.find((item) => item && typeof item === 'object' &&
+    String((item as Record<string, unknown>).id ?? (item as Record<string, unknown>).repository_id) === scope.repositoryId);
+  const sources = Array.isArray(state.sources) ? state.sources : [];
+  const scopedSources = sources.filter((source) => source && typeof source === 'object' &&
+    String((source as Record<string, unknown>).repository_id ?? (source as Record<string, unknown>).repo_id ?? '') === scope.repositoryId)
+    .slice(0, 100);
+  return {
+    success: true,
+    message: 'Repository tracking state retrieved.',
+    data: safe({ repository: repository ?? null, activity: scopedSources })
+  };
+}
+
+export async function getExitInterviews(): Promise<ApiResponse> {
+  const scope = getRepositoryScope();
+  if (!scope.success) return { success: false, message: scope.message };
+  const params = new URLSearchParams({ org_id: scope.orgId, repository_id: scope.repositoryId });
+  return request(`/api/mcp/interviews?${params}`, { method: 'GET' });
+}
+
+export async function answerExitQuestion(interviewId: string, questionId: string, answer: string): Promise<ApiResponse> {
+  const scope = getRepositoryScope();
+  if (!scope.success) return { success: false, message: scope.message };
+  if (!interviewId.trim() || !questionId.trim()) return { success: false, message: 'Interview and question IDs are required.' };
+  return request(`/api/mcp/interviews/${encodeURIComponent(interviewId)}/answers`, {
+    method: 'POST',
+    body: JSON.stringify({ questionId: questionId.slice(0, 200), answer: String(safe(answer)).slice(0, 10_000) })
+  });
+}

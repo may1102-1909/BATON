@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Dashboard } from '../components/Dashboard'
+import { Workspace } from '../components/Workspace'
 import { useRouter } from '../router'
 import { supabase } from '../lib/supabase'
 
@@ -22,7 +22,7 @@ export function DashboardPage() {
   }, [])
 
   return (
-    <Dashboard
+    <Workspace
       user={user}
       onBack={() => navigate('/')}
       onSignOut={async () => {
