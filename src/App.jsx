@@ -1,71 +1,17 @@
 import React from 'react'
-import { RouterProvider, useRouter } from './router'
-import { LandingPage } from './pages/LandingPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { ReviewPage } from './pages/ReviewPage'
-import { TasksPage } from './pages/TasksPage'
-import { UsagePage } from './pages/UsagePage'
-import { Auth } from './components/Auth'
-import ClassicApp from './ClassicApp'
-import HandoverReviewPage from '../app/handover/[id]/page'
+import {RouterProvider,useRouter} from './router'
+import {LandingPage} from './pages/LandingPage'
+import {Auth} from './components/Auth'
+import Workspace from './components/Workspace'
 
 function AppRoutes() {
-  const { path, navigate } = useRouter()
-  const cleanPath = path.split('?')[0].toLowerCase()
-
-  // Query parameters parsing
-  const isSignup = path.includes('mode=signup') || cleanPath === '/signup'
-  const isLogin = path.includes('mode=login') || cleanPath === '/login'
-
-  if (cleanPath.startsWith('/dashboard/handover')) {
-    const id = cleanPath.replace(/^\/dashboard\/handover\/?/, '') || 'active'
-    return <HandoverReviewPage params={{ id }} />
+  const {path,navigate}=useRouter()
+  const route=path.split('?')[0].toLowerCase()
+  if (['/auth','/login','/signup'].includes(route)) {
+    const signup=route==='/signup' || new URLSearchParams(window.location.search).get('mode')==='signup'
+    return <Auth mode={signup?'signup':'login'} setMode={()=>navigate(signup?'/login':'/signup')} back={()=>navigate('/')} onAuthSuccess={()=>navigate('/dashboard')}/>
   }
-
-  if (cleanPath.startsWith('/handover')) {
-    const id = cleanPath.replace(/^\/handover\/?/, '') || 'active'
-    return <HandoverReviewPage params={{ id }} />
-  }
-
-  if (cleanPath === '/dashboard') {
-    return <DashboardPage />
-  }
-
-  if (cleanPath === '/usage' || cleanPath === '/usgae') {
-    return <UsagePage />
-  }
-
-  if (cleanPath === '/review' || cleanPath === '/inspect') {
-    return <ReviewPage />
-  }
-
-  if (cleanPath === '/tasks' || cleanPath === '/claims') {
-    return <TasksPage />
-  }
-
-  if (cleanPath === '/auth' || isLogin || isSignup) {
-    return (
-      <Auth
-        mode={isSignup ? 'signup' : 'login'}
-        setMode={() => {}}
-        back={() => navigate('/')}
-        onAuthSuccess={() => navigate('/usage')}
-      />
-    )
-  }
-
-  if (cleanPath === '/classic') {
-    return <ClassicApp initialScreen="landing" />
-  }
-
-  // Root URL ('/' or '/landing') is the dedicated standalone 3D Paper Landing Page
-  return <LandingPage />
+  if (['/','/landing','/paper','/classic'].includes(route)) return <LandingPage/>
+  return <Workspace/>
 }
-
-export default function App() {
-  return (
-    <RouterProvider>
-      <AppRoutes />
-    </RouterProvider>
-  )
-}
+export default function App() {return <RouterProvider><AppRoutes/></RouterProvider>}
