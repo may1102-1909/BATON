@@ -276,9 +276,17 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     const user = await request('/user', { token: tokenData.access_token });
     if (!user?.id || !user?.login) throw new Error('GitHub did not return a valid user identity');
     const memberships = await store.list('members', { org_id: pending.org_id, user_id: pending.user_id });
-    if (!memberships.some((member) => !member.disabled_at && typeof member.github_login === 'string' &&
-      member.github_login.toLowerCase() === user.login.toLowerCase())) {
-      throw new Error('GitHub OAuth identity does not match the verified GitHub login on the organization membership');
+    const membership = memberships.find((member) => !member.disabled_at);
+    if (!membership) throw new Error('An active organization membership is required to link GitHub');
+    if (membership.github_login && membership.github_login.toLowerCase() !== user.login.toLowerCase()) {
+      throw new Error('This member is already linked to a different GitHub login; disconnect it before relinking');
+    }
+    const owners = (await store.list('members', { org_id: pending.org_id })).filter((member) =>
+      !member.disabled_at && member.user_id !== pending.user_id &&
+      typeof member.github_login === 'string' && member.github_login.toLowerCase() === user.login.toLowerCase());
+    if (owners.length) throw new Error('This GitHub login is already linked to another organization member');
+    if (!membership.github_login) {
+      await store.update('members', membership.id, { github_login: user.login });
     }
     const current = await accountFor(pending.user_id, pending.org_id);
     const now = new Date().toISOString();
