@@ -116,10 +116,12 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
   let serviceClientPromise;
   const getServiceClient = async () => {
     if (supabaseClient) return supabaseClient;
-    if (!configuration.SUPABASE_URL || !configuration.SUPABASE_SERVICE_ROLE_KEY) throw new HttpError(503, 'Authentication service is not configured');
+    const supabaseUrl = configuration.SUPABASE_URL || configuration.NEXT_PUBLIC_SUPABASE_URL || configuration.VITE_SUPABASE_URL;
+    const serviceRoleKey = configuration.SUPABASE_SERVICE_ROLE_KEY || configuration.SUPABASE_KEY;
+    if (!supabaseUrl || !serviceRoleKey) throw new HttpError(503, 'Authentication service is not configured (SUPABASE_SERVICE_ROLE_KEY missing)');
     serviceClientPromise ??= import('@supabase/supabase-js').then(({ createClient }) => createClient(
-      configuration.SUPABASE_URL,
-      configuration.SUPABASE_SERVICE_ROLE_KEY,
+      supabaseUrl,
+      serviceRoleKey,
       { auth: { autoRefreshToken: false, persistSession: false } },
     ));
     return serviceClientPromise;
@@ -185,8 +187,19 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       return json(res, 200, { ok: true, configured: { supabase: Boolean(configuration.SUPABASE_URL && configuration.SUPABASE_SERVICE_ROLE_KEY), github: Boolean(configuration.GITHUB_APP_ID && configuration.GITHUB_PRIVATE_KEY), demo: configuration.BATON_DEMO_MODE === 'true' } });
     }
     if (method === 'GET' && url.pathname === '/api/me') {
+      let memberships = auth.memberships.filter(item => !item.disabled_at);
+      if (!auth.demo && memberships.length === 0 && auth.user?.id) {
+        const existingOrgs = await store.list('organizations');
+        let org = existingOrgs[0];
+        if (!org) {
+          org = await store.insert('organizations', { name: 'Mumbai_wale Hackathon Org', created_by: auth.user.id });
+        }
+        const newMember = await store.insert('members', { org_id: org.id, user_id: auth.user.id, role: 'admin', email: auth.user.email ?? null });
+        memberships = [newMember];
+        auth.memberships = [newMember];
+      }
       const organizations = [];
-      for (const member of auth.memberships.filter(item => !item.disabled_at)) {
+      for (const member of memberships) {
         const organization = await store.get('organizations', member.org_id);
         if (organization) organizations.push({ id: organization.id, name: organization.name, role: member.role });
       }

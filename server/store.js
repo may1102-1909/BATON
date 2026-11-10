@@ -63,8 +63,8 @@ export function createSupabaseStore(client, env = process.env) {
   let clientPromise;
   if (!client) {
     clientPromise = (async () => {
-      const url = env.SUPABASE_URL;
-      const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+      const url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || env.VITE_SUPABASE_URL;
+      const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_KEY;
       if (!url || !serviceRoleKey) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
       const { createClient } = await import('@supabase/supabase-js');
       return createClient(url, serviceRoleKey, {

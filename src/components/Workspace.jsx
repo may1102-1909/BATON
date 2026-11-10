@@ -67,9 +67,19 @@ export function Workspace({ onSignOut, onBack }) {
       const meData = await api.fetchMe().catch(() => null);
       if (meData) {
         setMe(meData);
-        const orgList = meData.organizations || [];
+        let orgList = meData.organizations || [];
+        if (orgList.length === 0 && !h?.demo) {
+          try {
+            const newOrgRes = await api.createOrg('Mumbai_wale Hackathon Org');
+            if (newOrgRes?.organization) {
+              orgList = [{ id: newOrgRes.organization.id, name: newOrgRes.organization.name, role: 'admin' }];
+            }
+          } catch (e) {
+            console.warn('Auto-create org fallback:', e);
+          }
+        }
         setOrgs(orgList);
-        if (orgList.length > 0 && !selectedOrgId) {
+        if (orgList.length > 0) {
           setSelectedOrgId(orgList[0].id);
         } else if (orgList.length === 0 && h?.demo) {
           setSelectedOrgId('demo-org');
@@ -136,14 +146,22 @@ export function Workspace({ onSignOut, onBack }) {
 
   async function handleCreateToken(e) {
     e.preventDefault();
-    if (!selectedOrgId || !newTokenName.trim()) return;
+    const orgId = selectedOrgId || orgs[0]?.id;
+    if (!orgId) {
+      alert('Please create or select an organization before generating an MCP token.');
+      return;
+    }
+    if (!newTokenName.trim()) {
+      alert('Please enter a name for the MCP token.');
+      return;
+    }
     try {
-      const res = await api.createToken(selectedOrgId, newTokenName.trim());
+      const res = await api.createToken(orgId, newTokenName.trim());
       setRevealedToken(res.token);
       setNewTokenName('');
-      refreshOrgState(selectedOrgId);
+      refreshOrgState(orgId);
     } catch (err) {
-      alert(err.message);
+      alert(`Token generation failed: ${err.message}`);
     }
   }
 
