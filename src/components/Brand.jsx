@@ -1,6 +1,25 @@
 import React from 'react'
 
-export function Brand({ size = 22 }) {
+export function Brand({ size = 22, iconOnly = false }) {
+  const icon = (
+    <span className="relative flex items-center justify-center transition-transform duration-300 group-hover:scale-105 flex-shrink-0">
+      <svg
+        width={Math.round((24 / 22) * size)}
+        height={Math.round((28 / 22) * size)}
+        viewBox="0 0 25 29"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path d="m3 17 10-14 6 4L9 21z" fill="#34d399" />
+        <path d="m7 22 10-14 6 4-10 14z" fill="#10b981" />
+      </svg>
+    </span>
+  )
+
+  if (iconOnly) {
+    return icon
+  }
+
   return (
     <span
       className="inline-flex items-center select-none no-underline group"
@@ -9,18 +28,7 @@ export function Brand({ size = 22 }) {
         textDecoration: 'none'
       }}
     >
-      <span className="relative flex items-center justify-center transition-transform duration-300 group-hover:scale-105 flex-shrink-0">
-        <svg
-          width={Math.round((24 / 22) * size)}
-          height={Math.round((28 / 22) * size)}
-          viewBox="0 0 25 29"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path d="m3 17 10-14 6 4L9 21z" fill="#34d399" />
-          <path d="m7 22 10-14 6 4-10 14z" fill="#10b981" />
-        </svg>
-      </span>
+      {icon}
       <span
         style={{
           fontFamily: '"Plus Jakarta Sans", "Space Grotesk", sans-serif',
