@@ -18,49 +18,51 @@ body{
 .mono{font-size:10px;letter-spacing:.2em;text-transform:uppercase;font-weight:500;color:var(--dim)}
 
 /* ---------- background: one giant word, nothing else ---------- */
-#bg{position:fixed;inset:0;z-index:1;overflow:hidden}
+#bg{
+  position:fixed;inset:0;z-index:1;overflow:hidden;
+  background: radial-gradient(ellipse 75% 60% at 50% 50%, rgba(16, 185, 129, 0.13) 0%, rgba(16, 185, 129, 0.03) 48%, transparent 75%);
+}
 #bg h1{
   position:absolute;left:50%;top:50%;
+  transform: translate(-50%, -50%);
   font-family:"Syne", "Space Grotesk", sans-serif;font-weight:900;letter-spacing:-0.055em;
   font-size:clamp(100px, 21.5vw, 450px);line-height:.8;white-space:nowrap;
-  color:rgba(16, 215, 138, 0.35);
-  text-shadow: 0 0 70px rgba(16, 215, 138, 0.45), 0 0 160px rgba(52, 225, 160, 0.30);
+  color:rgba(52, 211, 153, 0.12);
+  filter: blur(14px);
   -webkit-user-select:none;user-select:none;pointer-events:none;
   animation: batonBgIntro 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards,
-             batonBgPulse 7s ease-in-out 1.2s infinite alternate;
-  will-change: transform, opacity, filter;
+             batonBgGlow 8s ease-in-out 1.2s infinite alternate;
+  will-change: opacity, filter;
 }
 
 @keyframes batonBgIntro {
   0% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.92);
-    filter: blur(12px);
+    transform: translate(-50%, -50%) scale(0.96);
+    filter: blur(28px);
   }
   100% {
-    opacity: 0.46;
+    opacity: 1;
     transform: translate(-50%, -50%) scale(1);
-    filter: blur(0px);
+    filter: blur(14px);
   }
 }
 
-@keyframes batonBgPulse {
+@keyframes batonBgGlow {
   0% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 0.46;
-    text-shadow: 0 0 70px rgba(16, 215, 138, 0.45), 0 0 160px rgba(52, 225, 160, 0.30);
+    opacity: 0.85;
+    filter: blur(14px);
+    color: rgba(52, 211, 153, 0.11);
   }
   100% {
-    transform: translate(-50%, -50%) scale(1.025);
-    opacity: 0.55;
-    text-shadow: 0 0 95px rgba(16, 225, 145, 0.56), 0 0 190px rgba(52, 235, 168, 0.38);
+    opacity: 1;
+    filter: blur(18px);
+    color: rgba(52, 211, 153, 0.16);
   }
 }
 
 /* ---------- layers over it ---------- */
-#dof{position:fixed;inset:-30px;z-index:2;pointer-events:none;
-     backdrop-filter:blur(2.4px);-webkit-backdrop-filter:blur(2.4px);
-     background:rgba(8,8,10,.05)}
+#dof{display:none}
 #gl{position:fixed;top:0;left:0;width:100%;height:100%;z-index:3;
     pointer-events:none;display:block}
 #grain,#grain2{position:fixed;inset:0;z-index:4;pointer-events:none;
@@ -119,27 +121,6 @@ function wrapL(ctx,text,x,y,maxW,lh){
   return yy+lh;
 }
 
-function signature(ctx,x,y,s,seed,color){
-  ctx.save(); ctx.translate(x,y); ctx.scale(s,s);
-  ctx.strokeStyle=color; ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round';
-  const rnd = rng(seed*7919+13);
-  ctx.beginPath(); ctx.moveTo(0,15);
-  ctx.bezierCurveTo(-3+rnd()*4,-7, 9,-20-rnd()*6, 15,-5);
-  ctx.bezierCurveTo(18,7, 7,15, 9,4);
-  let px=9, py=4;
-  const n=4+Math.floor(rnd()*3);
-  for(let i=0;i<n;i++){
-    const step=9+rnd()*11, nx=px+step, ny=4-(i%2?-1:1)*(4+rnd()*13);
-    ctx.bezierCurveTo(px+step*0.35, py-9-rnd()*10, nx-step*0.35, ny+7+rnd()*8, nx, ny);
-    px=nx; py=ny;
-  }
-  ctx.bezierCurveTo(px+9, py-13, px+21, py+11, px+29, py-3);
-  ctx.stroke();
-  ctx.beginPath(); ctx.lineWidth=1.4;
-  ctx.moveTo(-5,19); ctx.quadraticCurveTo(px*0.55, 24+rnd()*5, px+25, 12+rnd()*4);
-  ctx.stroke(); ctx.restore();
-}
-
 function drawGlass(ctx){
   ctx.scale(TW/1200, TH/1656);
 
@@ -182,17 +163,6 @@ function drawGlass(ctx){
   ctx.font="600 20px \"Space Grotesk\", sans-serif";
   ctx.fillText("®", M + 50 + bw + 4, 126);
 
-  // Top right sub-badge: TEAM MUMBAI_WALE
-  ctx.fillStyle="rgba(16, 185, 129, 0.10)";
-  rr(ctx, 1200 - M - 250, 116, 250, 42, 6); ctx.fill();
-  ctx.strokeStyle="rgba(16, 185, 129, 0.32)"; ctx.lineWidth=1;
-  rr(ctx, 1200 - M - 250, 116, 250, 42, 6); ctx.stroke();
-  ctx.fillStyle="#10b981";
-  ctx.beginPath(); ctx.arc(1200 - M - 232, 137, 4, 0, 7); ctx.fill();
-  ctx.font="600 13px \"JetBrains Mono\", monospace";
-  ctx.fillStyle="#6ee7b7";
-  ctx.fillText("TEAM MUMBAI_WALE", 1200 - M - 220, 142);
-
   // Separator line
   ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(M, 220); ctx.lineTo(1200 - M, 220); ctx.stroke();
@@ -207,47 +177,20 @@ function drawGlass(ctx){
   ctx.fillStyle="#34d399";
   ctx.fillText("the code.", M + njw, 465);
 
-  // --- Meta Subtitle ---
-  ctx.font="600 17px \"JetBrains Mono\", monospace";
-  ctx.fillStyle="#34d399";
-  ctx.fillText("CodersInPune Hackathon 2026 · Track: Full Stack", M, 545);
-
-  // --- Description ---
-  ctx.font="500 30px \"Space Grotesk\", sans-serif";
-  ctx.fillStyle="rgba(255, 255, 255, 0.85)";
-  wrapL(ctx, "Autonomous developer handover platform powered by MCP & Supabase.", M, 605, 1000, 42);
-
   // Separator line
   ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(M, 700); ctx.lineTo(1200 - M, 700); ctx.stroke();
-
-  // --- Official Hackathon Certification & Signatures ---
-  const px = M, py = 765;
-  ctx.font="700 17px \"JetBrains Mono\", monospace"; ctx.fillStyle="#10b981";
-  ctx.fillText("CODERSINPUNE HACKATHON 2026 // FULL STACK TRACK", px, py);
-
-  ctx.font="500 19px \"Space Grotesk\", sans-serif"; ctx.fillStyle="rgba(255, 255, 255, 0.65)";
-  wrapL(ctx, "Continuous developer reasoning indexing powered by Model Context Protocol & Supabase Auth.", px, py + 30, 680, 26);
-
-  // Signatures on right
-  [0, 1, 2].forEach(i => signature(ctx, 1200 - M - 260 + i * 86, py + 38, 0.85, i * 7 + 4, "rgba(16, 185, 129, 0.52)"));
-  ctx.font = "500 12px \"JetBrains Mono\", monospace"; ctx.fillStyle = "rgba(255, 255, 255, 0.40)";
-  ctx.fillText("CRYPTOGRAPHIC SIGNATURES", 1200 - M - 260, py + 74);
-
-  // Separator line
-  ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(M, 875); ctx.lineTo(1200 - M, 875); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(M, 540); ctx.lineTo(1200 - M, 540); ctx.stroke();
 
   // --- Team Roster Block (Monospace) ---
-  const ry = 930;
+  const ry = 620;
   ctx.fillStyle = "rgba(16, 185, 129, 0.05)";
-  rr(ctx, M, ry, 1048, 290, 12); ctx.fill();
+  rr(ctx, M, ry, 1048, 340, 12); ctx.fill();
   ctx.strokeStyle = "rgba(52, 211, 153, 0.22)"; ctx.lineWidth = 1;
-  rr(ctx, M, ry, 1048, 290, 12); ctx.stroke();
+  rr(ctx, M, ry, 1048, 340, 12); ctx.stroke();
 
   ctx.font = "700 18px \"JetBrains Mono\", monospace";
   ctx.fillStyle = "#34d399";
-  ctx.fillText("// TEAM MUMBAI_WALE", M + 32, ry + 44);
+  ctx.fillText("// CORE TEAM", M + 32, ry + 46);
 
   const teamMembers = [
     { name: "Vikrant GP", role: "Frontend & Design Lead" },
@@ -256,7 +199,7 @@ function drawGlass(ctx){
     { name: "Komal Chaurasiya", role: "QA & User Experience Lead" }
   ];
 
-  let memberY = ry + 92;
+  let memberY = ry + 104;
   teamMembers.forEach(m => {
     ctx.font = "700 17px \"JetBrains Mono\", monospace";
     ctx.fillStyle = "#10b981";
@@ -271,29 +214,27 @@ function drawGlass(ctx){
     ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
     ctx.fillText(" — " + m.role, M + 52 + nw, memberY);
 
-    memberY += 46;
+    memberY += 54;
   });
 
-  // Vertical watermark on right edge
-  ctx.save(); ctx.translate(1200 - M - 12, 1150); ctx.rotate(Math.PI / 2);
-  ctx.font = "600 18px \"JetBrains Mono\", monospace"; ctx.fillStyle = "rgba(16, 185, 129, 0.35)";
-  ctx.fillText("— BATON VERIFIED MANIFEST —", 0, 0);
-  ctx.restore();
+  // Separator line
+  ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(M, 1330); ctx.lineTo(1200 - M, 1330); ctx.stroke();
 
-  // --- Bottom Monospace Footer: BATON // MUMBAI_WALE // ROUND 2 BUILD ---
+  // --- Bottom Monospace Footer ---
   ctx.font="700 22px \"JetBrains Mono\", monospace";
   ctx.fillStyle="#10b981";
-  ctx.fillText("BATON", M, 1370);
+  ctx.fillText("BATON", M, 1420);
   const bFw = ctx.measureText("BATON").width;
   ctx.fillStyle="rgba(255, 255, 255, 0.50)";
-  ctx.fillText(" // MUMBAI_WALE // ROUND 2 BUILD", M + bFw, 1370);
+  ctx.fillText(" // VERIFIED HANDOVER PROTOCOL", M + bFw, 1420);
 
   // --- Interaction Cue: DRAG TO TURN IT · HOVER TO LIGHT IT ---
   ctx.save();
   ctx.font="600 15px \"JetBrains Mono\", monospace";
   ctx.fillStyle="rgba(52, 211, 153, 0.85)";
   ctx.textAlign="center";
-  ctx.fillText("DRAG TO TURN IT · HOVER TO LIGHT IT", 600, 1480);
+  ctx.fillText("DRAG TO TURN IT · HOVER TO LIGHT IT", 600, 1520);
   ctx.restore();
 }
 
@@ -369,7 +310,7 @@ touchLight.position.set(0,0,1.7); scene.add(touchLight);
 
 /* ---- geometry + the bend ------------------------------------------- */
 const SW = 2.30, SH = 2.72;
-const geo = new T.PlaneGeometry(SW,SH,72,96);
+const geo = new T.PlaneGeometry(SW,SH,32,32);
 
 const uni = {
   uTime:{value:0}, uAmp:{value:1.18}, uFreq:{value:4.70}, uTwist:{value:1.30},
@@ -578,7 +519,7 @@ window.addEventListener('pointerleave', ()=>{ hoverTarget=0; });
 let vw=0, vh=0;
 function resize(){
   vw = window.innerWidth; vh = window.innerHeight;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.5));
   renderer.setSize(vw,vh,false);
   camera.aspect = vw/vh; camera.updateProjectionMatrix();
   const visH = 2*camera.position.z*Math.tan(T.MathUtils.degToRad(camera.fov)/2);
