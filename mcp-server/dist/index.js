@@ -5,7 +5,7 @@ import { z } from 'zod';
 import dotenv from 'dotenv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { answerExitQuestion, getExitInterviews, getGithubActivity, pushMemory, queryContext } from './api.js';
+import { answerExitQuestion, getExitInterviews, getFileContext, getGithubActivity, pushMemory, queryContext } from './api.js';
 import { redactData } from './redact.js';
 import { bootstrapProject } from './snapshot.js';
 dotenv.config();
@@ -42,6 +42,24 @@ server.tool('save_memory', 'Save one new decision, blocker, context note, or con
     type: z.enum(['context', 'change', 'decision', 'blocker']),
     content: z.string().min(1).max(10_000)
 }, async ({ type, content }) => toolResult(await pushMemory(type, { content: redactData(content) })));
+server.tool('get_file_context', 'Retrieve codebase understanding, architecture summary, and recent decisions touching a specific file path.', { path: z.string().min(1).max(500) }, async ({ path }) => toolResult(await getFileContext(path)));
+server.tool('sync_history', 'Trigger an on-demand synchronization of the latest git commit, changed file summaries, and agent conversation turns.', {}, async () => {
+    try {
+        const { syncCommit, syncTranscripts } = await import('./cli.js');
+        const cRes = await syncCommit('HEAD');
+        const tRes = await syncTranscripts();
+        return toolResult({
+            success: true,
+            message: `Synchronized commit ${cRes.commitSha.slice(0, 8)} (${cRes.filesSynced} files) and ${tRes.messagesSynced} transcript turns.`
+        });
+    }
+    catch (err) {
+        return toolResult({
+            success: false,
+            message: err instanceof Error ? err.message : 'Sync history failed'
+        });
+    }
+});
 server.tool('github_activity', 'Retrieve GitHub/repository tracking state and recent sources for the configured repository.', {}, async () => toolResult(await getGithubActivity()));
 server.tool('get_exit_interview', 'Retrieve assigned exit-interview questions for the configured repository.', {}, async () => toolResult(await getExitInterviews()));
 server.tool('answer_exit_question', 'Submit an answer to an assigned exit-interview question.', {

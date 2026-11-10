@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Baton Local Model Context Protocol (MCP) server for capturing architectural decisions, blockers, and context.",
   "main": "dist/index.js",
+  "bin": {
+    "baton": "dist/cli.js"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc",

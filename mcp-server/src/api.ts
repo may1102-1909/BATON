@@ -223,3 +223,74 @@ export async function answerExitQuestion(interviewId: string, questionId: string
     body: JSON.stringify({ questionId: questionId.slice(0, 200), answer: String(safe(answer)).slice(0, 10_000) })
   });
 }
+
+export async function pushCommit(data: { sha: string; message: string; author: string; files?: string[]; diff_summary?: string }): Promise<ApiResponse> {
+  const scope = getRepositoryScope();
+  if (!scope.success) return { success: false, message: scope.message };
+  return request('/api/collector/commit', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...data,
+      message: safe(data.message),
+      diff_summary: data.diff_summary ? safe(data.diff_summary) : undefined,
+      org_id: scope.orgId,
+      repository_id: scope.repositoryId
+    })
+  });
+}
+
+export async function pushFiles(data: { path: string; content_hash: string; chunks?: string[]; summary?: string; commit_sha?: string }): Promise<ApiResponse> {
+  const scope = getRepositoryScope();
+  if (!scope.success) return { success: false, message: scope.message };
+  return request('/api/collector/files', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...data,
+      summary: data.summary ? safe(data.summary) : undefined,
+      org_id: scope.orgId,
+      repository_id: scope.repositoryId
+    })
+  });
+}
+
+export async function pushMessages(messages: Array<{ tool: string; sessionId: string; index: number; role: string; content: string; occurred_at?: string }>): Promise<ApiResponse> {
+  const scope = getRepositoryScope();
+  if (!scope.success) return { success: false, message: scope.message };
+  const safeMessages = messages.map(m => ({
+    ...m,
+    content: safe(m.content)
+  }));
+  return request('/api/collector/messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      messages: safeMessages,
+      org_id: scope.orgId,
+      repository_id: scope.repositoryId
+    })
+  });
+}
+
+export async function getCursor(tool: string, sessionId: string): Promise<{ success: boolean; cursor: number; message?: string }> {
+  const scope = getRepositoryScope();
+  if (!scope.success) return { success: false, cursor: -1, message: scope.message };
+  const params = new URLSearchParams({
+    org_id: scope.orgId,
+    repository_id: scope.repositoryId,
+    tool,
+    session: sessionId
+  });
+  const res = await request<{ cursor: number }>(`/api/collector/cursor?${params}`, { method: 'GET' });
+  if (!res.success) return { success: false, cursor: -1, message: res.message };
+  return { success: true, cursor: res.data?.cursor ?? -1 };
+}
+
+export async function getFileContext(path: string): Promise<ApiResponse> {
+  const scope = getRepositoryScope();
+  if (!scope.success) return { success: false, message: scope.message };
+  const params = new URLSearchParams({
+    q: path,
+    org_id: scope.orgId,
+    repository_id: scope.repositoryId
+  });
+  return request(`/api/collector/search?${params}`, { method: 'GET' });
+}

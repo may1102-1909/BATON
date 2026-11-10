@@ -212,7 +212,7 @@ test('MCP stdio publishes tools and bootstrap prompt', async () => {
     const names = tools.tools.map((tool) => tool.name).sort();
     assert.deepEqual(names, [
       'answer_exit_question', 'bootstrap_project', 'get_context', 'get_exit_interview',
-      'github_activity', 'log_blocker', 'log_decision', 'save_memory'
+      'get_file_context', 'github_activity', 'log_blocker', 'log_decision', 'save_memory', 'sync_history'
     ]);
     const prompts = await client.listPrompts();
     assert.ok(prompts.prompts.some((prompt) => prompt.name === 'baton_bootstrap'));

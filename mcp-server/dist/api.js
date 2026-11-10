@@ -209,3 +209,75 @@ export async function answerExitQuestion(interviewId, questionId, answer) {
         body: JSON.stringify({ questionId: questionId.slice(0, 200), answer: String(safe(answer)).slice(0, 10_000) })
     });
 }
+export async function pushCommit(data) {
+    const scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    return request('/api/collector/commit', {
+        method: 'POST',
+        body: JSON.stringify({
+            ...data,
+            message: safe(data.message),
+            diff_summary: data.diff_summary ? safe(data.diff_summary) : undefined,
+            org_id: scope.orgId,
+            repository_id: scope.repositoryId
+        })
+    });
+}
+export async function pushFiles(data) {
+    const scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    return request('/api/collector/files', {
+        method: 'POST',
+        body: JSON.stringify({
+            ...data,
+            summary: data.summary ? safe(data.summary) : undefined,
+            org_id: scope.orgId,
+            repository_id: scope.repositoryId
+        })
+    });
+}
+export async function pushMessages(messages) {
+    const scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    const safeMessages = messages.map(m => ({
+        ...m,
+        content: safe(m.content)
+    }));
+    return request('/api/collector/messages', {
+        method: 'POST',
+        body: JSON.stringify({
+            messages: safeMessages,
+            org_id: scope.orgId,
+            repository_id: scope.repositoryId
+        })
+    });
+}
+export async function getCursor(tool, sessionId) {
+    const scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, cursor: -1, message: scope.message };
+    const params = new URLSearchParams({
+        org_id: scope.orgId,
+        repository_id: scope.repositoryId,
+        tool,
+        session: sessionId
+    });
+    const res = await request(`/api/collector/cursor?${params}`, { method: 'GET' });
+    if (!res.success)
+        return { success: false, cursor: -1, message: res.message };
+    return { success: true, cursor: res.data?.cursor ?? -1 };
+}
+export async function getFileContext(path) {
+    const scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    const params = new URLSearchParams({
+        q: path,
+        org_id: scope.orgId,
+        repository_id: scope.repositoryId
+    });
+    return request(`/api/collector/search?${params}`, { method: 'GET' });
+}

@@ -16,6 +16,7 @@ dist-ssr
 mcp-server/.env
 
 # Editor directories and files
+bifrost-model-router/
 .vscode/*
 !.vscode/extensions.json
 .idea

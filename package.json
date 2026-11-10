@@ -2,11 +2,15 @@
   "name": "baton",
   "private": true,
   "version": "0.1.0",
+  "bin": {
+    "baton": "mcp-server/dist/cli.js"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "baton": "node mcp-server/dist/cli.js",
     "test": "node --test tests/backend.test.js tests/github.test.js tests/handover.test.js tests/mcp-integration.test.js",
     "build:mcp": "npm --prefix mcp-server run build",
     "start:mcp": "npm --prefix mcp-server start"

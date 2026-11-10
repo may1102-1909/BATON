@@ -25,6 +25,49 @@ class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
+async function embedText(text, key, fetchImpl = fetch) {
+  if (!key || !text) return null;
+  try {
+    const res = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        model: 'models/text-embedding-004',
+        content: { parts: [{ text: String(text).slice(0, 4000) }] }
+      })
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.embedding?.values ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function extractDecisionsFromMessages(messages, key, fetchImpl = fetch) {
+  if (!key || !messages || !messages.length) return [];
+  try {
+    const transcript = messages.map(m => `[${m.role.toUpperCase()} #${m.message_index}]: ${m.content}`).join('\n');
+    const prompt = `Analyze this AI-developer conversation transcript. Extract any architectural decisions, library adoptions, or operational blockers.\nReturn ONLY valid JSON array with objects matching:\n[{ "type": "decision"|"blocker", "content": "concise statement", "reason": "why", "files_affected": ["path/to/file"] }]\nIf no clear decisions or blockers were made, return [].\n\nTranscript:\n${transcript.slice(0, 8000)}`;
+    const res = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      })
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 async function readBody(req) {
   let size = 0;
   const chunks = [];
@@ -317,18 +360,240 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       }
       return json(res, 201, { ok: true, memory, deduplicated: false });
     }
+    if (method === 'POST' && url.pathname === '/api/collector/messages') {
+      const orgId = auth.tokenOrg ?? body.org_id;
+      if (!orgId) throw new HttpError(400, 'org_id is required');
+      const actor = await requireOrg(auth, orgId);
+      const messages = Array.isArray(body.messages) ? body.messages : [body];
+      if (!messages.length) throw new HttpError(400, 'No messages provided');
+      const repositoryId = body.repository_id ?? null;
+
+      let insertedCount = 0;
+      const processedMessages = [];
+      for (const msg of messages) {
+        const tool = String(msg.tool ?? 'claude-code').slice(0, 40);
+        const sessionId = String(msg.sessionId ?? msg.session_id ?? 'default').slice(0, 100);
+        const index = Number(msg.index ?? msg.message_index ?? 0);
+        const role = String(msg.role ?? 'user').slice(0, 20);
+        const rawContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content ?? '');
+        const content = await redact(rawContent);
+        if (!content) continue;
+
+        const existing = (await store.list('agent_messages', {
+          org_id: orgId, author_id: actor.id, tool, session_id: sessionId, message_index: index
+        }))[0];
+        if (existing) continue;
+
+        const record = {
+          org_id: orgId,
+          repository_id: repositoryId,
+          author_id: actor.id,
+          tool,
+          session_id: sessionId,
+          message_index: index,
+          role,
+          content: content.slice(0, 50000),
+          occurred_at: msg.occurred_at ?? new Date().toISOString()
+        };
+        await store.insert('agent_messages', record);
+        processedMessages.push(record);
+        insertedCount++;
+      }
+
+      const geminiKey = configuration.GEMINI_API_KEY;
+      if (geminiKey && processedMessages.length > 0) {
+        try {
+          const extracted = await extractDecisionsFromMessages(processedMessages, geminiKey, fetchImpl);
+          for (const item of extracted) {
+            const memContent = item.content || item.decision || item.problem;
+            if (!memContent) continue;
+            const emb = await embedText(memContent, geminiKey, fetchImpl);
+            await store.insert('sources', {
+              org_id: orgId,
+              repository_id: repositoryId,
+              author_id: actor.id,
+              author: auth.user?.email ?? actor.id,
+              type: item.type === 'blocker' ? 'blocker' : 'decision',
+              content: memContent,
+              metadata: {
+                reason: item.reason,
+                files_affected: item.files_affected || [],
+                extractor: 'llm',
+                source_turns: processedMessages.map(m => m.message_index)
+              },
+              embedding: emb,
+              visibility: 'team'
+            });
+          }
+        } catch (err) {
+          // Extraction error swallowed to not fail ingest
+        }
+      }
+
+      return json(res, 200, { ok: true, inserted: insertedCount });
+    }
+
+    if (method === 'POST' && url.pathname === '/api/collector/commit') {
+      const orgId = auth.tokenOrg ?? body.org_id;
+      if (!orgId) throw new HttpError(400, 'org_id is required');
+      const actor = await requireOrg(auth, orgId);
+      const sha = String(body.sha ?? '').slice(0, 64);
+      if (!sha) throw new HttpError(400, 'sha is required');
+      const repositoryId = body.repository_id ?? null;
+      const rawMsg = String(body.message ?? 'Git Commit');
+      const msg = await redact(rawMsg);
+      const diffSummary = body.diff_summary ? await redact(String(body.diff_summary).slice(0, 10000)) : null;
+      const files = Array.isArray(body.files) ? body.files.slice(0, 100) : [];
+      const authorName = String(body.author ?? auth.user?.email ?? actor.id);
+
+      const geminiKey = configuration.GEMINI_API_KEY;
+      const emb = geminiKey ? await embedText(`${msg}\nFiles: ${files.join(', ')}`, geminiKey, fetchImpl) : null;
+
+      const record = {
+        org_id: orgId,
+        repository_id: repositoryId,
+        author_id: actor.id,
+        author: authorName,
+        type: 'commit',
+        content: `[${sha.slice(0, 8)}] ${msg}`,
+        metadata: {
+          sha,
+          files,
+          diff_summary: diffSummary,
+          author: authorName
+        },
+        embedding: emb,
+        visibility: 'team'
+      };
+      const existing = (await store.list('sources', { org_id: orgId, type: 'commit' }))
+        .find(s => s.metadata?.sha === sha);
+      if (existing) return json(res, 200, { ok: true, source: existing, deduplicated: true });
+      const created = await store.insert('sources', record);
+      return json(res, 201, { ok: true, source: created });
+    }
+
+    if (method === 'POST' && url.pathname === '/api/collector/files') {
+      const orgId = auth.tokenOrg ?? body.org_id;
+      if (!orgId) throw new HttpError(400, 'org_id is required');
+      const actor = await requireOrg(auth, orgId);
+      const filePath = String(body.path ?? '').trim();
+      if (!filePath) throw new HttpError(400, 'path is required');
+      const contentHash = String(body.content_hash ?? body.hash ?? '');
+      const repositoryId = body.repository_id ?? null;
+      const chunks = Array.isArray(body.chunks) ? body.chunks.join('\n') : String(body.content ?? '');
+      const redactedChunks = await redact(chunks.slice(0, 15000));
+
+      let summary = body.summary ? await redact(String(body.summary)) : null;
+      const geminiKey = configuration.GEMINI_API_KEY;
+      if (!summary && geminiKey && redactedChunks) {
+        try {
+          const sumPrompt = `Provide a 2-3 sentence technical summary of this code file (${filePath}). Describe its core responsibility, exported interfaces, and dependencies.\n\nCode:\n${redactedChunks.slice(0, 4000)}`;
+          const sRes = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey },
+            body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: sumPrompt }] }] })
+          });
+          const sData = await sRes.json();
+          summary = sData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+        } catch {}
+      }
+      if (!summary) summary = `File ${filePath} (${contentHash.slice(0, 8)})`;
+
+      const emb = geminiKey ? await embedText(`${filePath}: ${summary}`, geminiKey, fetchImpl) : null;
+
+      const existing = (await store.list('file_summaries', { org_id: orgId, path: filePath }))
+        .find(f => !repositoryId || f.repository_id === repositoryId);
+
+      let record;
+      if (existing) {
+        record = await store.update('file_summaries', existing.id, {
+          content_hash: contentHash,
+          summary,
+          embedding: emb,
+          commit_sha: body.commit_sha || null,
+          updated_at: new Date().toISOString()
+        });
+      } else {
+        record = await store.insert('file_summaries', {
+          org_id: orgId,
+          repository_id: repositoryId,
+          path: filePath,
+          content_hash: contentHash,
+          summary,
+          embedding: emb,
+          commit_sha: body.commit_sha || null
+        });
+      }
+      return json(res, 200, { ok: true, file: record });
+    }
+
+    if (method === 'GET' && url.pathname === '/api/collector/cursor') {
+      const orgId = auth.tokenOrg ?? url.searchParams.get('org_id');
+      if (!orgId) throw new HttpError(400, 'org_id is required');
+      const actor = await requireOrg(auth, orgId);
+      const tool = url.searchParams.get('tool');
+      const sessionId = url.searchParams.get('session');
+      const filter = { org_id: orgId };
+      if (tool) filter.tool = tool;
+      if (sessionId) filter.session_id = sessionId;
+      const rows = await store.list('agent_messages', filter);
+      let maxCursor = -1;
+      for (const r of rows) {
+        if (typeof r.message_index === 'number' && r.message_index > maxCursor) {
+          maxCursor = r.message_index;
+        }
+      }
+      return json(res, 200, { cursor: maxCursor });
+    }
+
     if (method === 'GET' && url.pathname === '/api/collector/search') {
-      const query = (url.searchParams.get('q') ?? '').trim().toLocaleLowerCase();
+      const rawQuery = (url.searchParams.get('q') ?? '').trim();
       const orgId = auth.tokenOrg ?? url.searchParams.get('org_id');
       if (!orgId) throw new HttpError(400, 'org_id is required');
       const actor = await requireOrg(auth, orgId);
       const repositoryId = url.searchParams.get('repository_id');
-      const sources = await store.list('sources', { org_id: orgId });
-      const results = sources.filter(source => sourceVisible(source, actor)
-        && (!repositoryId || source.repository_id === repositoryId)
-        && (!query || source.content.toLocaleLowerCase().includes(query)))
-        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, 25);
-      return json(res, 200, { data: results });
+      const query = rawQuery.toLocaleLowerCase();
+
+      let results = [];
+      let searchMode = 'text';
+
+      const geminiKey = configuration.GEMINI_API_KEY;
+      if (geminiKey && rawQuery && typeof store.rpc === 'function') {
+        try {
+          const qEmbedding = await embedText(rawQuery, geminiKey, fetchImpl);
+          if (qEmbedding) {
+            const vectorMatches = await store.rpc('match_memory', {
+              query_embedding: qEmbedding,
+              p_org: orgId,
+              p_repo: repositoryId || null,
+              match_count: 10
+            });
+            if (Array.isArray(vectorMatches) && vectorMatches.length > 0) {
+              searchMode = 'vector';
+              results = vectorMatches.map(m => ({
+                id: m.id,
+                type: m.kind === 'file' ? 'file_summary' : 'memory',
+                content: m.content,
+                path: m.path,
+                similarity: m.similarity,
+                created_at: new Date().toISOString()
+              }));
+            }
+          }
+        } catch (err) {
+          // Fallback to text matching
+        }
+      }
+
+      if (!results.length) {
+        const sources = await store.list('sources', { org_id: orgId });
+        results = sources.filter(source => sourceVisible(source, actor)
+          && (!repositoryId || source.repository_id === repositoryId)
+          && (!query || source.content.toLocaleLowerCase().includes(query)))
+          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, 25);
+      }
+
+      return json(res, 200, { data: results, mode: searchMode });
     }
 
     if ((match = /^\/api\/orgs\/([^/]+)\/tasks$/.exec(url.pathname)) && method === 'POST') {
@@ -486,7 +751,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       }
       const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : {};
       const auth = url.pathname === '/api/health' ? { user: { id: 'health' }, memberships: [], demo: configuration.BATON_DEMO_MODE === 'true' } : await authenticate(req);
-      if (auth.apiToken && !['/api/collector/push', '/api/collector/search', '/api/mcp/interviews'].includes(url.pathname)
+      if (auth.apiToken && !['/api/collector/push', '/api/collector/search', '/api/collector/messages', '/api/collector/commit', '/api/collector/files', '/api/collector/cursor', '/api/mcp/interviews'].includes(url.pathname)
         && !/^\/api\/mcp\/interviews\/[^/]+\/answers$/.test(url.pathname)) throw new HttpError(403, 'API tokens are limited to collector and MCP interview access');
       return await routes(req, res, url, auth, body);
     } catch (error) {

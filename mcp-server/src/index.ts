@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import {
   answerExitQuestion,
   getExitInterviews,
+  getFileContext,
   getGithubActivity,
   pushMemory,
   queryContext
@@ -81,6 +82,35 @@ server.tool(
     content: z.string().min(1).max(10_000)
   },
   async ({ type, content }) => toolResult(await pushMemory(type, { content: redactData(content) }))
+);
+
+server.tool(
+  'get_file_context',
+  'Retrieve codebase understanding, architecture summary, and recent decisions touching a specific file path.',
+  { path: z.string().min(1).max(500) },
+  async ({ path }) => toolResult(await getFileContext(path))
+);
+
+server.tool(
+  'sync_history',
+  'Trigger an on-demand synchronization of the latest git commit, changed file summaries, and agent conversation turns.',
+  {},
+  async () => {
+    try {
+      const { syncCommit, syncTranscripts } = await import('./cli.js');
+      const cRes = await syncCommit('HEAD');
+      const tRes = await syncTranscripts();
+      return toolResult({
+        success: true,
+        message: `Synchronized commit ${cRes.commitSha.slice(0, 8)} (${cRes.filesSynced} files) and ${tRes.messagesSynced} transcript turns.`
+      });
+    } catch (err) {
+      return toolResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Sync history failed'
+      });
+    }
+  }
 );
 
 server.tool(

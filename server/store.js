@@ -53,6 +53,9 @@ export function createMemoryStore(seed = {}) {
       if (index < 0) return null;
       return clone(records.splice(index, 1)[0]);
     },
+    async rpc() {
+      return null;
+    },
   };
 }
 
@@ -110,6 +113,12 @@ export function createSupabaseStore(client, env = process.env) {
     async remove(name, id) {
       const db = await clientPromise;
       return await run(`remove ${name}`, db.from(tableName(name)).delete().eq('id', id).select('*').maybeSingle());
+    },
+    async rpc(fnName, params = {}) {
+      const db = await clientPromise;
+      const { data, error } = await db.rpc(fnName, params);
+      if (error) throw new Error(`Supabase rpc ${fnName} failed: ${error.message}`);
+      return data;
     },
   };
 }
