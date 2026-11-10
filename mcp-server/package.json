@@ -4,7 +4,9 @@
   "description": "Baton Local Model Context Protocol (MCP) server for capturing architectural decisions, blockers, and context.",
   "main": "dist/index.js",
   "bin": {
-    "baton": "dist/cli.js"
+    "baton": "dist/cli.js",
+    "baton-mcp": "dist/index.js",
+    "baton-mcp-server": "dist/index.js"
   },
   "type": "module",
   "scripts": {

@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "bin": {
-    "baton": "mcp-server/dist/cli.js"
+    "baton": "mcp-server/dist/cli.js",
+    "baton-mcp": "mcp-server/dist/index.js",
+    "baton-mcp-server": "mcp-server/dist/index.js"
   },
   "type": "module",
   "scripts": {
@@ -16,9 +18,12 @@
     "start:mcp": "npm --prefix mcp-server start"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1",
     "@supabase/supabase-js": "^2.119.0",
+    "dotenv": "^16.4.7",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",

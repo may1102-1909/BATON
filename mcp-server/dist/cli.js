@@ -279,6 +279,7 @@ async function main() {
 Baton CLI: Continuous Repository Memory & Context Capture
 
 Usage:
+  baton mcp                   Start the Baton Model Context Protocol (MCP) server over stdio
   baton init                  One-time setup (writes config, installs git hook, generates MCP settings)
   baton sync --commit [ref]   Push commit metadata and changed-file summaries (default: HEAD)
   baton sync --transcripts    Extract and push new turns from local agent sessions (Claude Code, Antigravity)
@@ -288,6 +289,10 @@ Usage:
     }
     if (command === 'init') {
         await initProject();
+        return;
+    }
+    if (command === 'mcp' || command === 'serve' || command === 'start') {
+        await import('./index.js');
         return;
     }
     if (command === 'sync') {
