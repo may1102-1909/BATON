@@ -3,7 +3,6 @@ import { Brand } from '../components/Brand'
 import { Icon } from '../components/Icon'
 import { Button } from '../components/Button'
 import { Comparison } from '../components/Comparison'
-import { CtaBanner } from '../components/CtaBanner'
 import { useRouter } from '../router'
 
 const C = {
@@ -17,8 +16,8 @@ const C = {
 
 const NAV_ITEMS = [
   { id: 'overview',     label: 'Overview' },
-  { id: 'features',     label: 'Features' },
   { id: 'docs',         label: 'Developer Notes' },
+  { id: 'features',     label: 'Features' },
 ]
 
 function DeveloperNotesCard() {
@@ -432,7 +431,11 @@ function TOCSidebar({ activeId, onNavigate }) {
           return (
             <button
               key={id}
-              onClick={() => onNavigate(id)}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                onNavigate(id)
+              }}
               style={{
                 position: 'relative',
                 display: 'block',
@@ -449,8 +452,7 @@ function TOCSidebar({ activeId, onNavigate }) {
                 lineHeight: 1.5,
                 transition: 'color 0.15s ease',
                 whiteSpace: 'nowrap',
-                opacity: 0,
-                animation: `tocItemEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.35 + index * 0.08}s forwards`,
+                animation: `tocItemEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.35 + index * 0.08}s both`,
               }}
               onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#e5e7eb' }}
               onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#6b7280' }}
@@ -486,11 +488,18 @@ export function UsagePage() {
   const [activeId, setActiveId] = useState('overview')
 
   const heroRef = useRef(null)
-  const featuresRef = useRef(null)
   const docsRef = useRef(null)
+  const featuresRef = useRef(null)
+  const isClickingRef = useRef(false)
+  const clickTimeoutRef = useRef(null)
 
   const scrollToSection = (id) => {
     setActiveId(id)
+    isClickingRef.current = true
+    if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current)
+    clickTimeoutRef.current = setTimeout(() => {
+      isClickingRef.current = false
+    }, 850)
 
     if (id === 'overview') {
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -498,18 +507,14 @@ export function UsagePage() {
     }
 
     const refMap = {
-      features: featuresRef,
-      docs: docsRef
+      docs: docsRef,
+      features: featuresRef
     }
 
     const targetRef = refMap[id]
     if (targetRef?.current) {
-      if (id === 'docs') {
-        const details = targetRef.current.querySelector('details')
-        if (details) details.open = true
-      }
       const rect = targetRef.current.getBoundingClientRect()
-      const targetY = rect.top + window.scrollY - 120
+      const targetY = rect.top + window.scrollY - 85
       window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' })
     }
   }
@@ -517,29 +522,45 @@ export function UsagePage() {
   // Accurate scroll tracking
   useEffect(() => {
     const onScroll = () => {
-      const isAtBottom =
-        window.innerHeight + window.scrollY >= (document.documentElement.scrollHeight - 120)
-      if (isAtBottom) {
-        setActiveId('docs')
+      if (isClickingRef.current) return
+
+      const scrollY = window.scrollY
+      const windowH = window.innerHeight
+
+      // If scrolled to bottom of document, select features
+      if (windowH + scrollY >= document.documentElement.scrollHeight - 70) {
+        setActiveId('features')
         return
       }
 
-      const scrollY = window.scrollY + 160
-      const sections = [
-        { id: 'overview',     top: 0 },
-        { id: 'features',     top: featuresRef.current ? featuresRef.current.getBoundingClientRect().top + window.scrollY : Infinity },
-        { id: 'docs',         top: docsRef.current ? docsRef.current.getBoundingClientRect().top + window.scrollY : Infinity },
-      ].filter(s => s.top !== Infinity).sort((a, b) => a.top - b.top)
-
-      let current = 'overview'
-      for (const { id, top } of sections) {
-        if (scrollY >= top) current = id
+      // If near top of page, select overview
+      if (scrollY < 120) {
+        setActiveId('overview')
+        return
       }
-      setActiveId(current)
+
+      // Viewport probe point (user's focus area: top 35% of screen)
+      const probeY = scrollY + Math.min(320, windowH * 0.35)
+
+      const getTop = (el) => el ? el.getBoundingClientRect().top + scrollY : Infinity
+      const docsTop = getTop(docsRef.current)
+      const featuresTop = getTop(featuresRef.current)
+
+      if (probeY >= featuresTop) {
+        setActiveId('features')
+      } else if (probeY >= docsTop) {
+        setActiveId('docs')
+      } else {
+        setActiveId('overview')
+      }
     }
 
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    onScroll()
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current)
+    }
   }, [])
 
   return (
@@ -820,7 +841,14 @@ export function UsagePage() {
       <main>
         <div className="bt-shell">
           {/* Hero Section */}
-          <section className="bt-hero" ref={heroRef}>
+          <section
+            className="bt-hero"
+            ref={heroRef}
+            style={{
+              paddingTop: 130,
+              paddingBottom: 90
+            }}
+          >
             <div
               style={{
                 maxWidth: 780,
@@ -893,9 +921,9 @@ export function UsagePage() {
               display: 'flex',
               justifyContent: 'space-between',
               gap: 20,
-              padding: '28px 0',
-              marginTop: 65,
-              marginBottom: 80,
+              padding: '30px 0',
+              marginTop: 80,
+              marginBottom: 130,
               borderTop: `1px solid ${C.line}`,
               borderBottom: `1px solid ${C.line}`,
               fontSize: 10,
@@ -912,10 +940,58 @@ export function UsagePage() {
 
           <SectionDivider />
 
+          {/* Developer Notes / Docs Section */}
+          <section
+            ref={docsRef}
+            style={{ padding: '130px 0 170px', scrollMarginTop: 100 }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+              <div
+                style={{
+                  color: C.green,
+                  fontSize: 10,
+                  letterSpacing: 1.7,
+                  fontFamily: 'monospace',
+                  marginBottom: 10,
+                  fontWeight: 600
+                }}
+              >
+                DEVELOPER NOTES
+              </div>
+              <h2
+                style={{
+                  fontSize: 30,
+                  fontWeight: 500,
+                  letterSpacing: -1,
+                  margin: '0 0 10px',
+                  color: '#f4f4f5'
+                }}
+              >
+                Behind the code.
+              </h2>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: C.muted,
+                  margin: '0 auto',
+                  maxWidth: 540,
+                  lineHeight: 1.8
+                }}
+              >
+                Engineering rationale and candid builder dialogue directly from the developers behind Baton.
+              </p>
+            </div>
+
+            {/* Option C Dialogue Table Card with Stickers */}
+            <DeveloperNotesCard />
+          </section>
+
+          <SectionDivider />
+
           {/* Features Section */}
           <section
             ref={featuresRef}
-            style={{ padding: '80px 0 120px', scrollMarginTop: 110 }}
+            style={{ padding: '130px 0 160px', scrollMarginTop: 100 }}
           >
             <div
               style={{
@@ -1035,67 +1111,9 @@ export function UsagePage() {
           <SectionDivider />
 
           {/* Comparison */}
-          <div style={{ padding: '80px 0 120px' }}>
+          <div style={{ padding: '130px 0 160px' }}>
             <Comparison />
           </div>
-
-          <SectionDivider />
-
-          {/* CTA Banner */}
-          <div style={{ padding: '70px 0 110px' }}>
-            <CtaBanner
-              onGetStarted={() => navigate('/dashboard')}
-              actionLabel="View Dashboard"
-            />
-          </div>
-
-          <SectionDivider />
-
-          {/* Developer Notes / Docs Section */}
-          <section
-            ref={docsRef}
-            style={{ padding: '60px 0 120px', scrollMarginTop: 110 }}
-          >
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div
-                style={{
-                  color: C.green,
-                  fontSize: 10,
-                  letterSpacing: 1.7,
-                  fontFamily: 'monospace',
-                  marginBottom: 10,
-                  fontWeight: 600
-                }}
-              >
-                DEVELOPER NOTES
-              </div>
-              <h2
-                style={{
-                  fontSize: 30,
-                  fontWeight: 500,
-                  letterSpacing: -1,
-                  margin: '0 0 10px',
-                  color: '#f4f4f5'
-                }}
-              >
-                Behind the code.
-              </h2>
-              <p
-                style={{
-                  fontSize: 13,
-                  color: C.muted,
-                  margin: '0 auto',
-                  maxWidth: 540,
-                  lineHeight: 1.8
-                }}
-              >
-                Engineering rationale and candid builder dialogue directly from the developers behind Baton.
-              </p>
-            </div>
-
-            {/* Option C Dialogue Table Card with Stickers */}
-            <DeveloperNotesCard />
-          </section>
         </div>
       </main>
 

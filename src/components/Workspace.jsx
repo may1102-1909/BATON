@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Brand } from './Brand';
 import * as api from '../lib/api.js';
 import './workspace.css';
 
@@ -419,9 +420,30 @@ export function Workspace({ onSignOut, onBack }) {
   if (loading && !orgState) {
     return (
       <div className="ws-container" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <style>{`
+          @keyframes batonLoaderGlow {
+            0% {
+              opacity: 0.65;
+              filter: drop-shadow(0 0 4px rgba(52, 211, 153, 0.2));
+              transform: scale(0.97);
+            }
+            50% {
+              opacity: 1;
+              filter: drop-shadow(0 0 14px rgba(52, 211, 153, 0.65));
+              transform: scale(1.03);
+            }
+            100% {
+              opacity: 0.65;
+              filter: drop-shadow(0 0 4px rgba(52, 211, 153, 0.2));
+              transform: scale(0.97);
+            }
+          }
+        `}</style>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-          <div className="ws-logo-gem" style={{ width: 24, height: 24 }} />
-          <div style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>Loading Baton Workspace...</div>
+          <div style={{ animation: 'batonLoaderGlow 2.4s ease-in-out infinite' }}>
+            <Brand size={32} iconOnly />
+          </div>
+          <div style={{ color: 'var(--muted)', fontSize: '0.9rem', letterSpacing: '0.02em' }}>Loading Baton Workspace...</div>
         </div>
       </div>
     );
@@ -456,8 +478,7 @@ export function Workspace({ onSignOut, onBack }) {
       <header className="ws-header">
         <div className="ws-header-left">
           <div className="ws-logo-wrap" onClick={onBack}>
-            <div className="ws-logo-gem" />
-            <span>BATON</span>
+            <Brand size={20} />
           </div>
 
           {orgs.length > 0 && (
