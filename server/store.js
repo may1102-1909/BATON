@@ -82,27 +82,60 @@ export function createSupabaseStore(client, env = process.env) {
     return data;
   };
 
+  const normalizeForDb = (name, record) => {
+    if (!record || typeof record !== 'object') return record;
+    if (name === 'sources') {
+      const payload = { ...record };
+      if (payload.visibility === 'team') payload.visibility = 'all';
+      if (payload.type === 'decision') payload.type = 'mcp_decision';
+      else if (payload.type === 'blocker') payload.type = 'mcp_blocker';
+      else if (payload.type && !['commit', 'pr', 'issue', 'mcp_decision', 'mcp_blocker'].includes(payload.type)) {
+        payload.type = 'mcp_decision';
+      }
+      return payload;
+    }
+    return record;
+  };
+
   return {
     async list(name, filters = {}) {
       const db = await clientPromise;
       let query = db.from(tableName(name)).select('*');
-      for (const [key, value] of Object.entries(filters)) query = query.eq(key, value);
-      return (await run(`list ${name}`, query)).map(record => name === 'tokens' ? ({
-        ...record,
-        token_hash: record.token_hash,
-      }) : record);
+      for (const [key, value] of Object.entries(filters)) {
+        let val = value;
+        if (name === 'sources' && key === 'type') {
+          if (val === 'decision') val = 'mcp_decision';
+          else if (val === 'blocker') val = 'mcp_blocker';
+        }
+        query = query.eq(key, val);
+      }
+      return (await run(`list ${name}`, query)).map(record => {
+        if (name === 'tokens') {
+          return { ...record, token_hash: record.token_hash };
+        }
+        if (name === 'sources' && record) {
+          if (record.type === 'mcp_decision') return { ...record, type: 'decision' };
+          if (record.type === 'mcp_blocker') return { ...record, type: 'blocker' };
+        }
+        return record;
+      });
     },
     async get(name, id) {
       const db = await clientPromise;
-      return await run(`get ${name}`, db.from(tableName(name)).select('*').eq('id', id).maybeSingle());
+      const record = await run(`get ${name}`, db.from(tableName(name)).select('*').eq('id', id).maybeSingle());
+      if (name === 'sources' && record) {
+        if (record.type === 'mcp_decision') return { ...record, type: 'decision' };
+        if (record.type === 'mcp_blocker') return { ...record, type: 'blocker' };
+      }
+      return record;
     },
     async insert(name, record) {
       const db = await clientPromise;
-      return await run(`insert ${name}`, db.from(tableName(name)).insert(record).select('*').single());
+      return await run(`insert ${name}`, db.from(tableName(name)).insert(normalizeForDb(name, record)).select('*').single());
     },
     async update(name, id, patch) {
       const db = await clientPromise;
-      return await run(`update ${name}`, db.from(tableName(name)).update(patch).eq('id', id).select('*').maybeSingle());
+      return await run(`update ${name}`, db.from(tableName(name)).update(normalizeForDb(name, patch)).eq('id', id).select('*').maybeSingle());
     },
     async claimInvite(id, acceptedBy, acceptedAt = new Date().toISOString()) {
       const db = await clientPromise;
