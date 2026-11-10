@@ -1,12 +1,20 @@
--- Baton organization-scoped API schema. Run with the Supabase service-role SQL editor.
-create extension if not exists pgcrypto;
+-- ====================================================================
+-- BATON FULL DATABASE SETUP & MIGRATION SCHEMA (Supabase PostgreSQL)
+-- Safe & idempotent: works on fresh databases AND upgrades existing setups.
+-- ====================================================================
 
+-- 1. Required PostgreSQL Extensions
+create extension if not exists pgcrypto;
+create extension if not exists vector;
+
+-- 2. Organizations & Team Memberships
 create table if not exists public.organizations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
+alter table public.organizations add column if not exists created_by uuid references auth.users(id) on delete set null;
 
 create table if not exists public.org_memberships (
   id uuid primary key default gen_random_uuid(),
@@ -19,7 +27,12 @@ create table if not exists public.org_memberships (
   created_at timestamptz not null default now(),
   unique (org_id, user_id)
 );
+alter table public.org_memberships add column if not exists email text;
+alter table public.org_memberships add column if not exists role text not null default 'member';
+alter table public.org_memberships add column if not exists github_login text;
+alter table public.org_memberships add column if not exists disabled_at timestamptz;
 
+-- 3. Repositories
 create table if not exists public.repositories (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
@@ -35,8 +48,17 @@ create table if not exists public.repositories (
   created_at timestamptz not null default now(),
   unique (org_id, full_name)
 );
+alter table public.repositories add column if not exists installation_id text;
+alter table public.repositories add column if not exists github_repo_id bigint;
+alter table public.repositories add column if not exists full_name text;
+alter table public.repositories add column if not exists default_branch text;
+alter table public.repositories add column if not exists private boolean not null default true;
+alter table public.repositories add column if not exists synced_at timestamptz;
+alter table public.repositories add column if not exists last_synced_at timestamptz;
+alter table public.repositories add column if not exists github_repository_id bigint;
+alter table public.repositories add column if not exists metadata jsonb not null default '{}'::jsonb;
 
--- Retain compatibility with the initial dashboard schema while tightening its policies.
+-- 4. Sources (Agent Decisions, Blockers, Commits & PR Evidence)
 create table if not exists public.sources (
   id uuid primary key default gen_random_uuid(),
   org_id uuid references public.organizations(id) on delete cascade,
@@ -57,30 +79,38 @@ create table if not exists public.sources (
   created_at timestamptz not null default now(),
   timestamp timestamptz not null default now()
 );
-alter table public.sources add column if not exists author_id uuid references auth.users(id) on delete set null;
-drop policy if exists sources_member_read on public.sources;
-drop policy if exists sources_member_insert on public.sources;
-drop policy if exists sources_owner_update on public.sources;
-drop policy if exists sources_owner_delete on public.sources;
-drop policy if exists "Allow read access to authenticated users on sources" on public.sources;
-drop policy if exists "Allow insert access on sources" on public.sources;
+
+-- Ensure all new columns exist on legacy sources tables before creating indexes
+alter table public.sources add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table public.sources add column if not exists author_id text;
 alter table public.sources drop constraint if exists sources_author_id_fkey;
-alter table public.sources alter column author_id type text using author_id::text;
+do $$ begin
+  alter table public.sources alter column author_id type text using author_id::text;
+exception when others then null;
+end $$;
+alter table public.sources add column if not exists author text not null default 'Agent';
 alter table public.sources add column if not exists author_login text;
-alter table public.sources add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table public.sources add column if not exists content text;
+alter table public.sources add column if not exists type text;
 alter table public.sources add column if not exists external_id text;
 alter table public.sources add column if not exists url text;
 alter table public.sources add column if not exists sha text;
 alter table public.sources add column if not exists committer jsonb;
+alter table public.sources add column if not exists metadata jsonb not null default '{}'::jsonb;
 alter table public.sources add column if not exists repository_id uuid references public.repositories(id) on delete set null;
 alter table public.sources add column if not exists session_id text;
 alter table public.sources add column if not exists event_id text;
 alter table public.sources add column if not exists visibility text not null default 'team';
 alter table public.sources add column if not exists created_at timestamptz not null default now();
+alter table public.sources add column if not exists timestamp timestamptz not null default now();
+alter table public.sources add column if not exists embedding vector(768);
+
 create unique index if not exists sources_event_dedupe on public.sources(org_id, author_id, session_id, event_id) where event_id is not null;
 create unique index if not exists sources_external_dedupe on public.sources(org_id, repository_id, external_id) where external_id is not null;
 create index if not exists sources_org_created_idx on public.sources(org_id, created_at desc);
+create index if not exists sources_embedding_idx on public.sources using hnsw (embedding vector_cosine_ops);
 
+-- 5. Tasks & Threaded Comments
 create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
@@ -104,6 +134,7 @@ create table if not exists public.task_comments (
   created_at timestamptz not null default now()
 );
 
+-- 6. Organization Invites & API Tokens
 create table if not exists public.organization_invites (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
@@ -128,6 +159,7 @@ create table if not exists public.api_tokens (
   created_at timestamptz not null default now()
 );
 
+-- 7. Handovers, Claims, Questions, Versions & Audit Events
 create table if not exists public.handovers (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
@@ -148,6 +180,7 @@ create table if not exists public.handovers (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
 create table if not exists public.handover_claims (
   id uuid primary key default gen_random_uuid(),
   handover_id uuid not null references public.handovers(id) on delete cascade,
@@ -167,6 +200,7 @@ create table if not exists public.handover_claims (
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
+
 create table if not exists public.handover_questions (
   id uuid primary key default gen_random_uuid(),
   handover_id uuid not null references public.handovers(id) on delete cascade,
@@ -184,6 +218,7 @@ create table if not exists public.handover_questions (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
 create table if not exists public.handover_versions (
   id uuid primary key default gen_random_uuid(),
   handover_id uuid not null references public.handovers(id) on delete cascade,
@@ -197,6 +232,7 @@ create table if not exists public.handover_versions (
   created_at timestamptz not null default now(),
   unique (handover_id, version_number)
 );
+
 create table if not exists public.handover_events (
   id uuid primary key default gen_random_uuid(),
   handover_id uuid not null references public.handovers(id) on delete cascade,
@@ -207,6 +243,7 @@ create table if not exists public.handover_events (
   created_at timestamptz not null default now()
 );
 
+-- 8. GitHub App OAuth & Webhook Tables
 create table if not exists public.github_accounts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -220,6 +257,7 @@ create table if not exists public.github_accounts (
   updated_at timestamptz not null default now(),
   unique (org_id, user_id)
 );
+
 create table if not exists public.github_states (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -228,6 +266,7 @@ create table if not exists public.github_states (
   expires_at timestamptz not null,
   created_at timestamptz not null default now()
 );
+
 create table if not exists public.github_deliveries (
   id uuid primary key default gen_random_uuid(),
   delivery_id text not null unique,
@@ -244,6 +283,7 @@ create table if not exists public.github_link_states (
   expires_at timestamptz not null,
   created_at timestamptz not null default now()
 );
+
 create table if not exists public.github_installations (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
@@ -255,133 +295,40 @@ create table if not exists public.github_installations (
   unique (org_id, installation_id)
 );
 
--- Legacy dashboard tables are now organization-scoped too.
+-- 9. Legacy Decisions & Blockers Tables (Scoped to Organization)
 create table if not exists public.decisions (
-  id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
   org_id uuid references public.organizations(id) on delete cascade,
-  decision text not null, reason text not null, alternatives text[] not null default '{}',
-  files_affected text[] not null default '{}', status text not null default 'Verified',
-  citation text not null default 'Agent Session', created_at timestamptz not null default now()
+  decision text not null,
+  reason text not null,
+  alternatives text[] not null default '{}',
+  files_affected text[] not null default '{}',
+  status text not null default 'Verified',
+  citation text not null default 'Agent Session',
+  created_at timestamptz not null default now()
 );
 alter table public.decisions add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table public.decisions add column if not exists alternatives text[] not null default '{}';
+alter table public.decisions add column if not exists files_affected text[] not null default '{}';
+alter table public.decisions add column if not exists status text not null default 'Verified';
+alter table public.decisions add column if not exists citation text not null default 'Agent Session';
+
 create table if not exists public.blockers (
-  id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
   org_id uuid references public.organizations(id) on delete cascade,
-  problem text not null, status text not null default 'active' check (status in ('active','investigating','blocked','workaround_applied','resolved')),
-  workaround_notes text not null default '', citation text not null default 'Agent Session', created_at timestamptz not null default now()
+  problem text not null,
+  status text not null default 'active' check (status in ('active','investigating','blocked','workaround_applied','resolved')),
+  workaround_notes text not null default '',
+  citation text not null default 'Agent Session',
+  created_at timestamptz not null default now()
 );
 alter table public.blockers add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table public.blockers add column if not exists workaround_notes text not null default '';
+alter table public.blockers add column if not exists citation text not null default 'Agent Session';
 
-create or replace function public.is_org_member(target_org uuid)
-returns boolean language sql stable security definer set search_path = public, auth
-as $$ select exists (select 1 from public.org_memberships m where m.org_id = target_org and m.user_id = auth.uid() and m.disabled_at is null) $$;
-create or replace function public.is_org_admin(target_org uuid)
-returns boolean language sql stable security definer set search_path = public, auth
-as $$ select exists (select 1 from public.org_memberships m where m.org_id = target_org and m.user_id = auth.uid() and m.role = 'admin' and m.disabled_at is null) $$;
-create or replace function public.keep_org_admin()
-returns trigger language plpgsql security definer set search_path = public
-as $$
-begin
-  if old.role = 'admin' and old.disabled_at is null
-    and (tg_op = 'DELETE' or new.role <> 'admin' or new.disabled_at is not null) then
-    perform 1 from public.organizations where id = old.org_id for update;
-    if not exists (
-      select 1 from public.org_memberships m
-      where m.org_id = old.org_id and m.id <> old.id and m.role = 'admin' and m.disabled_at is null
-    ) then
-      raise exception 'organization must retain at least one active admin' using errcode = '23514';
-    end if;
-  end if;
-  if tg_op = 'DELETE' then return old; end if;
-  return new;
-end;
-$$;
-drop trigger if exists org_memberships_keep_admin on public.org_memberships;
-create trigger org_memberships_keep_admin before update or delete on public.org_memberships
-for each row execute function public.keep_org_admin();
-
-alter table public.organizations enable row level security;
-alter table public.org_memberships enable row level security;
-alter table public.repositories enable row level security;
-alter table public.sources enable row level security;
-alter table public.tasks enable row level security;
-alter table public.task_comments enable row level security;
-alter table public.organization_invites enable row level security;
-alter table public.api_tokens enable row level security;
-alter table public.handovers enable row level security;
-alter table public.handover_claims enable row level security;
-alter table public.handover_questions enable row level security;
-alter table public.handover_versions enable row level security;
-alter table public.handover_events enable row level security;
-alter table public.github_link_states enable row level security;
-alter table public.github_installations enable row level security;
-alter table public.github_accounts enable row level security;
-alter table public.github_states enable row level security;
-alter table public.github_deliveries enable row level security;
-alter table public.decisions enable row level security;
-alter table public.blockers enable row level security;
-
-drop policy if exists "Allow read access to authenticated users on sources" on public.sources;
-drop policy if exists "Allow insert access on sources" on public.sources;
-drop policy if exists "Allow read access to authenticated users" on public.decisions;
-drop policy if exists "Allow insert access to authenticated users" on public.decisions;
-drop policy if exists "Allow read access to authenticated users on blockers" on public.blockers;
-drop policy if exists "Allow insert access to authenticated users on blockers" on public.blockers;
-drop policy if exists organizations_member_read on public.organizations;
-drop policy if exists organizations_member_insert on public.organizations;
-drop policy if exists organizations_admin_update on public.organizations;
-drop policy if exists memberships_org_read on public.org_memberships;
-drop policy if exists memberships_admin_write on public.org_memberships;
-drop policy if exists repositories_member_access on public.repositories;
-drop policy if exists sources_member_read on public.sources;
-drop policy if exists sources_member_insert on public.sources;
-drop policy if exists sources_owner_update on public.sources;
-drop policy if exists sources_owner_delete on public.sources;
-drop policy if exists tasks_member_access on public.tasks;
-drop policy if exists task_comments_member_access on public.task_comments;
-drop policy if exists handovers_member_read on public.handovers;
-drop policy if exists handovers_admin_insert on public.handovers;
-drop policy if exists handovers_admin_update on public.handovers;
-drop policy if exists handover_claims_member_access on public.handover_claims;
-drop policy if exists handover_questions_member_access on public.handover_questions;
-drop policy if exists handover_versions_member_read on public.handover_versions;
-drop policy if exists handover_events_member_read on public.handover_events;
-drop policy if exists decisions_member_access on public.decisions;
-drop policy if exists blockers_member_access on public.blockers;
-
-create policy organizations_member_read on public.organizations for select to authenticated using (public.is_org_member(id));
-create policy organizations_member_insert on public.organizations for insert to authenticated with check (created_by = auth.uid());
-create policy organizations_admin_update on public.organizations for update to authenticated using (public.is_org_admin(id)) with check (public.is_org_admin(id));
-create policy memberships_org_read on public.org_memberships for select to authenticated using (public.is_org_member(org_id));
-create policy memberships_admin_write on public.org_memberships for all to authenticated using (public.is_org_admin(org_id)) with check (public.is_org_admin(org_id));
-create policy repositories_member_access on public.repositories for select to authenticated using (public.is_org_member(org_id));
-create policy sources_member_read on public.sources for select to authenticated using (
-  public.is_org_member(org_id) and (visibility <> 'admin' or public.is_org_admin(org_id))
-  and (visibility <> 'private' or author_id = auth.uid()::text or public.is_org_admin(org_id))
-);
-create policy sources_member_insert on public.sources for insert to authenticated with check (public.is_org_member(org_id) and author_id = auth.uid()::text);
-create policy sources_owner_update on public.sources for update to authenticated using (public.is_org_member(org_id) and author_id = auth.uid()::text and external_id is null and type <> 'github_evidence') with check (public.is_org_member(org_id) and author_id = auth.uid()::text and external_id is null and type <> 'github_evidence');
-create policy sources_owner_delete on public.sources for delete to authenticated using (public.is_org_member(org_id) and author_id = auth.uid()::text and external_id is null and type <> 'github_evidence');
-create policy tasks_member_access on public.tasks for all to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
-create policy task_comments_member_access on public.task_comments for all to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
-create policy handovers_member_read on public.handovers for select to authenticated using (public.is_org_member(org_id));
-create policy handovers_admin_insert on public.handovers for insert to authenticated with check (public.is_org_admin(org_id));
-create policy handovers_admin_update on public.handovers for update to authenticated using (public.is_org_admin(org_id)) with check (public.is_org_admin(org_id));
-create policy handover_claims_member_access on public.handover_claims for select to authenticated using (public.is_org_member(org_id));
-create policy handover_questions_member_access on public.handover_questions for select to authenticated using (public.is_org_member(org_id));
-create policy handover_versions_member_read on public.handover_versions for select to authenticated using (public.is_org_member(org_id));
-create policy handover_events_member_read on public.handover_events for select to authenticated using (public.is_org_member(org_id));
-create policy decisions_member_access on public.decisions for select to authenticated using (org_id is not null and public.is_org_member(org_id));
-create policy blockers_member_access on public.blockers for select to authenticated using (org_id is not null and public.is_org_member(org_id));
-
--- Invites, API tokens, GitHub OAuth/account state, deliveries and installations have no client policies;
--- access is only through the server's service-role client.
-
--- ==========================================
--- Vector Memory & Transcripts Extension (v2)
--- ==========================================
-create extension if not exists vector;
-
+-- 10. Vector Memory & Transcripts Tables
 create table if not exists public.agent_messages (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
@@ -405,22 +352,138 @@ create table if not exists public.file_summaries (
   content_hash text not null,
   summary text not null,
   commit_sha text,
+  embedding vector(768),
   updated_at timestamptz not null default now(),
   unique (org_id, repository_id, path)
 );
-
-alter table public.sources        add column if not exists embedding vector(768);
 alter table public.file_summaries add column if not exists embedding vector(768);
-
-create index if not exists sources_embedding_idx on public.sources using hnsw (embedding vector_cosine_ops);
 create index if not exists file_summaries_embedding_idx on public.file_summaries using hnsw (embedding vector_cosine_ops);
 
+-- 11. Security Definer Helper Functions
+create or replace function public.is_org_member(target_org uuid)
+returns boolean language sql stable security definer set search_path = public, auth
+as $$ select exists (select 1 from public.org_memberships m where m.org_id = target_org and m.user_id = auth.uid() and m.disabled_at is null) $$;
+
+create or replace function public.is_org_admin(target_org uuid)
+returns boolean language sql stable security definer set search_path = public, auth
+as $$ select exists (select 1 from public.org_memberships m where m.org_id = target_org and m.user_id = auth.uid() and m.role = 'admin' and m.disabled_at is null) $$;
+
+create or replace function public.keep_org_admin()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if old.role = 'admin' and old.disabled_at is null
+    and (tg_op = 'DELETE' or new.role <> 'admin' or new.disabled_at is not null) then
+    perform 1 from public.organizations where id = old.org_id for update;
+    if not exists (
+      select 1 from public.org_memberships m
+      where m.org_id = old.org_id and m.id <> old.id and m.role = 'admin' and m.disabled_at is null
+    ) then
+      raise exception 'organization must retain at least one active admin' using errcode = '23514';
+    end if;
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists org_memberships_keep_admin on public.org_memberships;
+create trigger org_memberships_keep_admin before update or delete on public.org_memberships
+for each row execute function public.keep_org_admin();
+
+-- 12. Enable Row Level Security (RLS) on all user-facing tables
+alter table public.organizations enable row level security;
+alter table public.org_memberships enable row level security;
+alter table public.repositories enable row level security;
+alter table public.sources enable row level security;
+alter table public.tasks enable row level security;
+alter table public.task_comments enable row level security;
+alter table public.organization_invites enable row level security;
+alter table public.api_tokens enable row level security;
+alter table public.handovers enable row level security;
+alter table public.handover_claims enable row level security;
+alter table public.handover_questions enable row level security;
+alter table public.handover_versions enable row level security;
+alter table public.handover_events enable row level security;
+alter table public.github_link_states enable row level security;
+alter table public.github_installations enable row level security;
+alter table public.github_accounts enable row level security;
+alter table public.github_states enable row level security;
+alter table public.github_deliveries enable row level security;
+alter table public.decisions enable row level security;
+alter table public.blockers enable row level security;
 alter table public.agent_messages enable row level security;
 alter table public.file_summaries enable row level security;
+
+-- 13. Drop any existing policies idempotently before recreation
+drop policy if exists "Allow read access to authenticated users on sources" on public.sources;
+drop policy if exists "Allow insert access on sources" on public.sources;
+drop policy if exists "Allow read access to authenticated users" on public.decisions;
+drop policy if exists "Allow insert access to authenticated users" on public.decisions;
+drop policy if exists "Allow read access to authenticated users on blockers" on public.blockers;
+drop policy if exists "Allow insert access to authenticated users on blockers" on public.blockers;
+
+drop policy if exists organizations_member_read on public.organizations;
+drop policy if exists organizations_member_insert on public.organizations;
+drop policy if exists organizations_admin_update on public.organizations;
+drop policy if exists memberships_org_read on public.org_memberships;
+drop policy if exists memberships_admin_write on public.org_memberships;
+drop policy if exists repositories_member_access on public.repositories;
+drop policy if exists sources_member_read on public.sources;
+drop policy if exists sources_member_insert on public.sources;
+drop policy if exists sources_owner_update on public.sources;
+drop policy if exists sources_owner_delete on public.sources;
+drop policy if exists tasks_member_access on public.tasks;
+drop policy if exists task_comments_member_access on public.task_comments;
+drop policy if exists handovers_member_read on public.handovers;
+drop policy if exists handovers_admin_insert on public.handovers;
+drop policy if exists handovers_admin_update on public.handovers;
+drop policy if exists handover_claims_member_access on public.handover_claims;
+drop policy if exists handover_questions_member_access on public.handover_questions;
+drop policy if exists handover_versions_member_read on public.handover_versions;
+drop policy if exists handover_events_member_read on public.handover_events;
+drop policy if exists decisions_member_access on public.decisions;
+drop policy if exists blockers_member_access on public.blockers;
+drop policy if exists agent_messages_member_access on public.agent_messages;
+drop policy if exists file_summaries_member_access on public.file_summaries;
+
+-- 14. Create RLS Policies
+create policy organizations_member_read on public.organizations for select to authenticated using (public.is_org_member(id));
+create policy organizations_member_insert on public.organizations for insert to authenticated with check (created_by = auth.uid());
+create policy organizations_admin_update on public.organizations for update to authenticated using (public.is_org_admin(id)) with check (public.is_org_admin(id));
+
+create policy memberships_org_read on public.org_memberships for select to authenticated using (public.is_org_member(org_id));
+create policy memberships_admin_write on public.org_memberships for all to authenticated using (public.is_org_admin(org_id)) with check (public.is_org_admin(org_id));
+
+create policy repositories_member_access on public.repositories for select to authenticated using (public.is_org_member(org_id));
+
+create policy sources_member_read on public.sources for select to authenticated using (
+  public.is_org_member(org_id) and (visibility <> 'admin' or public.is_org_admin(org_id))
+  and (visibility <> 'private' or author_id = auth.uid()::text or public.is_org_admin(org_id))
+);
+create policy sources_member_insert on public.sources for insert to authenticated with check (public.is_org_member(org_id) and author_id = auth.uid()::text);
+create policy sources_owner_update on public.sources for update to authenticated using (public.is_org_member(org_id) and author_id = auth.uid()::text and external_id is null and type <> 'github_evidence') with check (public.is_org_member(org_id) and author_id = auth.uid()::text and external_id is null and type <> 'github_evidence');
+create policy sources_owner_delete on public.sources for delete to authenticated using (public.is_org_member(org_id) and author_id = auth.uid()::text and external_id is null and type <> 'github_evidence');
+
+create policy tasks_member_access on public.tasks for all to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
+create policy task_comments_member_access on public.task_comments for all to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
+
+create policy handovers_member_read on public.handovers for select to authenticated using (public.is_org_member(org_id));
+create policy handovers_admin_insert on public.handovers for insert to authenticated with check (public.is_org_admin(org_id));
+create policy handovers_admin_update on public.handovers for update to authenticated using (public.is_org_admin(org_id)) with check (public.is_org_admin(org_id));
+
+create policy handover_claims_member_access on public.handover_claims for select to authenticated using (public.is_org_member(org_id));
+create policy handover_questions_member_access on public.handover_questions for select to authenticated using (public.is_org_member(org_id));
+create policy handover_versions_member_read on public.handover_versions for select to authenticated using (public.is_org_member(org_id));
+create policy handover_events_member_read on public.handover_events for select to authenticated using (public.is_org_member(org_id));
+
+create policy decisions_member_access on public.decisions for select to authenticated using (org_id is not null and public.is_org_member(org_id));
+create policy blockers_member_access on public.blockers for select to authenticated using (org_id is not null and public.is_org_member(org_id));
 
 create policy agent_messages_member_access on public.agent_messages for all to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
 create policy file_summaries_member_access on public.file_summaries for all to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
 
+-- 15. Stored Procedure for Hybrid Semantic Recall (pgvector)
 create or replace function public.match_memory(
   query_embedding vector(768), p_org uuid, p_repo uuid, match_count int default 8
 ) returns table (kind text, id uuid, content text, path text, similarity float)
@@ -440,3 +503,26 @@ language sql stable as $$
     order by f.embedding <=> query_embedding limit match_count)
   order by 5 desc limit match_count;
 $$;
+
+-- 16. Default seed org & Realtime publication setup
+insert into public.organizations (name)
+select 'Mumbai_wale Hackathon Org'
+where not exists (select 1 from public.organizations where name = 'Mumbai_wale Hackathon Org');
+
+do $$
+begin
+  alter publication supabase_realtime add table public.sources;
+exception when others then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.decisions;
+exception when others then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.blockers;
+exception when others then null;
+end $$;

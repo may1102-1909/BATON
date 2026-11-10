@@ -1,25 +1,44 @@
--- Migration: MCP Memory v2 (Vector embeddings, Agent Transcripts, File Summaries)
--- Run this in your Supabase SQL Editor: https://supabase.com/dashboard/project/_/sql
+-- ====================================================================
+-- BATON MCP MEMORY V2 MIGRATION (Vector embeddings & transcript ingest)
+-- Run this in your Supabase SQL Editor if you already ran the base schema.
+-- ====================================================================
 
 create extension if not exists vector;
 
--- Normalised conversation turns pulled from local agent logs (redacted before upload)
+-- Ensure public.repositories exists or has all foreign key requirements
+create table if not exists public.repositories (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id) on delete cascade,
+  installation_id text not null,
+  github_repo_id bigint,
+  full_name text not null,
+  default_branch text,
+  private boolean not null default true,
+  synced_at timestamptz,
+  last_synced_at timestamptz,
+  github_repository_id bigint,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (org_id, full_name)
+);
+
+-- Agent messages table
 create table if not exists public.agent_messages (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
   repository_id uuid references public.repositories(id) on delete set null,
   author_id text not null,
-  tool text not null,                 -- claude-code | codex | cursor | antigravity
+  tool text not null,
   session_id text not null,
   message_index integer not null,
-  role text not null,                 -- user | assistant
-  content text not null,              -- already redacted
+  role text not null,
+  content text not null,
   occurred_at timestamptz,
   created_at timestamptz not null default now(),
   unique (org_id, author_id, tool, session_id, message_index)
 );
 
--- Per-file / per-module understanding, refreshed only when content hash changes
+-- File summaries table
 create table if not exists public.file_summaries (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
@@ -32,16 +51,18 @@ create table if not exists public.file_summaries (
   unique (org_id, repository_id, path)
 );
 
--- Embeddings (768-dim for Gemini text-embedding-004)
-alter table public.sources        add column if not exists embedding vector(768);
+-- Ensure all sources columns exist
+alter table public.sources add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table public.sources add column if not exists repository_id uuid references public.repositories(id) on delete set null;
+alter table public.sources add column if not exists session_id text;
+alter table public.sources add column if not exists event_id text;
+alter table public.sources add column if not exists author_id text;
+alter table public.sources add column if not exists embedding vector(768);
 alter table public.file_summaries add column if not exists embedding vector(768);
 
-create index if not exists sources_embedding_idx
-  on public.sources using hnsw (embedding vector_cosine_ops);
-create index if not exists file_summaries_embedding_idx
-  on public.file_summaries using hnsw (embedding vector_cosine_ops);
+create index if not exists sources_embedding_idx on public.sources using hnsw (embedding vector_cosine_ops);
+create index if not exists file_summaries_embedding_idx on public.file_summaries using hnsw (embedding vector_cosine_ops);
 
--- Row-level security: members only see rows of their org
 alter table public.agent_messages enable row level security;
 alter table public.file_summaries enable row level security;
 
@@ -57,7 +78,6 @@ create policy file_summaries_member_access on public.file_summaries
   using (public.is_org_member(org_id))
   with check (public.is_org_member(org_id));
 
--- Stored procedure for hybrid semantic recall
 create or replace function public.match_memory(
   query_embedding vector(768), p_org uuid, p_repo uuid, match_count int default 8
 ) returns table (kind text, id uuid, content text, path text, similarity float)
