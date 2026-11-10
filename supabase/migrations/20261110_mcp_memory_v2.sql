@@ -5,51 +5,64 @@
 
 create extension if not exists vector;
 
+-- Ensure public.organizations exists
+create table if not exists public.organizations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table public.organizations add column if not exists created_by uuid references auth.users(id) on delete set null;
+
 -- Ensure public.repositories exists or has all foreign key requirements
 create table if not exists public.repositories (
   id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references public.organizations(id) on delete cascade,
-  installation_id text not null,
+  org_id uuid references public.organizations(id) on delete cascade,
+  installation_id text,
   github_repo_id bigint,
-  full_name text not null,
+  full_name text not null default '',
   default_branch text,
   private boolean not null default true,
   synced_at timestamptz,
   last_synced_at timestamptz,
   github_repository_id bigint,
   metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  unique (org_id, full_name)
+  created_at timestamptz not null default now()
 );
+alter table public.repositories add column if not exists org_id uuid references public.organizations(id) on delete cascade;
 
--- Agent messages table
+-- Ensure agent_messages table exists
 create table if not exists public.agent_messages (
   id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references public.organizations(id) on delete cascade,
+  org_id uuid references public.organizations(id) on delete cascade,
   repository_id uuid references public.repositories(id) on delete set null,
-  author_id text not null,
-  tool text not null,
-  session_id text not null,
-  message_index integer not null,
-  role text not null,
-  content text not null,
+  author_id text not null default '',
+  tool text not null default 'agent',
+  session_id text not null default '',
+  message_index integer not null default 0,
+  role text not null default 'user',
+  content text not null default '',
   occurred_at timestamptz,
-  created_at timestamptz not null default now(),
-  unique (org_id, author_id, tool, session_id, message_index)
+  created_at timestamptz not null default now()
 );
+alter table public.agent_messages add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table public.agent_messages add column if not exists repository_id uuid references public.repositories(id) on delete set null;
 
--- File summaries table
+-- Ensure file_summaries table exists
 create table if not exists public.file_summaries (
   id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references public.organizations(id) on delete cascade,
+  org_id uuid references public.organizations(id) on delete cascade,
   repository_id uuid references public.repositories(id) on delete cascade,
-  path text not null,
-  content_hash text not null,
-  summary text not null,
+  path text not null default '',
+  content_hash text not null default '',
+  summary text not null default '',
   commit_sha text,
-  updated_at timestamptz not null default now(),
-  unique (org_id, repository_id, path)
+  embedding vector(768),
+  updated_at timestamptz not null default now()
 );
+alter table public.file_summaries add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table public.file_summaries add column if not exists repository_id uuid references public.repositories(id) on delete cascade;
+alter table public.file_summaries add column if not exists embedding vector(768);
 
 -- Ensure all sources columns exist
 alter table public.sources add column if not exists org_id uuid references public.organizations(id) on delete cascade;
@@ -58,7 +71,6 @@ alter table public.sources add column if not exists session_id text;
 alter table public.sources add column if not exists event_id text;
 alter table public.sources add column if not exists author_id text;
 alter table public.sources add column if not exists embedding vector(768);
-alter table public.file_summaries add column if not exists embedding vector(768);
 
 create index if not exists sources_embedding_idx on public.sources using hnsw (embedding vector_cosine_ops);
 create index if not exists file_summaries_embedding_idx on public.file_summaries using hnsw (embedding vector_cosine_ops);
