@@ -5,6 +5,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { TasksPage } from './pages/TasksPage'
 import { UsagePage } from './pages/UsagePage'
+import { DemoPage } from './pages/DemoPage'
 import { Auth } from './components/Auth'
 import ClassicApp from './ClassicApp'
 import HandoverReviewPage from '../app/handover/[id]/page'
@@ -45,6 +46,10 @@ function AppRoutes() {
 
   if (cleanPath === '/dashboard') {
     return <DashboardPage />
+  }
+
+  if (cleanPath === '/demo-page' || cleanPath.startsWith('/demo-page')) {
+    return <DemoPage />
   }
 
   if (cleanPath === '/usage' || cleanPath === '/usgae') {

@@ -15,9 +15,9 @@ const C = {
 }
 
 const NAV_ITEMS = [
-  { id: 'overview',     label: 'Overview' },
-  { id: 'docs',         label: 'Developer Notes' },
-  { id: 'features',     label: 'Features' },
+  { id: 'overview', label: 'Overview' },
+  { id: 'docs', label: 'Developer Notes' },
+  { id: 'features', label: 'Features' },
 ]
 
 function DeveloperNotesCard() {
@@ -39,7 +39,7 @@ function DeveloperNotesCard() {
     <div
       style={{
         maxWidth: 780,
-        margin: '50px auto 0',
+        margin: '34px auto 0',
         position: 'relative',
         background: '#111316',
         border: '1px solid #282a30',
@@ -95,10 +95,10 @@ function DeveloperNotesCard() {
         onMouseLeave={handleMouseLeave}
         style={{
           position: 'absolute',
-          top: -55,
-          left: -30,
-          width: 115,
-          height: 115,
+          top: -58,
+          left: -24,
+          width: 120,
+          height: 120,
           zIndex: 20,
           cursor: 'pointer',
           textDecoration: 'none',
@@ -136,10 +136,10 @@ function DeveloperNotesCard() {
         onMouseLeave={handleMouseLeave}
         style={{
           position: 'absolute',
-          top: -55,
-          right: -30,
-          width: 115,
-          height: 115,
+          top: -58,
+          right: -24,
+          width: 120,
+          height: 120,
           zIndex: 20,
           cursor: 'pointer',
           textDecoration: 'none',
@@ -397,7 +397,7 @@ function TOCSidebar({ activeId, onNavigate }) {
         right: 24,
         top: '50%',
         transform: 'translateY(-50%)',
-        width: 135,
+        width: 145,
         zIndex: 50,
         userSelect: 'none',
       }}
@@ -438,7 +438,8 @@ function TOCSidebar({ activeId, onNavigate }) {
               }}
               style={{
                 position: 'relative',
-                display: 'block',
+                display: 'flex',
+                alignItems: 'center',
                 width: '100%',
                 textAlign: 'left',
                 background: 'none',
@@ -615,6 +616,16 @@ export function UsagePage() {
           0% { transform: scale(0.9); opacity: 0.45; }
           70% { transform: scale(2.3); opacity: 0; }
           100% { transform: scale(2.3); opacity: 0; }
+        }
+
+        /* Subtle vertical bob for story prompt down arrow */
+        @keyframes storyArrowBob {
+          0%, 100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(3px);
+          }
         }
 
         /* Hero Entrance Keyframes (Word-by-word staggered reveal) */
@@ -824,15 +835,35 @@ export function UsagePage() {
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: 17, alignItems: 'center' }}>
-            <Button
-              primary
-              onClick={() => navigate('/dashboard')}
-              style={{ padding: '9px 15px', fontSize: 12 }}
+          {/* Technical Protocol Badge on right side */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'rgba(255, 255, 255, 0.025)',
+                border: '1px solid #272a31',
+                padding: '5px 12px',
+                borderRadius: 20,
+                fontSize: 11,
+                fontFamily: 'monospace',
+                color: '#9499a4',
+                letterSpacing: 0.3
+              }}
             >
-              View Dashboard
-              <Icon size={13} />
-            </Button>
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: C.green,
+                  boxShadow: '0 0 6px #34d399',
+                  display: 'inline-block'
+                }}
+              />
+              <span>Autonomous Handover Protocol</span>
+            </div>
           </div>
         </div>
       </header>
@@ -921,9 +952,9 @@ export function UsagePage() {
               display: 'flex',
               justifyContent: 'space-between',
               gap: 20,
-              padding: '30px 0',
-              marginTop: 80,
-              marginBottom: 130,
+              padding: '22px 0',
+              marginTop: 40,
+              marginBottom: 48,
               borderTop: `1px solid ${C.line}`,
               borderBottom: `1px solid ${C.line}`,
               fontSize: 10,
@@ -938,12 +969,194 @@ export function UsagePage() {
             </span>
           </div>
 
+          {/* Workspace Mode Selection */}
+          <section
+            style={{
+              padding: '36px 0 46px',
+              textAlign: 'center',
+              position: 'relative'
+            }}
+          >
+            <div
+              style={{
+                color: C.green,
+                fontSize: 10,
+                letterSpacing: 2,
+                fontFamily: 'monospace',
+                marginBottom: 10,
+                fontWeight: 600
+              }}
+            >
+              WORKSPACE MODE
+            </div>
+            <h2
+              style={{
+                fontSize: 34,
+                fontWeight: 500,
+                letterSpacing: -1.2,
+                margin: '0 auto 24px',
+                maxWidth: 440,
+                color: '#f4f4f5'
+              }}
+            >
+              Choose your experience.
+            </h2>
+
+            {/* Dual Mode Buttons sized proportionally to the title */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 16,
+                maxWidth: 440,
+                margin: '0 auto',
+                flexWrap: 'wrap'
+              }}
+            >
+              {/* Demo Mode Button */}
+              <button
+                onClick={() => {
+                  localStorage.setItem('baton_mode', 'demo')
+                  navigate('/demo-page')
+                }}
+                style={{
+                  flex: '1 1 185px',
+                  minWidth: 180,
+                  height: 48,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 24px',
+                  borderRadius: 8,
+                  background: '#131518',
+                  border: '1px solid #282c35',
+                  color: '#f4f4f5',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.35)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.borderColor = 'rgba(52, 211, 153, 0.55)'
+                  e.currentTarget.style.boxShadow = '0 0 28px rgba(52, 211, 153, 0.25), 0 8px 24px rgba(0, 0, 0, 0.5)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.borderColor = '#282c35'
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.35)'
+                }}
+              >
+                Demo Mode
+              </button>
+
+              {/* Production Mode Button */}
+              <button
+                onClick={() => {
+                  localStorage.setItem('baton_mode', 'production')
+                  navigate('/dashboard')
+                }}
+                style={{
+                  flex: '1 1 185px',
+                  minWidth: 180,
+                  height: 48,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  padding: '0 24px',
+                  borderRadius: 8,
+                  background: '#34d399',
+                  border: '1px solid #4ade80',
+                  color: '#052e22',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                  boxShadow: '0 4px 20px rgba(52, 211, 153, 0.28)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 0 34px rgba(52, 211, 153, 0.55), 0 8px 24px rgba(0, 0, 0, 0.5)'
+                  const arrow = e.currentTarget.querySelector('.prod-arrow')
+                  if (arrow) arrow.style.transform = 'translateX(3px)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 20px rgba(52, 211, 153, 0.28)'
+                  const arrow = e.currentTarget.querySelector('.prod-arrow')
+                  if (arrow) arrow.style.transform = 'translateX(0)'
+                }}
+              >
+                <span>Production Mode</span>
+                <span
+                  className="prod-arrow"
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    display: 'inline-block',
+                    transition: 'transform 0.2s ease',
+                    lineHeight: 1
+                  }}
+                >
+                  →
+                </span>
+              </button>
+            </div>
+
+            {/* Featherweight Story prompt - sleek, non-intrusive micro-link */}
+            <div style={{ marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={() => scrollToSection('docs')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#8b929d',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  transition: 'color 0.2s ease',
+                  fontFamily: 'inherit',
+                  outline: 'none'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.color = '#34d399'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.color = '#8b929d'
+                }}
+              >
+                <span>Why we built Baton</span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: '#34d399',
+                    display: 'inline-block',
+                    animation: 'storyArrowBob 1.8s ease-in-out infinite',
+                    lineHeight: 1
+                  }}
+                >
+                  ↓
+                </span>
+              </button>
+            </div>
+          </section>
+
           <SectionDivider />
 
           {/* Developer Notes / Docs Section */}
           <section
             ref={docsRef}
-            style={{ padding: '130px 0 170px', scrollMarginTop: 100 }}
+            style={{ padding: '48px 0 130px', scrollMarginTop: 85 }}
           >
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <div
@@ -952,7 +1165,7 @@ export function UsagePage() {
                   fontSize: 10,
                   letterSpacing: 1.7,
                   fontFamily: 'monospace',
-                  marginBottom: 10,
+                  marginBottom: 8,
                   fontWeight: 600
                 }}
               >
@@ -960,29 +1173,18 @@ export function UsagePage() {
               </div>
               <h2
                 style={{
-                  fontSize: 30,
+                  fontSize: 28,
                   fontWeight: 500,
-                  letterSpacing: -1,
-                  margin: '0 0 10px',
+                  letterSpacing: -0.8,
+                  margin: 0,
                   color: '#f4f4f5'
                 }}
               >
                 Behind the code.
               </h2>
-              <p
-                style={{
-                  fontSize: 13,
-                  color: C.muted,
-                  margin: '0 auto',
-                  maxWidth: 540,
-                  lineHeight: 1.8
-                }}
-              >
-                Engineering rationale and candid builder dialogue directly from the developers behind Baton.
-              </p>
             </div>
 
-            {/* Option C Dialogue Table Card with Stickers */}
+            {/* Dialogue Table Card with Stickers */}
             <DeveloperNotesCard />
           </section>
 
