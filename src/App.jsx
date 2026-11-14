@@ -8,7 +8,7 @@ import { UsagePage } from './pages/UsagePage'
 import { DemoPage } from './pages/DemoPage'
 import { Auth } from './components/Auth'
 import ClassicApp from './ClassicApp'
-import HandoverReviewPage from '../app/handover/[id]/page'
+import { HandoverPage } from './pages/HandoverPage'
 
 function AuthPageWrapper() {
   const { path, navigate } = useRouter()
@@ -34,14 +34,9 @@ function AppRoutes() {
   const isSignup = path.includes('mode=signup') || cleanPath === '/signup'
   const isLogin = path.includes('mode=login') || cleanPath === '/login'
 
-  if (cleanPath.startsWith('/dashboard/handover')) {
-    const id = cleanPath.replace(/^\/dashboard\/handover\/?/, '') || 'active'
-    return <HandoverReviewPage params={{ id }} />
-  }
-
-  if (cleanPath.startsWith('/handover')) {
-    const id = cleanPath.replace(/^\/handover\/?/, '') || 'active'
-    return <HandoverReviewPage params={{ id }} />
+  const packet = /^\/(?:dashboard\/)?handover\/([^/]+)\/?$/i.exec(path.split('?')[0])
+  if (packet) {
+    return <HandoverPage handoverId={decodeURIComponent(packet[1])} onBack={() => navigate('/dashboard')} />
   }
 
   if (cleanPath === '/dashboard') {

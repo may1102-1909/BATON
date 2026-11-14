@@ -30,9 +30,9 @@ const C = {
 
 // Persona and step per tour stop; the last stop returns to the admin for the MCP simulator.
 const TOUR = [
-  { persona: 'demo-admin', text: 'May (Admin): open Overview for the bus-factor and risk summary built from BATON\'s real commits and pull requests.' },
-  { persona: 'demo-leaver', text: 'Leaving engineer: open the "Handovers" tab to review or answer the exit-interview questions.' },
-  { persona: 'demo-incoming', text: 'Incoming engineer: ask a question in Handovers and read the answer with its cited evidence.' },
+  { persona: 'demo-admin', text: 'May (Admin): open Overview for bus-factor alerts and the contribution matrix built from BATON\'s real commits, then start a handover from an alert.' },
+  { persona: 'demo-leaver', text: 'Leaving engineer: open "Handovers" to answer or skip the risk-ranked exit-interview questions.' },
+  { persona: 'demo-incoming', text: 'Incoming engineer: after approval, open the packet from Handovers, ask a question and acknowledge it.' },
   { persona: 'demo-admin', text: 'May (Admin): try the Live MCP simulator; the sample key is redacted before anything is stored.' }
 ]
 

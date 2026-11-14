@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Brand } from './Brand';
 import * as api from '../lib/api.js';
 import { GithubConnect } from './GithubConnect';
+import { Citations, ClaimsView, ConflictsPanel, ContributionMatrix, RiskBadge, VersionHistory } from './HandoverParts';
+import { HandoverPage } from '../pages/HandoverPage';
+import { FUNCTION_ROLES } from '../../server/audience.js';
 import './workspace.css';
 
 const MCP_PACKAGE_SOURCE = 'github:may1102-1909/BATON';
@@ -16,6 +19,7 @@ export function Workspace({
   demoSimulatorSample,
 }) {
   const isDemo = mode === 'demo';
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [health, setHealth] = useState(null);
   const [me, setMe] = useState(null);
   const [orgs, setOrgs] = useState([]);
@@ -66,6 +70,7 @@ export function Workspace({
   const [qaQuestion, setQaQuestion] = useState('');
   const [qaResult, setQaResult] = useState(null);
   const [qaLoading, setQaLoading] = useState(false);
+  const [packetId, setPacketId] = useState(null);
 
 
   // Zero-Clone MCP Client Config & demo-only simulator state
@@ -362,6 +367,7 @@ export function Workspace({
     try {
       const res = await api.startHandover(selectedOrgId, handoverLeaverId, handoverIncomingId);
       setShowStartHandoverModal(false);
+      setActiveTab('handovers');
       refreshOrgState(selectedOrgId);
       if (res?.handover?.id) await loadHandover(res.handover.id);
     } catch (err) {
@@ -402,6 +408,36 @@ export function Workspace({
 
   const handleGenerateHandover = () => runHandoverAction(id => api.generateHandover(id));
   const handleClaimReview = (claimId, status) => runHandoverAction(id => api.updateClaim(id, claimId, { status }));
+  const handleSkipQuestion = questionId => runHandoverAction(id => api.skipQuestion(id, questionId));
+  const handleResolveConflict = (claimId, body) => runHandoverAction(id => api.resolveConflict(id, claimId, body), 'Conflict resolved.');
+
+  async function handleEditClaim(claimId, text) {
+    const id = activeHandoverDetail?.handover?.id;
+    if (!id) return false;
+    try {
+      await api.updateClaim(id, claimId, { status: 'edited', text });
+      await loadHandover(id);
+      return true;
+    } catch (err) {
+      notify(err.message);
+      return false;
+    }
+  }
+
+  async function handleSetFunctionRole(member, value) {
+    try {
+      await api.updateMember(selectedOrgId, member.id, { function_role: value || null });
+      await refreshOrgState(selectedOrgId);
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
+  function startHandoverFor(leaverUserId) {
+    setHandoverLeaverId(leaverUserId || '');
+    setHandoverIncomingId('');
+    setShowStartHandoverModal(true);
+  }
   const handleApproveHandover = () => runHandoverAction(id => api.approveHandover(id), 'Handover approved.');
   const handleAcknowledgeHandover = () => runHandoverAction(id => api.acknowledgeHandover(id), 'Handover acknowledged.');
 
@@ -460,6 +496,12 @@ export function Workspace({
   const tokens = orgState?.tokens || [];
 
   const hv = activeHandoverDetail?.handover;
+  const myUserId = me?.user?.id;
+  const isAdmin = orgs.find(o => o.id === selectedOrgId)?.role === 'admin';
+  const riskAlerts = Array.isArray(risks?.alerts) ? risks.alerts : [];
+  const hiddenRiskCount = risks?.hidden_count ?? 0;
+  const openConflicts = (activeHandoverDetail?.claims || []).filter(c => c.conflict && !c.conflict.resolved && c.status !== 'rejected').length;
+  const hasGithubData = repositories.length > 0 || sources.some(s => s.type === 'commit' || s.type === 'pull_request');
   const memberLabel = id => {
     const m = members.find(item => item.user_id === id);
     return m?.name || m?.github_login || id || 'Unknown';
@@ -587,7 +629,7 @@ export function Workspace({
       {error && <div className="ws-notice ws-notice-error" role="alert"><span>{error}</span></div>}
 
       {/* Navigation Tabs */}
-      {!noOrgs && (
+      {!noOrgs && !packetId && (
       <nav className="ws-nav-tabs">
         {[
           { id: 'overview', label: 'Overview' },
@@ -649,11 +691,49 @@ export function Workspace({
       )}
 
       {/* Main Workspace Body */}
-      {!noOrgs && (
+      {!noOrgs && !packetId && (
       <main className="ws-main">
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div>
+            {riskAlerts.length > 0 && (
+              <section className="ws-alert-list" aria-label="Bus factor alerts">
+                {(showAllAlerts ? riskAlerts : riskAlerts.slice(0, 3)).map(alert => (
+                  <div key={alert.module} className="ws-alert" role="alert">
+                    <span>
+                      <strong>Bus factor alert · {alert.module}:</strong> {alert.message}
+                    </span>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        className="ws-btn ws-btn-sm ws-btn-danger"
+                        aria-label={`Start handover for ${alert.sole_contributor?.name || 'contributor'} (${alert.module})`}
+                        onClick={() => startHandoverFor(alert.sole_contributor?.id)}
+                      >
+                        Start handover
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {riskAlerts.length > 3 && (
+                  <button type="button" className="ws-btn ws-btn-sm" aria-expanded={showAllAlerts} onClick={() => setShowAllAlerts(value => !value)}>
+                    {showAllAlerts ? "Show fewer alerts" : `Show all ${riskAlerts.length} alerts`}
+                  </button>
+                )}
+              </section>
+            )}
+
+            {!hasGithubData && (
+              <div className="ws-card ws-empty-state">
+                <div className="ws-empty-title">No GitHub data yet</div>
+                <div style={{ marginBottom: 14 }}>Connect GitHub to see who owns which modules, or explore the demo with sample data.</div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button type="button" className="ws-btn ws-btn-primary" onClick={() => setActiveTab('github')}>Connect GitHub</button>
+                  {!isDemo && <a className="ws-btn" href="/demo-page">Open the demo</a>}
+                </div>
+              </div>
+            )}
+
             {/* Quick Metrics */}
             <div className="ws-grid-4" style={{ marginBottom: 24 }}>
               <div className="ws-stat-card">
@@ -733,6 +813,24 @@ export function Workspace({
               ) : (
                 <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
                   Risk data is not available yet.
+                </div>
+              )}
+            </div>
+
+            <div className="ws-card">
+              <div className="ws-card-header">
+                <div className="ws-card-title">Who knows what: contribution matrix</div>
+              </div>
+              {!risks ? (
+                <div className="ws-muted">Loading contribution data…</div>
+              ) : risks.matrix?.modules?.length ? (
+                <ContributionMatrix matrix={risks.matrix} modules={risks.modules} />
+              ) : (
+                <div className="ws-muted">No module contribution data yet. Sync a GitHub repository to build it.</div>
+              )}
+              {hiddenRiskCount > 0 && (
+                <div className="ws-muted" role="note" style={{ marginTop: 10 }}>
+                  {hiddenRiskCount} item{hiddenRiskCount === 1 ? '' : 's'} hidden for your role are not counted here.
                 </div>
               )}
             </div>
@@ -1027,6 +1125,20 @@ export function Workspace({
                       <span className={`ws-badge ${m.role === 'admin' ? 'ws-badge-verified' : 'ws-badge-muted'}`}>
                         {m.role}
                       </span>
+                      {isAdmin ? (
+                        <select
+                          className="ws-input"
+                          style={{ width: 'auto' }}
+                          aria-label={`Function role for ${m.name || m.github_login || m.user_id}`}
+                          value={m.function_role || ''}
+                          onChange={e => handleSetFunctionRole(m, e.target.value)}
+                        >
+                          <option value="">No function role</option>
+                          {FUNCTION_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
+                        </select>
+                      ) : (
+                        <span className="ws-badge ws-badge-muted">{m.function_role || 'no function role'}</span>
+                      )}
                       <button
                         className={`ws-btn ws-btn-sm ${m.offboarding ? 'ws-btn-danger' : ''}`}
                         onClick={() => handleToggleOffboarding(m)}
@@ -1445,7 +1557,7 @@ export function Workspace({
                       className={`ws-btn ${hv?.id === h.id ? 'ws-btn-primary' : ''}`}
                       onClick={() => loadHandover(h.id)}
                     >
-                      Handover #{h.id.slice(0, 8)} ({h.status || 'draft'})
+                      Handover {memberLabel(h.leaver_id)} → {memberLabel(h.incoming_id)} ({h.status || 'draft'})
                     </button>
                   ))}
                 </div>
@@ -1455,6 +1567,13 @@ export function Workspace({
             {/* Handover Detail View */}
             {activeHandoverDetail && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <ConflictsPanel
+                  conflicts={activeHandoverDetail.conflicts}
+                  canResolve={isAdmin && hv?.status === 'draft'}
+                  onResolve={handleResolveConflict}
+                  nameOf={memberLabel}
+                />
+
                 {/* Header card with status and actions */}
                 <div className="ws-card">
                   <div className="ws-card-header">
@@ -1471,19 +1590,27 @@ export function Workspace({
                       <button className="ws-btn ws-btn-sm" onClick={handleGenerateHandover} disabled={hv?.status !== 'draft'}>
                         ⚡ Compile Claims
                       </button>
-                      <button
-                        className="ws-btn ws-btn-primary ws-btn-sm"
-                        onClick={handleApproveHandover}
-                        disabled={hv?.status !== 'draft'}
-                      >
-                        ✓ Approve Handover
-                      </button>
-                      <button
-                        className="ws-btn ws-btn-sm"
-                        onClick={handleAcknowledgeHandover}
-                        disabled={hv?.status !== 'approved' || Boolean(hv?.acknowledged_at)}
-                      >
-                        🤝 Acknowledge Transfer
+                      {isAdmin && (
+                        <button
+                          className="ws-btn ws-btn-primary ws-btn-sm"
+                          onClick={handleApproveHandover}
+                          disabled={hv?.status !== 'draft' || openConflicts > 0}
+                          title={openConflicts > 0 ? 'Resolve every conflict before approving' : undefined}
+                        >
+                          ✓ Approve Handover
+                        </button>
+                      )}
+                      {myUserId && myUserId === hv?.incoming_id && (
+                        <button
+                          className="ws-btn ws-btn-sm"
+                          onClick={handleAcknowledgeHandover}
+                          disabled={hv?.status !== 'approved' || Boolean(hv?.acknowledged_at)}
+                        >
+                          🤝 Acknowledge Transfer
+                        </button>
+                      )}
+                      <button type="button" className="ws-btn ws-btn-sm" onClick={() => setPacketId(hv.id)}>
+                        Open packet
                       </button>
                     </div>
                   </div>
@@ -1495,7 +1622,7 @@ export function Workspace({
                         Exit Interview Questions (Knowledge Gap Detection):
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {activeHandoverDetail.questions.map(q => (
+                        {activeHandoverDetail.questions.filter(q => !q.asked_by).map(q => (
                           <div
                             key={q.id}
                             style={{
@@ -1508,11 +1635,20 @@ export function Workspace({
                             <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f4f4f5' }}>
                               {q.question_text}
                             </div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+                              <RiskBadge question={q} />
+                              {q.status === 'skipped' && <span className="ws-badge ws-badge-muted">skipped</span>}
+                            </div>
+                            {Array.isArray(q.risk_reasons) && q.risk_reasons.length > 0 && (
+                              <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: '0.78rem', color: 'var(--muted)' }} aria-label="Why this question matters">
+                                {q.risk_reasons.map(reason => <li key={reason}>{reason}</li>)}
+                              </ul>
+                            )}
                             {q.answer ? (
                               <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--green)' }}>
                                 <strong>Answer:</strong> {q.answer}
                               </div>
-                            ) : (
+                            ) : q.status === 'skipped' ? null : hv?.status !== 'draft' ? null : (
                               <div style={{ marginTop: 8 }}>
                                 {answeringQuestionId === q.id ? (
                                   <form onSubmit={e => handleAnswerQuestion(e, q.id)}>
@@ -1538,15 +1674,30 @@ export function Workspace({
                                     </div>
                                   </form>
                                 ) : (
-                                  <button
-                                    className="ws-btn ws-btn-sm"
-                                    onClick={() => {
-                                      setAnsweringQuestionId(q.id);
-                                      setAnswerText('');
-                                    }}
-                                  >
-                                    Answer Question
-                                  </button>
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    {myUserId === q.assigned_to && (
+                                      <button
+                                        className="ws-btn ws-btn-sm"
+                                        aria-label={`Answer question: ${String(q.question_text).slice(0, 60)}`}
+                                        onClick={() => {
+                                          setAnsweringQuestionId(q.id);
+                                          setAnswerText('');
+                                        }}
+                                      >
+                                        Answer
+                                      </button>
+                                    )}
+                                    {(isAdmin || myUserId === q.assigned_to) && (
+                                      <button
+                                        type="button"
+                                        className="ws-btn ws-btn-sm"
+                                        aria-label={`Skip question: ${String(q.question_text).slice(0, 60)}`}
+                                        onClick={() => handleSkipQuestion(q.id)}
+                                      >
+                                        Skip
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             )}
@@ -1571,81 +1722,13 @@ export function Workspace({
                       Click "Compile Claims" above to synthesize claims from git history, PRs, and agent memory.
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {activeHandoverDetail.claims.map(claim => (
-                        <div
-                          key={claim.id}
-                          style={{
-                            background: '#131417',
-                            border: '1px solid var(--line)',
-                            borderRadius: 6,
-                            padding: 14,
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                              <span
-                                className={`ws-badge ${
-                                  claim.confidence === 'verified' ? 'ws-badge-verified' : 'ws-badge-inferred'
-                                }`}
-                              >
-                                {claim.confidence || 'inferred'}
-                              </span>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase' }}>
-                                {claim.section}
-                              </span>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <button
-                                className="ws-btn ws-btn-sm"
-                                style={{
-                                  background: claim.status === 'approved' ? 'rgba(52, 211, 153, 0.2)' : 'transparent',
-                                  color: claim.status === 'approved' ? 'var(--green)' : 'inherit',
-                                }}
-                                onClick={() => handleClaimReview(claim.id, 'approved')}
-                              >
-                                Approve
-                              </button>
-                              <button
-                                className="ws-btn ws-btn-sm"
-                                style={{
-                                  background: claim.status === 'rejected' ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
-                                  color: claim.status === 'rejected' ? '#ef4444' : 'inherit',
-                                }}
-                                onClick={() => handleClaimReview(claim.id, 'rejected')}
-                              >
-                                Reject
-                              </button>
-                            </div>
-                          </div>
-
-                          <div style={{ fontSize: '0.9rem', color: '#fff', marginBottom: 8 }}>
-                            {claim.text}
-                          </div>
-
-                          {claim.source_ids && claim.source_ids.length > 0 && (
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                              {claim.source_ids.map((c, i) => (
-                                <span
-                                  key={i}
-                                  style={{
-                                    background: '#1f2128',
-                                    border: '1px solid #32353e',
-                                    padding: '2px 8px',
-                                    borderRadius: 4,
-                                    fontSize: '0.75rem',
-                                    color: '#60a5fa',
-                                  }}
-                                >
-                                  Source: #{String(c).slice(0, 8)}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <ClaimsView
+                      claims={activeHandoverDetail.claims}
+                      sources={activeHandoverDetail.sources}
+                      editable={isAdmin && hv?.status === 'draft'}
+                      onReview={handleClaimReview}
+                      onEdit={handleEditClaim}
+                    />
                   )}
                 </div>
 
@@ -1690,37 +1773,35 @@ export function Workspace({
                         {qaResult.answer}
                       </div>
 
-                      {qaResult.citations && qaResult.citations.length > 0 && (
+                      {Array.isArray(qaResult.source_ids) && qaResult.source_ids.length > 0 ? (
                         <div>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: 6 }}>
-                            Supporting Evidence Citations:
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {qaResult.citations.map((c, i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  background: '#18191e',
-                                  padding: '6px 10px',
-                                  borderRadius: 4,
-                                  fontSize: '0.8rem',
-                                  color: '#cbd5e1',
-                                }}
-                              >
-                                {typeof c === 'string' ? c : c.quote || c.text || JSON.stringify(c)}
-                              </div>
-                            ))}
-                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: 6 }}>Supporting Evidence Citations:</div>
+                          <Citations ids={qaResult.source_ids} sources={activeHandoverDetail.sources} />
                         </div>
+                      ) : (
+                        qaResult.confidence === 'missing' && <div className="ws-muted">No approved source supports an answer.</div>
                       )}
                     </div>
                   )}
+                </div>
+
+                <div className="ws-card">
+                  <div className="ws-card-header">
+                    <div className="ws-card-title">Version History</div>
+                  </div>
+                  <VersionHistory handoverId={hv.id} notify={notify} refreshKey={hv.version} />
                 </div>
               </div>
             )}
           </div>
         )}
       </main>
+      )}
+
+      {packetId && (
+        <main className="ws-main">
+          <HandoverPage handoverId={packetId} mode={mode} embedded onBack={() => setPacketId(null)} />
+        </main>
       )}
 
       {/* MODAL 1: CREATE ORG */}
@@ -2022,6 +2103,7 @@ export function Workspace({
                 <label className="ws-form-label">Departing Engineer (Leaver)</label>
                 <select
                   className="ws-org-select"
+                  aria-label="Departing engineer"
                   value={handoverLeaverId}
                   onChange={e => setHandoverLeaverId(e.target.value)}
                   required
@@ -2038,6 +2120,7 @@ export function Workspace({
                 <label className="ws-form-label">Incoming Engineer</label>
                 <select
                   className="ws-org-select"
+                  aria-label="Incoming engineer"
                   value={handoverIncomingId}
                   onChange={e => setHandoverIncomingId(e.target.value)}
                   required
