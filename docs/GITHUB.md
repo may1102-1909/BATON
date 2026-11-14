@@ -13,11 +13,13 @@ Set these in the server runtime (never the browser):
 | `GITHUB_APP_ID` | App JWT issuer used to mint installation tokens for sync |
 | `GITHUB_APP_PRIVATE_KEY` (or `GITHUB_PRIVATE_KEY`) | App PEM private key; literal `\n` line breaks are accepted |
 | `GITHUB_WEBHOOK_SECRET` | HMAC-SHA256 secret for `x-hub-signature-256` |
-| `GITHUB_APP_SLUG` | Optional. Builds `https://github.com/apps/<slug>/installations/new` for error messages and `/api/health` (`githubInstallUrl`) |
+| `GITHUB_APP_SLUG` | Optional. Builds `https://github.com/apps/<slug>/installations/new` for error messages and `/api/health` (`githubInstallUrl`); when unset the slug is read once from GitHub's `GET /app` |
 | `TOKEN_ENCRYPTION_KEY` | Base64 of 32 bytes; encrypts stored OAuth tokens (AES-256-GCM) |
 | `GITHUB_API_URL` | Optional REST base URL (defaults to `https://api.github.com`) |
 
 Install the GitHub App with read access to repository metadata, contents, issues and pull requests, and subscribe to `push`, `pull_request` and `issues`. The OAuth step requests `read:user,repo` so the service can check which installations and repositories the linked user can reach.
+
+The app must be **public** (app settings → Advanced → Make public). GitHub serves a 404 page on `/login/oauth/authorize` and on the install page to every account except the owner of a private app, so other Baton users cannot link GitHub. Set the app's **Setup URL** to `<PUBLIC_APP_URL>/dashboard` (with **Redirect on update**) so users return to Baton after installing. Linking always shows GitHub's account picker (`prompt=select_account`), and `GET`/`DELETE /api/orgs/:id/github/account` show and remove the member's link so another account can be linked.
 
 ## Data model
 
@@ -25,7 +27,7 @@ Uses `github_states` (hashed single-use OAuth state, 10-minute expiry), `github_
 
 ## Flow
 
-1. `GET /api/orgs/:id/github/connect` (admin) returns the GitHub authorize URL. GitHub redirects the browser to `/api/github/callback`, which needs no bearer token: the one-use state identifies the user. The browser always lands on `/dashboard?github=linked` or `/dashboard?github=error&reason=<code>`.
+1. `GET /api/orgs/:id/github/connect` (admin) returns the GitHub authorize URL. GitHub redirects the browser to `/api/github/callback`, which needs no bearer token: the one-use state identifies the user. The browser lands on `/dashboard?github=linked`, on the app install page when the linked account has no installation yet, or on `/dashboard?github=error&reason=<code>`.
 2. `GET /api/orgs/:id/github/installations` lists installations the linked user can access (all pages). `GET /api/orgs/:id/github/installations/:installationId/repositories` lists the repositories one installation covers (all pages).
 3. `POST /api/orgs/:id/repositories` connects a repository. Body `{ fullName | full_name, installationId? | installation_id? }`.
    - With an installation id, the repository must be covered by that installation.
