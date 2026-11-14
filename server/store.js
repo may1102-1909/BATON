@@ -12,7 +12,14 @@ const TABLES = {
 const DB_SOURCE_TYPES = { decision: 'mcp_decision', blocker: 'mcp_blocker', pull_request: 'pr' };
 const API_SOURCE_TYPES = Object.fromEntries(Object.entries(DB_SOURCE_TYPES).map(([api, db]) => [db, api]));
 const OPTIONAL_COLUMNS = { handover_questions: ['risk_score', 'risk_reasons'], members: ['function_role'] };
-const sourceFromDb = record => record && API_SOURCE_TYPES[record.type] ? { ...record, type: API_SOURCE_TYPES[record.type] } : record;
+// Types the production sources.type constraint may not know are stored as mcp_decision; metadata.source_type keeps the real one.
+const LEGACY_ONLY_TYPES = new Set(['branch', 'task_comment', 'memory', 'interview']);
+const sourceFromDb = record => {
+  if (!record) return record;
+  const kept = record.metadata?.source_type;
+  if (LEGACY_ONLY_TYPES.has(kept)) return { ...record, type: kept };
+  return API_SOURCE_TYPES[record.type] ? { ...record, type: API_SOURCE_TYPES[record.type] } : record;
+};
 
 function clone(value) {
   return value == null ? value : structuredClone(value);
@@ -114,7 +121,11 @@ export function createSupabaseStore(client, env = process.env) {
       if (payload.type === 'decision') payload.type = 'mcp_decision';
       else if (payload.type === 'blocker') payload.type = 'mcp_blocker';
       else if (payload.type === 'pull_request') payload.type = 'pr';
-      else if (payload.type) { const type = requireSourceType(payload.type); payload.type = DB_SOURCE_TYPES[type] ?? type; }
+      else if (payload.type) {
+        const type = requireSourceType(payload.type);
+        if (LEGACY_ONLY_TYPES.has(type)) { payload.type = 'mcp_decision'; payload.metadata = { ...(payload.metadata ?? {}), source_type: type }; }
+        else payload.type = DB_SOURCE_TYPES[type] ?? type;
+      }
       return payload;
     }
     return record;
@@ -145,11 +156,13 @@ export function createSupabaseStore(client, env = process.env) {
     },
     async insert(name, record) {
       const db = await clientPromise;
-      return await writeTolerant(name, normalizeForDb(name, record), payload => run(`insert ${name}`, db.from(tableName(name)).insert(payload).select('*').single()));
+      const saved = await writeTolerant(name, normalizeForDb(name, record), payload => run(`insert ${name}`, db.from(tableName(name)).insert(payload).select('*').single()));
+      return name === 'sources' ? sourceFromDb(saved) : saved;
     },
     async update(name, id, patch) {
       const db = await clientPromise;
-      return await writeTolerant(name, normalizeForDb(name, patch), payload => run(`update ${name}`, db.from(tableName(name)).update(payload).eq('id', id).select('*').maybeSingle()));
+      const saved = await writeTolerant(name, normalizeForDb(name, patch), payload => run(`update ${name}`, db.from(tableName(name)).update(payload).eq('id', id).select('*').maybeSingle()));
+      return name === 'sources' ? sourceFromDb(saved) : saved;
     },
     async claimInvite(id, acceptedBy, acceptedAt = new Date().toISOString()) {
       const db = await clientPromise;

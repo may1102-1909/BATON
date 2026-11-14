@@ -312,4 +312,7 @@ test('the Supabase adapter keeps working against the pre-round-3 schema', async 
   await assert.rejects(() => store.insert('sources', { type: 'nonsense', content: 'x' }), /Unsupported source type/);
   const branch = await store.insert('sources', { type: 'branch', content: 'x' });
   assert.equal(branch.type, 'branch');
+  const stored = log.at(-1).payload;
+  assert.equal(stored.type, 'mcp_decision');
+  assert.equal(stored.metadata.source_type, 'branch');
 });
