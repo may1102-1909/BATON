@@ -17,7 +17,7 @@ const labelStyle = { display: 'flex', flexDirection: 'column', gap: 4, fontSize:
  * Can be used repeatedly to connect more repositories, including from other accounts or organizations.
  * `outcome` is the result of the OAuth redirect: { status: 'linked' | 'error', reason }.
  */
-export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [], onConnected }) {
+export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [], onConnected, ownOnly = false }) {
   const [phase, setPhase] = useState('loading'); // loading | unlinked | linked | error
   const [installations, setInstallations] = useState([]);
   const [installationId, setInstallationId] = useState('');
@@ -32,6 +32,15 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
   const hasRepos = connectedNames.length > 0;
   const connected = new Set(connectedNames.map(name => name.toLowerCase()));
   const available = repos.filter(repo => !connected.has(String(repo.full_name).toLowerCase()));
+  // GitHub also lists other people's personal accounts the user merely collaborates on; the dashboard offers
+  // only the user's own account and organizations. Waits for the login so nothing flickers in or out.
+  const visible = !ownOnly || !linkedLogin ? installations
+    : installations.filter(item => item.account?.type !== 'User' || String(item.account?.login).toLowerCase() === linkedLogin.toLowerCase());
+
+  useEffect(() => {
+    if (!ownOnly) return;
+    setInstallationId(cur => (visible.some(item => String(item.id) === cur) ? cur : visible.length ? String(visible[0].id) : ''));
+  }, [ownOnly, linkedLogin, installations]);
 
   async function loadInstallations() {
     if (!orgId) return;
@@ -40,8 +49,10 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
       const list = await api.getGithubInstallations(orgId);
       setInstallations(list);
       setInstallationId(cur => (list.some(item => String(item.id) === cur) ? cur : list.length ? String(list[0].id) : ''));
+      const account = ownOnly ? await api.getGithubAccount(orgId).catch(() => null) : null;
+      if (ownOnly) setLinkedLogin(account?.account?.login ?? '');
       setPhase('linked');
-      api.getGithubAccount(orgId).then(res => setLinkedLogin(res?.account?.login ?? '')).catch(() => setLinkedLogin(''));
+      if (!ownOnly) api.getGithubAccount(orgId).then(res => setLinkedLogin(res?.account?.login ?? '')).catch(() => setLinkedLogin(''));
     } catch (err) {
       if (err.status === 409) {
         setPhase('unlinked');
@@ -57,11 +68,11 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
 
   // Coming back from GitHub's install page in another tab: pick up the new installation.
   useEffect(() => {
-    if (phase !== 'linked' || installations.length) return undefined;
+    if (phase !== 'linked' || visible.length) return undefined;
     const onFocus = () => loadInstallations();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [phase, installations.length, orgId]);
+  }, [phase, visible.length, orgId]);
 
   useEffect(() => {
     if (outcome?.status === 'linked') setMessage({ tone: 'ok', text: 'GitHub account linked. Now choose a repository to connect.' });
@@ -180,7 +191,7 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
         </div>
       )}
 
-      {phase === 'linked' && installations.length === 0 && (
+      {phase === 'linked' && visible.length === 0 && (
         <div style={{ fontSize: '0.85rem', color: 'var(--muted)', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <span>Step 2 of 2: install the Baton GitHub App on your account and choose which repositories it can read.</span>
           {installUrl && <a className="ws-btn ws-btn-primary ws-btn-sm" href={installUrl} target="_blank" rel="noreferrer">Install on GitHub</a>}
@@ -188,12 +199,12 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
         </div>
       )}
 
-      {phase === 'linked' && installations.length > 0 && (
+      {phase === 'linked' && visible.length > 0 && (
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <label style={labelStyle}>
             GitHub account
             <select className="ws-input" value={installationId} onChange={e => setInstallationId(e.target.value)} disabled={busy}>
-              {installations.map(item => (
+              {visible.map(item => (
                 <option key={item.id} value={String(item.id)}>{item.account?.login ?? `Installation ${item.id}`}</option>
               ))}
             </select>
@@ -214,7 +225,7 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
 
       {(phase === 'linked' || phase === 'unlinked') && (
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--muted)' }}>
-          {installUrl && !(phase === 'linked' && installations.length === 0) && <a href={installUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>Install the app on more repositories or accounts</a>}
+          {installUrl && !(phase === 'linked' && visible.length === 0) && <a href={installUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>Install the app on more repositories or accounts</a>}
           {phase === 'linked' && (
             <button type="button" className="ws-btn ws-btn-sm" onClick={loadInstallations} disabled={busy}>Refresh list</button>
           )}

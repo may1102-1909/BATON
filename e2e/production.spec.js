@@ -127,6 +127,21 @@ test('GitHub tab shows who is signed in and can switch to a different GitHub acc
   expect(signInLink).toBeGreaterThan(unlink);
 });
 
+test('the repository picker offers only your own GitHub account and organizations', async ({ page }) => {
+  await stubApi(page, { installations: [
+    { id: 6, account: { login: 'someone-else', type: 'User' } },
+    { id: 5, account: { login: 'octo', type: 'User' } },
+    { id: 7, account: { login: 'acme-org', type: 'Organization' } },
+  ] });
+  await signIn(page);
+  await page.goto(`${BASE}/dashboard`);
+  await page.getByRole('tab', { name: /^GitHub/ }).click();
+
+  const picker = page.getByRole('combobox', { name: 'GitHub account' });
+  await expect(picker).toHaveValue('5');
+  await expect(picker.locator('option')).toHaveText(['octo', 'acme-org']);
+});
+
 test('a GitHub account without the app installed is sent to the install step', async ({ page }) => {
   await stubApi(page, { repositories: [], installations: [] });
   await signIn(page);
