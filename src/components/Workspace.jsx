@@ -4,7 +4,18 @@ import * as api from '../lib/api.js';
 import { GithubConnect } from './GithubConnect';
 import './workspace.css';
 
-export function Workspace({ onSignOut, onBack }) {
+const MCP_PACKAGE_SOURCE = 'github:may1102-1909/BATON';
+
+export function Workspace({
+  onSignOut,
+  onBack,
+  mode = 'production',
+  demoPersonas = [],
+  demoPersona,
+  onDemoPersonaChange,
+  demoSimulatorSample,
+}) {
+  const isDemo = mode === 'demo';
   const [health, setHealth] = useState(null);
   const [me, setMe] = useState(null);
   const [orgs, setOrgs] = useState([]);
@@ -13,9 +24,10 @@ export function Workspace({ onSignOut, onBack }) {
   const [risks, setRisks] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [githubOutcome, setGithubOutcome] = useState(null);
-  const [demoUser, setDemoUser] = useState(api.getDemoUser());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [inviteToken, setInviteToken] = useState('');
 
   // Modals & form states
   const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
@@ -55,33 +67,42 @@ export function Workspace({ onSignOut, onBack }) {
   const [qaResult, setQaResult] = useState(null);
   const [qaLoading, setQaLoading] = useState(false);
 
-  // Zero-Clone MCP Client Config & Live Simulator State
+
+  // Zero-Clone MCP Client Config & demo-only simulator state
   const [mcpClientTab, setMcpClientTab] = useState('cursor');
   const [copiedMcpSnippet, setCopiedMcpSnippet] = useState(false);
-  const [simDecisionText, setSimDecisionText] = useState('Migrated auth to Supabase client; test secret key sk_live_99x418Fq9K001 with 120s timeout');
-  const [simReasonText, setSimReasonText] = useState('Strict RLS requirements and pgvector support for AI semantic search');
+  const [simDecisionText, setSimDecisionText] = useState(demoSimulatorSample?.decision ?? '');
+  const [simReasonText, setSimReasonText] = useState(demoSimulatorSample?.reason ?? '');
   const [simRunning, setSimRunning] = useState(false);
   const [simResult, setSimResult] = useState(null);
 
+  function notify(message, kind = 'error') {
+    setNotice({ message: String(message), kind });
+  }
+
+  useEffect(() => {
+    if (notice?.kind !== 'success') return undefined;
+    const timer = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
   const handleSimulateMcp = async () => {
-    if (!selectedOrgId || simRunning) return;
+    if (!selectedOrgId || simRunning || !simDecisionText.trim()) return;
     setSimRunning(true);
     setSimResult(null);
     try {
-      const secretPattern = /(sk_live_[a-zA-Z0-9]+|eyJ[a-zA-Z0-9_\-.]+|[a-zA-Z0-9]{20,})/i;
-      const detectedSecret = simDecisionText.match(secretPattern)?.[0] || 'sk_live_99x418Fq9K001';
+      const secretPattern = /(eyJ[a-zA-Z0-9_\-.]+|[a-zA-Z0-9_]{20,})/;
+      const detectedSecret = simDecisionText.match(secretPattern)?.[0] || null;
       const cleanDecision = simDecisionText.replace(secretPattern, '[REDACTED: API_KEY]');
 
       const res = await api.createMemory(selectedOrgId, {
         type: 'decision',
-        content: `Decision: ${cleanDecision}\nReason: ${simReasonText}\nAlternatives: Firebase Firestore, Auth0\nFiles Affected: src/lib/supabase.js, .env`,
+        content: `Decision: ${cleanDecision}\nReason: ${simReasonText}`,
         metadata: {
           decision: cleanDecision,
           reason: simReasonText,
-          alternatives: ['Firebase Firestore', 'Auth0'],
-          files_affected: ['src/lib/supabase.js', '.env'],
           source: 'mcp-live-simulator',
-          redaction_applied: true,
+          redaction_applied: Boolean(detectedSecret),
           original_quarantined: Boolean(detectedSecret)
         },
         repository_id: repositories[0]?.id || null,
@@ -102,37 +123,30 @@ export function Workspace({ onSignOut, onBack }) {
     }
   };
 
-  // Initial boot
+  // Initial boot (re-runs when the demo persona changes)
   useEffect(() => {
     boot();
-  }, [demoUser]);
+  }, [demoPersona]);
 
   async function boot() {
     setLoading(true);
     setError(null);
     try {
+      if (isDemo && demoPersona) api.setDemoUser(demoPersona);
       const h = await api.fetchHealth().catch(() => null);
       setHealth(h);
 
       const meData = await api.fetchMe().catch(() => null);
       if (meData) {
         setMe(meData);
-        let orgList = meData.organizations || [];
-        if (orgList.length === 0 && !h?.demo) {
-          try {
-            const newOrgRes = await api.createOrg('Mumbai_wale Hackathon Org');
-            if (newOrgRes?.organization) {
-              orgList = [{ id: newOrgRes.organization.id, name: newOrgRes.organization.name, role: 'admin' }];
-            }
-          } catch (e) {
-            console.warn('Auto-create org fallback:', e);
-          }
-        }
+        const orgList = meData.organizations || [];
         setOrgs(orgList);
         if (orgList.length > 0) {
-          setSelectedOrgId(orgList[0].id);
-        } else if (orgList.length === 0 && h?.demo) {
-          setSelectedOrgId('demo-org');
+          setSelectedOrgId(cur => (orgList.some(o => o.id === cur) ? cur : orgList[0].id));
+        } else {
+          setSelectedOrgId(null);
+          setOrgState(null);
+          setRisks(null);
         }
       }
     } catch (err) {
@@ -156,7 +170,7 @@ export function Workspace({ onSignOut, onBack }) {
   useEffect(() => {
     if (!selectedOrgId) return;
     refreshOrgState(selectedOrgId);
-  }, [selectedOrgId]);
+  }, [selectedOrgId, demoPersona]);
 
   async function refreshOrgState(orgId) {
     try {
@@ -164,19 +178,9 @@ export function Workspace({ onSignOut, onBack }) {
       setOrgState(state);
       const r = await api.fetchRisks(orgId).catch(() => null);
       setRisks(r);
-
-      // If viewing active handover, refresh it too
-      if (activeHandoverDetail?.id) {
-        loadHandover(activeHandoverDetail.id);
-      }
     } catch (err) {
       console.error('Failed to load org state:', err);
     }
-  }
-
-  function handleDemoUserSwitch(user) {
-    api.setDemoUser(user);
-    setDemoUser(user);
   }
 
   async function handleCreateOrg(e) {
@@ -187,9 +191,25 @@ export function Workspace({ onSignOut, onBack }) {
       setNewOrgName('');
       setShowCreateOrgModal(false);
       await boot();
-      if (res?.id) setSelectedOrgId(res.id);
+      if (res?.organization?.id) setSelectedOrgId(res.organization.id);
+      notify('Team created.', 'success');
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
+    }
+  }
+
+  async function handleAcceptInvite(e) {
+    e.preventDefault();
+    const token = inviteToken.trim();
+    if (!token) return;
+    try {
+      const res = await api.acceptInvite(token);
+      setInviteToken('');
+      await boot();
+      if (res?.organization_id) setSelectedOrgId(res.organization_id);
+      notify('Invite accepted.', 'success');
+    } catch (err) {
+      notify(err.message);
     }
   }
 
@@ -200,7 +220,7 @@ export function Workspace({ onSignOut, onBack }) {
       const res = await api.createInvite(selectedOrgId, inviteRole, inviteEmail.trim() || null);
       setGeneratedInviteToken(res.token);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -208,11 +228,11 @@ export function Workspace({ onSignOut, onBack }) {
     e.preventDefault();
     const orgId = selectedOrgId || orgs[0]?.id;
     if (!orgId) {
-      alert('Please create or select an organization before generating an MCP token.');
+      notify('Please create or select an organization before generating an MCP token.');
       return;
     }
     if (!newTokenName.trim()) {
-      alert('Please enter a name for the MCP token.');
+      notify('Please enter a name for the MCP token.');
       return;
     }
     try {
@@ -221,7 +241,7 @@ export function Workspace({ onSignOut, onBack }) {
       setNewTokenName('');
       refreshOrgState(orgId);
     } catch (err) {
-      alert(`Token generation failed: ${err.message}`);
+      notify(`Token generation failed: ${err.message}`);
     }
   }
 
@@ -231,7 +251,7 @@ export function Workspace({ onSignOut, onBack }) {
       await api.deleteToken(selectedOrgId, tokenId);
       refreshOrgState(selectedOrgId);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -243,7 +263,7 @@ export function Workspace({ onSignOut, onBack }) {
       });
       refreshOrgState(selectedOrgId);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -270,7 +290,7 @@ export function Workspace({ onSignOut, onBack }) {
       setMemoryMetadata('');
       refreshOrgState(selectedOrgId);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -280,7 +300,7 @@ export function Workspace({ onSignOut, onBack }) {
       await api.deleteMemory(selectedOrgId, memoryId);
       refreshOrgState(selectedOrgId);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -299,7 +319,7 @@ export function Workspace({ onSignOut, onBack }) {
       setTaskDesc('');
       refreshOrgState(selectedOrgId);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -308,7 +328,7 @@ export function Workspace({ onSignOut, onBack }) {
       await api.updateTask(taskId, { status });
       refreshOrgState(selectedOrgId);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -320,7 +340,7 @@ export function Workspace({ onSignOut, onBack }) {
       setNewCommentText('');
       refreshOrgState(selectedOrgId);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -328,10 +348,10 @@ export function Workspace({ onSignOut, onBack }) {
     if (!selectedOrgId) return;
     try {
       await api.syncRepo(selectedOrgId, repoId);
-      alert('Repository synced successfully.');
+      notify('Repository synced successfully.', 'success');
       refreshOrgState(selectedOrgId);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -343,9 +363,9 @@ export function Workspace({ onSignOut, onBack }) {
       const res = await api.startHandover(selectedOrgId, handoverLeaverId, handoverIncomingId);
       setShowStartHandoverModal(false);
       refreshOrgState(selectedOrgId);
-      if (res?.id) loadHandover(res.id);
+      if (res?.handover?.id) await loadHandover(res.handover.id);
     } catch (err) {
-      alert(err.message);
+      notify(err.message);
     }
   }
 
@@ -354,73 +374,44 @@ export function Workspace({ onSignOut, onBack }) {
       const detail = await api.getHandover(id);
       setActiveHandoverDetail(detail);
     } catch (err) {
-      console.error('Failed to load handover:', err);
+      notify(`Failed to load handover: ${err.message}`);
+    }
+  }
+
+  // Run a handover action, then reload the full detail the server returns from GET.
+  async function runHandoverAction(action, successMessage) {
+    const id = activeHandoverDetail?.handover?.id;
+    if (!id) return;
+    try {
+      await action(id);
+      await loadHandover(id);
+      refreshOrgState(selectedOrgId);
+      if (successMessage) notify(successMessage, 'success');
+    } catch (err) {
+      notify(err.message);
     }
   }
 
   async function handleAnswerQuestion(e, questionId) {
     e.preventDefault();
-    if (!activeHandoverDetail || !answerText.trim()) return;
-    try {
-      const updated = await api.answerQuestion(activeHandoverDetail.id, questionId, answerText.trim());
-      setActiveHandoverDetail(updated);
-      setAnsweringQuestionId(null);
-      setAnswerText('');
-    } catch (err) {
-      alert(err.message);
-    }
+    if (!answerText.trim()) return;
+    await runHandoverAction(id => api.answerQuestion(id, questionId, answerText.trim()));
+    setAnsweringQuestionId(null);
+    setAnswerText('');
   }
 
-  async function handleGenerateHandover() {
-    if (!activeHandoverDetail) return;
-    try {
-      const updated = await api.generateHandover(activeHandoverDetail.id);
-      setActiveHandoverDetail(updated);
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
-  async function handleClaimReview(claimId, status) {
-    if (!activeHandoverDetail) return;
-    try {
-      const updated = await api.updateClaim(activeHandoverDetail.id, claimId, { status });
-      setActiveHandoverDetail(updated);
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
-  async function handleApproveHandover() {
-    if (!activeHandoverDetail) return;
-    try {
-      const updated = await api.approveHandover(activeHandoverDetail.id);
-      setActiveHandoverDetail(updated);
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
-  async function handleAcknowledgeHandover() {
-    if (!activeHandoverDetail) return;
-    try {
-      const updated = await api.acknowledgeHandover(activeHandoverDetail.id);
-      setActiveHandoverDetail(updated);
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      alert(err.message);
-    }
-  }
+  const handleGenerateHandover = () => runHandoverAction(id => api.generateHandover(id));
+  const handleClaimReview = (claimId, status) => runHandoverAction(id => api.updateClaim(id, claimId, { status }));
+  const handleApproveHandover = () => runHandoverAction(id => api.approveHandover(id), 'Handover approved.');
+  const handleAcknowledgeHandover = () => runHandoverAction(id => api.acknowledgeHandover(id), 'Handover acknowledged.');
 
   async function handleAskQuestion(e) {
     e.preventDefault();
-    if (!activeHandoverDetail || !qaQuestion.trim()) return;
+    if (!activeHandoverDetail?.handover?.id || !qaQuestion.trim()) return;
     setQaLoading(true);
     setQaResult(null);
     try {
-      const res = await api.askHandover(activeHandoverDetail.id, qaQuestion.trim());
+      const res = await api.askHandover(activeHandoverDetail.handover.id, qaQuestion.trim());
       setQaResult(res);
     } catch (err) {
       setQaResult({ answer: `Error: ${err.message}`, citations: [] });
@@ -468,6 +459,47 @@ export function Workspace({ onSignOut, onBack }) {
   const handovers = orgState?.handovers || [];
   const tokens = orgState?.tokens || [];
 
+  const hv = activeHandoverDetail?.handover;
+  const memberLabel = id => {
+    const m = members.find(item => item.user_id === id);
+    return m?.name || m?.github_login || id || 'Unknown';
+  };
+  const activePersona = demoPersonas.find(p => p.id === demoPersona);
+  const userLabel = isDemo
+    ? `${activePersona ? `${activePersona.name} (${activePersona.role})` : 'Demo visitor'} · demo`
+    : me?.user?.email || me?.user?.name || 'Signed in';
+  const riskItems = Array.isArray(risks?.risks) ? risks.risks : [];
+  const riskCounts = risks?.counts || {};
+  const busFactor = Array.isArray(risks?.bus_factor) ? risks.bus_factor : risks?.bus_factor ? [risks.bus_factor] : [];
+
+  function buildMcpSnippet(tab) {
+    const repoId = repositories[0]?.id;
+    if (!selectedOrgId || !repoId) return null;
+    const apiUrl = window.location.origin.includes('localhost') ? 'https://baton-nu.vercel.app' : window.location.origin;
+    const apiKey = revealedToken || (tokens[0]?.name ? `<TOKEN_FOR_${tokens[0].name.toUpperCase()}>` : '<GENERATE_A_TOKEN_ABOVE>');
+    const env = { BATON_API_URL: apiUrl, BATON_API_KEY: apiKey, BATON_ORG_ID: selectedOrgId, BATON_REPOSITORY_ID: repoId };
+    if (tab === 'claude_cli') {
+      const flags = Object.entries(env).map(([k, v]) => `-e ${k}="${v}"`).join(' ');
+      return `claude mcp add baton -s user ${flags} -- npx -y ${MCP_PACKAGE_SOURCE} baton-mcp`;
+    }
+    if (tab === 'local_node') {
+      return JSON.stringify({ mcpServers: { baton: { command: 'node', args: ['mcp-server/dist/index.js'], env } } }, null, 2);
+    }
+    return JSON.stringify({ mcpServers: { baton: { command: 'npx', args: ['-y', MCP_PACKAGE_SOURCE, 'baton-mcp'], env } } }, null, 2);
+  }
+
+  const noticeBar = notice && (
+    <div
+      className={`ws-notice ws-notice-${notice.kind}`}
+      role={notice.kind === 'error' ? 'alert' : 'status'}
+    >
+      <span>{notice.message}</span>
+      <button type="button" className="ws-notice-close" aria-label="Dismiss message" onClick={() => setNotice(null)}>✕</button>
+    </div>
+  );
+
+  const noOrgs = orgs.length === 0 && !selectedOrgId;
+
   const decisionsCount = sources.filter(s => s.type === 'decision').length;
   const blockersCount = sources.filter(s => s.type === 'blocker').length;
   const commitsCount = sources.filter(s => s.type === 'commit' || s.type === 'pull_request').length;
@@ -513,26 +545,28 @@ export function Workspace({ onSignOut, onBack }) {
         </div>
 
         <div className="ws-header-right">
-          {health?.demo && (
+          {isDemo && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="ws-demo-badge">Demo Mode</span>
-              <select
-                className="ws-org-select"
-                style={{ fontSize: '0.75rem', padding: '3px 8px' }}
-                value={demoUser}
-                onChange={e => handleDemoUserSwitch(e.target.value)}
-                title="Switch synthetic demo actor"
-              >
-                <option value="demo-admin">Actor: Alex (Admin)</option>
-                <option value="demo-member">Actor: Sam (Leaver)</option>
-                <option value="demo-incoming">Actor: Riley (Incoming)</option>
-              </select>
+              {demoPersonas.length > 0 && (
+                <select
+                  className="ws-org-select"
+                  style={{ fontSize: '0.75rem', padding: '3px 8px' }}
+                  value={demoPersona || ''}
+                  onChange={e => onDemoPersonaChange?.(e.target.value)}
+                  title="Switch demo persona"
+                >
+                  {demoPersonas.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.role})</option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 
           <div className="ws-user-badge">
             <span style={{ color: 'var(--green)', fontWeight: 600 }}>●</span>
-            <span>{me?.user?.email || me?.user?.name || demoUser}</span>
+            <span>{userLabel}</span>
           </div>
 
           {onSignOut && (
@@ -548,7 +582,12 @@ export function Workspace({ onSignOut, onBack }) {
         </div>
       </header>
 
+      {noticeBar}
+
+      {error && <div className="ws-notice ws-notice-error" role="alert"><span>{error}</span></div>}
+
       {/* Navigation Tabs */}
+      {!noOrgs && (
       <nav className="ws-nav-tabs">
         {[
           { id: 'overview', label: 'Overview' },
@@ -568,8 +607,49 @@ export function Workspace({ onSignOut, onBack }) {
           </button>
         ))}
       </nav>
+      )}
+
+      {noOrgs && (
+        <main className="ws-main">
+          <div className="ws-card ws-empty-state">
+            <div className="ws-empty-icon">👥</div>
+            <div className="ws-empty-title">You are not part of a team yet</div>
+            <div style={{ marginBottom: 20 }}>Create a team or join one with an invite token.</div>
+            <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <form onSubmit={handleCreateOrg} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 260 }}>
+                <label className="ws-form-label" htmlFor="ws-create-team">Create a team</label>
+                <input
+                  id="ws-create-team"
+                  type="text"
+                  className="ws-input"
+                  placeholder="Team name"
+                  value={newOrgName}
+                  onChange={e => setNewOrgName(e.target.value)}
+                  maxLength={120}
+                  required
+                />
+                <button type="submit" className="ws-btn ws-btn-primary">Create a team</button>
+              </form>
+              <form onSubmit={handleAcceptInvite} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 260 }}>
+                <label className="ws-form-label" htmlFor="ws-join-invite">Join with invite</label>
+                <input
+                  id="ws-join-invite"
+                  type="text"
+                  className="ws-input"
+                  placeholder="Invite token"
+                  value={inviteToken}
+                  onChange={e => setInviteToken(e.target.value)}
+                  required
+                />
+                <button type="submit" className="ws-btn">Join with invite</button>
+              </form>
+            </div>
+          </div>
+        </main>
+      )}
 
       {/* Main Workspace Body */}
+      {!noOrgs && (
       <main className="ws-main">
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
@@ -607,51 +687,52 @@ export function Workspace({ onSignOut, onBack }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <span className="ws-badge ws-badge-danger">
-                      High: {risks.high?.length || 0}
+                      Active blockers: {riskCounts.active_blockers ?? 0}
                     </span>
                     <span className="ws-badge ws-badge-inferred">
-                      Medium: {risks.medium?.length || 0}
+                      Open PRs: {riskCounts.open_pull_requests ?? 0}
                     </span>
-                    <span className="ws-badge ws-badge-verified">
-                      Low: {risks.low?.length || 0}
+                    <span className="ws-badge ws-badge-inferred">
+                      Branches ahead: {riskCounts.branches_ahead ?? 0}
+                    </span>
+                    <span className="ws-badge ws-badge-muted">
+                      Source records: {riskCounts.source_records ?? 0}
                     </span>
                   </div>
 
-                  {risks.high?.length > 0 && (
+                  {riskItems.length > 0 ? (
                     <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: 14 }}>
                       <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: 8, fontSize: '0.9rem' }}>
-                        Critical Handover Gaps & Unmerged Changes:
+                        Source-backed risks:
                       </div>
                       <ul style={{ margin: 0, paddingLeft: 20, fontSize: '0.85rem', color: '#fca5a5', lineHeight: 1.6 }}>
-                        {risks.high.map((r, i) => (
-                          <li key={i}>{typeof r === 'string' ? r : r.description || r.title || JSON.stringify(r)}</li>
+                        {riskItems.map((r, i) => (
+                          <li key={r.source_ids?.[0] || i}>{r.summary || r.kind}</li>
                         ))}
                       </ul>
                     </div>
-                  )}
-
-                  {risks.medium?.length > 0 && (
-                    <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: 14 }}>
-                      <div style={{ fontWeight: 600, color: '#f59e0b', marginBottom: 8, fontSize: '0.9rem' }}>
-                        Operational Inconsistencies & Caveats:
-                      </div>
-                      <ul style={{ margin: 0, paddingLeft: 20, fontSize: '0.85rem', color: '#fcd34d', lineHeight: 1.6 }}>
-                        {risks.medium.map((r, i) => (
-                          <li key={i}>{typeof r === 'string' ? r : r.description || r.title || JSON.stringify(r)}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {(!risks.high?.length && !risks.medium?.length) && (
+                  ) : (
                     <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
-                      All tracked components verified; no high or medium risks identified.
+                      No blockers, open pull requests, or branches ahead in the synced evidence.
                     </div>
                   )}
+
+                  {busFactor.map((b, i) => (
+                    <div key={b.repository_id || i} style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
+                      {b.available === false ? (
+                        <span>Bus factor: {b.reason}</span>
+                      ) : (
+                        <span>
+                          Bus factor ({repositories.find(r => r.id === b.repository_id)?.full_name || 'repository'}):{' '}
+                          <strong>{b.risk}</strong> risk. {b.evidence}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
-                  Risk analysis is currently scanning connected repos and developer memory...
+                  Risk data is not available yet.
                 </div>
               )}
             </div>
@@ -671,7 +752,7 @@ export function Workspace({ onSignOut, onBack }) {
                 <div style={{ background: '#131417', padding: 14, borderRadius: 6, border: '1px solid var(--line)' }}>
                   <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 4 }}>GitHub App Integration</div>
                   <div style={{ fontWeight: 600, color: health?.configured?.github ? 'var(--green)' : '#f59e0b' }}>
-                    {health?.configured?.github ? 'Configured & Active' : 'OAuth / Demo Sync Ready'}
+                    {health?.configured?.github ? 'Configured & Active' : 'Not configured'}
                   </div>
                 </div>
                 <div style={{ background: '#131417', padding: 14, borderRadius: 6, border: '1px solid var(--line)' }}>
@@ -934,10 +1015,10 @@ export function Workspace({ onSignOut, onBack }) {
                   >
                     <div>
                       <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.95rem' }}>
-                        {m.name || m.user_id}
+                        {m.name || m.github_login || m.user_id}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 2 }}>
-                        {m.email || 'No email provided'} · GitHub:{' '}
+                        {!isDemo && `${m.email || 'No email provided'} · `}GitHub:{' '}
                         <strong>{m.github_login ? `@${m.github_login}` : 'Not linked'}</strong>
                       </div>
                     </div>
@@ -1029,46 +1110,10 @@ export function Workspace({ onSignOut, onBack }) {
 
                   <button
                     className="ws-btn ws-btn-primary ws-btn-sm"
+                    disabled={!buildMcpSnippet(mcpClientTab)}
                     onClick={() => {
-                      const targetOrigin = window.location.origin.includes('localhost') ? 'https://baton-nu.vercel.app' : window.location.origin;
-                      const tokenVal = revealedToken || (tokens[0]?.name ? `<TOKEN_FOR_${tokens[0].name.toUpperCase()}>` : 'baton_PnBRTnuPeFgYFyhgdMZqD0cyQnj-UC8a');
-                      const orgIdVal = selectedOrgId || '1534fdd2-a001-4ef6-9284-42c4f21dda8a';
-                      const repoIdVal = repositories[0]?.id || '2323e05b-b671-46f3-b9df-f26225d7ed05';
-
-                      let textToCopy = '';
-                      if (mcpClientTab === 'claude_cli') {
-                        textToCopy = `claude mcp add baton -s user -e BATON_API_URL="${targetOrigin}" -e BATON_API_KEY="${tokenVal}" -e BATON_ORG_ID="${orgIdVal}" -e BATON_REPOSITORY_ID="${repoIdVal}" -- npx -y github:may1102-1909/BATON baton-mcp`;
-                      } else if (mcpClientTab === 'local_node') {
-                        textToCopy = JSON.stringify({
-                          mcpServers: {
-                            baton: {
-                              command: 'node',
-                              args: ['mcp-server/dist/index.js'],
-                              env: {
-                                BATON_API_URL: targetOrigin,
-                                BATON_API_KEY: tokenVal,
-                                BATON_ORG_ID: orgIdVal,
-                                BATON_REPOSITORY_ID: repoIdVal
-                              }
-                            }
-                          }
-                        }, null, 2);
-                      } else {
-                        textToCopy = JSON.stringify({
-                          mcpServers: {
-                            baton: {
-                              command: 'npx',
-                              args: ['-y', 'github:may1102-1909/BATON', 'baton-mcp'],
-                              env: {
-                                BATON_API_URL: targetOrigin,
-                                BATON_API_KEY: tokenVal,
-                                BATON_ORG_ID: orgIdVal,
-                                BATON_REPOSITORY_ID: repoIdVal
-                              }
-                            }
-                          }
-                        }, null, 2);
-                      }
+                      const textToCopy = buildMcpSnippet(mcpClientTab);
+                      if (!textToCopy) return;
                       navigator.clipboard?.writeText(textToCopy);
                       setCopiedMcpSnippet(true);
                       setTimeout(() => setCopiedMcpSnippet(false), 2000);
@@ -1111,46 +1156,7 @@ export function Workspace({ onSignOut, onBack }) {
                 {/* Configuration Code Box */}
                 <div className="ws-code-snippet" style={{ position: 'relative' }}>
                   <pre style={{ margin: 0, overflowX: 'auto', fontSize: '0.82rem', lineHeight: 1.6 }}>
-                    {(() => {
-                      const targetOrigin = window.location.origin.includes('localhost') ? 'https://baton-nu.vercel.app' : window.location.origin;
-                      const tokenVal = revealedToken || (tokens[0]?.name ? `<TOKEN_FOR_${tokens[0].name.toUpperCase()}>` : 'baton_PnBRTnuPeFgYFyhgdMZqD0cyQnj-UC8a');
-                      const orgIdVal = selectedOrgId || '1534fdd2-a001-4ef6-9284-42c4f21dda8a';
-                      const repoIdVal = repositories[0]?.id || '2323e05b-b671-46f3-b9df-f26225d7ed05';
-
-                      if (mcpClientTab === 'claude_cli') {
-                        return `claude mcp add baton -s user -e BATON_API_URL="${targetOrigin}" -e BATON_API_KEY="${tokenVal}" -e BATON_ORG_ID="${orgIdVal}" -e BATON_REPOSITORY_ID="${repoIdVal}" -- npx -y github:may1102-1909/BATON baton-mcp`;
-                      }
-                      if (mcpClientTab === 'local_node') {
-                        return JSON.stringify({
-                          mcpServers: {
-                            baton: {
-                              command: 'node',
-                              args: ['mcp-server/dist/index.js'],
-                              env: {
-                                BATON_API_URL: targetOrigin,
-                                BATON_API_KEY: tokenVal,
-                                BATON_ORG_ID: orgIdVal,
-                                BATON_REPOSITORY_ID: repoIdVal
-                              }
-                            }
-                          }
-                        }, null, 2);
-                      }
-                      return JSON.stringify({
-                        mcpServers: {
-                          baton: {
-                            command: 'npx',
-                            args: ['-y', 'github:may1102-1909/BATON', 'baton-mcp'],
-                            env: {
-                              BATON_API_URL: targetOrigin,
-                              BATON_API_KEY: tokenVal,
-                              BATON_ORG_ID: orgIdVal,
-                              BATON_REPOSITORY_ID: repoIdVal
-                            }
-                          }
-                        }
-                      }, null, 2);
-                    })()}
+                    {buildMcpSnippet(mcpClientTab) || 'Connect a repository first (GitHub tab) to generate an MCP configuration.'}
                   </pre>
                 </div>
 
@@ -1163,7 +1169,7 @@ export function Workspace({ onSignOut, onBack }) {
                   {mcpClientTab === 'local_node' && '💡 For developers working directly inside the cloned BATON repository.'}
                 </div>
 
-                {/* LIVE MCP SIMULATOR WIDGET (CRITICAL FOR JUDGES) */}
+                {isDemo ? (
                 <div style={{
                   marginTop: 24,
                   background: '#0e1115',
@@ -1181,14 +1187,14 @@ export function Workspace({ onSignOut, onBack }) {
                       </div>
                     </div>
                     <span style={{ fontSize: '0.7rem', color: '#6ee7b7', background: 'rgba(52, 211, 153, 0.1)', border: '1px solid #284435', padding: '2px 8px', borderRadius: 4, fontFamily: 'monospace' }}>
-                      Interactive Judge Sandbox
+                      Demo sandbox
                     </span>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div>
                       <div style={{ fontSize: '0.75rem', color: '#a0a6b4', marginBottom: 4, fontFamily: 'monospace' }}>
-                        Architectural Decision (contains intentional test API key):
+                        Architectural Decision (sample text):
                       </div>
                       <input
                         type="text"
@@ -1257,6 +1263,27 @@ export function Workspace({ onSignOut, onBack }) {
                     )}
                   </div>
                 </div>
+                ) : (
+                <div style={{ marginTop: 24, background: '#0e1115', border: '1px solid #252b36', borderRadius: 8, padding: 16 }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#fff', marginBottom: 10 }}>
+                    Recent MCP captures
+                  </div>
+                  {sources.filter(s => s.type === 'decision' || s.type === 'blocker').length === 0 ? (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                      No captures yet. Decisions and blockers logged through the Baton MCP server will appear here.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {sources.filter(s => s.type === 'decision' || s.type === 'blocker').slice(0, 5).map(s => (
+                        <div key={s.id} style={{ fontSize: '0.8rem', color: '#d1d5db' }}>
+                          <span className={`ws-badge ${s.type === 'blocker' ? 'ws-badge-danger' : 'ws-badge-verified'}`}>{s.type}</span>{' '}
+                          {s.metadata?.decision || s.metadata?.problem || s.content}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                )}
               </div>
             </div>
           </div>
@@ -1321,7 +1348,7 @@ export function Workspace({ onSignOut, onBack }) {
                     </div>
 
                     <div style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'flex', gap: 12 }}>
-                      <span>Assignee: {task.assignee_id || 'Unassigned'}</span>
+                      <span>Assignee: {task.assignee_id ? memberLabel(task.assignee_id) : 'Unassigned'}</span>
                       {task.due_at && <span>Due: {new Date(task.due_at).toLocaleDateString()}</span>}
                     </div>
 
@@ -1352,7 +1379,7 @@ export function Workspace({ onSignOut, onBack }) {
                                   }}
                                 >
                                   <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.75rem' }}>
-                                    {c.author_id} · {new Date(c.created_at).toLocaleTimeString()}
+                                    {memberLabel(c.author_id)} · {new Date(c.created_at).toLocaleTimeString()}
                                   </div>
                                   <div style={{ color: '#d1d5db', marginTop: 2 }}>{c.content}</div>
                                 </div>
@@ -1415,7 +1442,7 @@ export function Workspace({ onSignOut, onBack }) {
                   {handovers.map(h => (
                     <button
                       key={h.id}
-                      className={`ws-btn ${activeHandoverDetail?.id === h.id ? 'ws-btn-primary' : ''}`}
+                      className={`ws-btn ${hv?.id === h.id ? 'ws-btn-primary' : ''}`}
                       onClick={() => loadHandover(h.id)}
                     >
                       Handover #{h.id.slice(0, 8)} ({h.status || 'draft'})
@@ -1433,29 +1460,28 @@ export function Workspace({ onSignOut, onBack }) {
                   <div className="ws-card-header">
                     <div>
                       <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff' }}>
-                        Handover: {activeHandoverDetail.leaver_name || activeHandoverDetail.leaver_id} →{' '}
-                        {activeHandoverDetail.incoming_name || activeHandoverDetail.incoming_id}
+                        Handover: {memberLabel(hv?.leaver_id)} → {memberLabel(hv?.incoming_id)}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 4 }}>
-                        Status: <span className="ws-badge ws-badge-verified">{activeHandoverDetail.status}</span>
+                        Status: <span className="ws-badge ws-badge-verified">{hv?.acknowledged_at ? 'acknowledged' : hv?.status || 'draft'}</span>
                       </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="ws-btn ws-btn-sm" onClick={handleGenerateHandover}>
+                      <button className="ws-btn ws-btn-sm" onClick={handleGenerateHandover} disabled={hv?.status !== 'draft'}>
                         ⚡ Compile Claims
                       </button>
                       <button
                         className="ws-btn ws-btn-primary ws-btn-sm"
                         onClick={handleApproveHandover}
-                        disabled={activeHandoverDetail.status === 'approved'}
+                        disabled={hv?.status !== 'draft'}
                       >
                         ✓ Approve Handover
                       </button>
                       <button
                         className="ws-btn ws-btn-sm"
                         onClick={handleAcknowledgeHandover}
-                        disabled={activeHandoverDetail.status === 'acknowledged'}
+                        disabled={hv?.status !== 'approved' || Boolean(hv?.acknowledged_at)}
                       >
                         🤝 Acknowledge Transfer
                       </button>
@@ -1480,7 +1506,7 @@ export function Workspace({ onSignOut, onBack }) {
                             }}
                           >
                             <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f4f4f5' }}>
-                              {q.prompt || q.question}
+                              {q.question_text}
                             </div>
                             {q.answer ? (
                               <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--green)' }}>
@@ -1598,9 +1624,9 @@ export function Workspace({ onSignOut, onBack }) {
                             {claim.text}
                           </div>
 
-                          {claim.citations && claim.citations.length > 0 && (
+                          {claim.source_ids && claim.source_ids.length > 0 && (
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                              {claim.citations.map((c, i) => (
+                              {claim.source_ids.map((c, i) => (
                                 <span
                                   key={i}
                                   style={{
@@ -1612,7 +1638,7 @@ export function Workspace({ onSignOut, onBack }) {
                                     color: '#60a5fa',
                                   }}
                                 >
-                                  Source: #{c}
+                                  Source: #{String(c).slice(0, 8)}
                                 </span>
                               ))}
                             </div>
@@ -1634,7 +1660,7 @@ export function Workspace({ onSignOut, onBack }) {
                     <input
                       type="text"
                       className="ws-input"
-                      placeholder="e.g. Why did we choose Supabase over Firebase? What's the status of invoice retries?"
+                      placeholder="e.g. Why did we choose this database? What work is still unfinished?"
                       value={qaQuestion}
                       onChange={e => setQaQuestion(e.target.value)}
                       style={{ flex: 1 }}
@@ -1695,6 +1721,7 @@ export function Workspace({ onSignOut, onBack }) {
           </div>
         )}
       </main>
+      )}
 
       {/* MODAL 1: CREATE ORG */}
       {showCreateOrgModal && (
@@ -1749,7 +1776,7 @@ export function Workspace({ onSignOut, onBack }) {
                   className="ws-btn ws-btn-primary"
                   onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/auth?invite=${generatedInviteToken}`);
-                    alert('Copied invite link to clipboard!');
+                    notify('Copied invite link to clipboard!');
                     setShowInviteModal(false);
                     setGeneratedInviteToken(null);
                   }}
@@ -1814,7 +1841,7 @@ export function Workspace({ onSignOut, onBack }) {
                   className="ws-btn ws-btn-primary"
                   onClick={() => {
                     navigator.clipboard.writeText(revealedToken);
-                    alert('Token copied to clipboard!');
+                    notify('Token copied to clipboard!');
                     setShowTokenModal(false);
                     setRevealedToken(null);
                   }}
@@ -1955,7 +1982,7 @@ export function Workspace({ onSignOut, onBack }) {
                   <option value="">Unassigned</option>
                   {members.map(m => (
                     <option key={m.id} value={m.user_id}>
-                      {m.name || m.user_id}
+                      {m.name || m.github_login || m.user_id}
                     </option>
                   ))}
                 </select>
@@ -2002,7 +2029,7 @@ export function Workspace({ onSignOut, onBack }) {
                   <option value="">Select Leaver...</option>
                   {members.map(m => (
                     <option key={m.id} value={m.user_id}>
-                      {m.name || m.user_id} {m.offboarding ? '(Flagged for offboarding)' : ''}
+                      {m.name || m.github_login || m.user_id} {m.offboarding ? '(Flagged for offboarding)' : ''}
                     </option>
                   ))}
                 </select>
@@ -2018,7 +2045,7 @@ export function Workspace({ onSignOut, onBack }) {
                   <option value="">Select Incoming Engineer...</option>
                   {members.map(m => (
                     <option key={m.id} value={m.user_id}>
-                      {m.name || m.user_id}
+                      {m.name || m.github_login || m.user_id}
                     </option>
                   ))}
                 </select>

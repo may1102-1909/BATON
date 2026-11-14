@@ -1,367 +1,145 @@
-// In-memory synthetic demo sandbox for Baton Demo Mode (/demo-page)
-// Strictly client-side: never touches production database or secrets.
-// Aligned with BATON_DEMO_MODE(1).md (Round 3 Demo Specification)
+// Browser side of Baton Demo Mode (/demo-page). State lives in this browser only; every API call is
+// answered by the real engine through POST /api/demo (server/demo.js), which keeps nothing and uses no credentials.
+import snapshot from './demoSnapshot.json' with { type: 'json' }
 
-const STORAGE_KEY = 'baton_demo_state'
-const DEMO_REPO = 'may1102-1909/BATON'
+const STORAGE_KEY = 'baton_demo_state_v2'
+const LEGACY_STORAGE_KEY = 'baton_demo_state'
+const ORG_ID = 'demo-org'
+const REPO_ID = 'demo-repo'
 const DEMO_INSTALLATION_ID = 'demo-installation'
+const ADMIN_LOGIN = 'may1102-1909'
+const SEED_DATE = '2026-11-01T10:00:00Z'
+const PRODUCTION_ONLY = 'Available in Production mode'
 
-// Imports recent commits and pull requests of the public demo repository into the demo state.
-async function importPublicRepo(state, repo) {
-  const base = `https://api.github.com/repos/${DEMO_REPO}`
-  const read = async path => {
-    const response = await originalFetch.call(window, `${base}${path}`, { headers: { accept: 'application/vnd.github+json' } })
-    if (response.status === 403 || response.status === 429) throw new Error('GitHub\'s public request limit was reached. Try "Sync Now" again in a few minutes.')
-    if (!response.ok) throw new Error(`GitHub returned ${response.status} for ${DEMO_REPO}`)
-    return response.json()
-  }
-  const [commits, pulls] = await Promise.all([read('/commits?per_page=30'), read('/pulls?state=all&per_page=30')])
-  const upsert = source => {
-    const index = state.sources.findIndex(item => item.external_id === source.external_id)
-    if (index >= 0) state.sources[index] = { ...state.sources[index], ...source }
-    else state.sources.push(source)
-  }
-  const common = { org_id: 'demo-org', repository_id: repo.id, author_id: null, visibility: 'team' }
-  for (const commit of commits) {
-    const login = commit.author?.login ?? commit.commit?.author?.name ?? 'unknown'
-    upsert({
-      ...common,
-      id: `gh-commit-${commit.sha.slice(0, 12)}`,
-      external_id: `github:${DEMO_REPO}:commit:${commit.sha}`,
-      author_login: login,
-      type: 'commit',
-      content: String(commit.commit?.message ?? '').slice(0, 500),
-      url: commit.html_url,
-      metadata: { kind: 'commit', sha: commit.sha, author_login: login, url: commit.html_url },
-      created_at: commit.commit?.author?.date ?? new Date().toISOString()
+const isBot = login => !login || login === 'unknown' || login.endsWith('[bot]')
+const toFiles = list => (list ?? []).map(filename => ({ filename }))
+
+// Commits, pull requests and branches in the snapshot shape become engine "sources".
+export function sourcesFromSnapshot(data, repoId = REPO_ID) {
+  const repo = data.repository
+  const common = { org_id: ORG_ID, repository_id: repoId, author_id: null, visibility: 'team' }
+  const sources = []
+  for (const commit of data.commits ?? []) {
+    sources.push({
+      ...common, id: `gh-commit-${commit.sha.slice(0, 12)}`, external_id: `github:${repo}:commit:${commit.sha}`,
+      author_login: commit.author_login, type: 'commit', content: String(commit.message ?? '').slice(0, 500), url: commit.url,
+      metadata: { kind: 'commit', sha: commit.sha, author_login: commit.author_login, url: commit.url, repository: repo, ...(commit.files ? { files: toFiles(commit.files) } : {}) },
+      created_at: commit.date
     })
   }
-  for (const pr of pulls) {
-    const login = pr.user?.login ?? 'unknown'
-    upsert({
-      ...common,
-      id: `gh-pr-${pr.number}`,
-      external_id: `github:${DEMO_REPO}:pull_request:${pr.number}`,
-      author_login: login,
-      type: 'pull_request',
-      content: `PR #${pr.number}: ${pr.title}`,
-      url: pr.html_url,
+  for (const pr of data.pulls ?? []) {
+    sources.push({
+      ...common, id: `gh-pr-${pr.number}`, external_id: `github:${repo}:pull_request:${pr.number}`,
+      author_login: pr.author_login, type: 'pull_request', content: `PR #${pr.number}: ${pr.title}`, url: pr.url,
       metadata: {
-        kind: 'pull_request', number: pr.number, title: pr.title, state: pr.state, merged: Boolean(pr.merged_at),
-        head: pr.head?.ref ?? null, base_ref: pr.base?.ref ?? null, author_login: login, url: pr.html_url
+        kind: 'pull_request', number: pr.number, title: pr.title, state: pr.state, merged: Boolean(pr.merged), head: pr.head,
+        base_ref: pr.base, author_login: pr.author_login, url: pr.url, repository: repo, ...(pr.files ? { files: toFiles(pr.files) } : {})
       },
       created_at: pr.created_at
     })
   }
-  return { commits: commits.length, pullRequests: pulls.length, issues: 0 }
+  for (const branch of data.branches ?? []) {
+    sources.push({
+      ...common, id: `gh-branch-${branch.name}`, external_id: `github:${repo}:branch:${branch.name}`, author_login: null,
+      type: 'branch', content: `Branch ${branch.name}: ${branch.ahead_by} ahead, ${branch.behind_by} behind ${branch.base}`,
+      metadata: { kind: 'branch', name: branch.name, base: branch.base, ahead_by: branch.ahead_by, behind_by: branch.behind_by, sha: branch.sha, repository: repo },
+      created_at: data.generated_at
+    })
+  }
+  return sources
+}
+
+// Leaver and incoming come from the real contributors, most active first.
+function pickPeople(data) {
+  const counts = new Map()
+  const bump = login => { if (!isBot(login) && login !== ADMIN_LOGIN) counts.set(login, (counts.get(login) ?? 0) + 1) }
+  for (const commit of data.commits ?? []) bump(commit.author_login)
+  for (const pr of data.pulls ?? []) bump(pr.author_login)
+  const [leaver, incoming] = [...counts].sort((a, b) => b[1] - a[1]).map(([login]) => login)
+  return { leaver: leaver ?? null, incoming: incoming ?? null }
+}
+
+const people = pickPeople(snapshot)
+
+export const DEMO_PERSONAS = [
+  { id: 'demo-admin', name: 'May (Admin)', role: 'Team lead' },
+  { id: 'demo-leaver', name: people.leaver ?? 'Leaving engineer', role: 'Leaving engineer' },
+  { id: 'demo-incoming', name: people.incoming ?? 'Incoming engineer', role: 'Incoming engineer' }
+]
+
+export const DEMO_SIMULATOR_SAMPLE = {
+  decision: '[SAMPLE] Rotate the deploy key after it appeared in a build log',
+  reason: '[SAMPLE] The log contained ' + 'sk_' + 'live_SAMPLE00000000000000000000' + '. This is a made-up key to show redaction before anything is stored.'
 }
 
 export function getInitialDemoState() {
-  const now = new Date().toISOString()
-  return {
-    organization: {
-      id: 'demo-org',
-      name: 'Payments Team · DEMO',
-      created_by: 'demo-admin',
-      created_at: '2026-11-01T10:00:00Z'
+  const member = (id, user_id, name, role, github_login) => ({ id, org_id: ORG_ID, user_id, name, role, ...(github_login ? { github_login } : {}), created_at: SEED_DATE })
+  const members = [
+    member('m-admin', 'demo-admin', 'May (Admin)', 'admin', ADMIN_LOGIN),
+    member('m-leaver', 'demo-leaver', `${DEMO_PERSONAS[1].name} (Leaving)`, 'member', people.leaver),
+    member('m-incoming', 'demo-incoming', `${DEMO_PERSONAS[2].name} (Incoming)`, 'member', people.incoming)
+  ]
+  const idFor = login => members.find(item => item.github_login === login)?.user_id ?? null
+  const sources = sourcesFromSnapshot(snapshot)
+  const now = snapshot.generated_at
+
+  // Decisions: commits that record a choice, plus the project's own agent protocol.
+  const choice = /^(feat|refactor)\b|\b(migrat|switch|replac|adopt)/i
+  for (const commit of snapshot.commits.filter(item => choice.test(item.message)).slice(0, 6)) {
+    const [subject, ...rest] = commit.message.split('\n').filter(Boolean)
+    sources.push({
+      id: `decision-${commit.sha.slice(0, 12)}`, org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(commit.author_login), author_login: commit.author_login,
+      type: 'decision', content: `${subject}. ${rest.join(' ')}`.trim().slice(0, 400), visibility: 'team', created_at: commit.date,
+      metadata: { decision: subject, reason: rest.join(' ').slice(0, 240) || `Recorded in commit ${commit.sha.slice(0, 7)}.`, files_affected: (commit.files ?? []).slice(0, 5) }
+    })
+  }
+  sources.push({
+    id: 'decision-agents-md', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(ADMIN_LOGIN), author_login: ADMIN_LOGIN, type: 'decision',
+    content: 'Agents record architectural decisions and blockers through the Baton MCP server (AGENTS.md).', visibility: 'team', created_at: now,
+    metadata: { decision: 'Capture decisions with the Baton MCP server', reason: String(snapshot.agents ?? '').split('\n').filter(line => line && !line.startsWith('#'))[0] ?? 'Keeps context across agent sessions.', files_affected: ['AGENTS.md'] }
+  })
+
+  // Planted examples, labelled as samples because they are not part of the repository's history.
+  sources.push(
+    {
+      id: 'sample-decision-a', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, type: 'decision', visibility: 'team', created_at: now,
+      content: '[SAMPLE] Keep the MCP collector local-only so no project data leaves the developer machine.',
+      metadata: { decision: '[SAMPLE] Collector stays local-only', reason: 'Sample of one side of a conflict.', files_affected: ['mcp-server/'] }
     },
-    members: [
-      {
-        id: 'm-alex',
-        org_id: 'demo-org',
-        user_id: 'demo-admin',
-        name: 'Alex Rivera',
-        email: 'alex.lead@payments.demo',
-        role: 'admin',
-        created_at: '2026-11-01T10:00:00Z'
-      },
-      {
-        id: 'm-asha',
-        org_id: 'demo-org',
-        user_id: 'demo-asha',
-        name: 'Asha Patel',
-        email: 'asha.leaving@payments.demo',
-        role: 'member',
-        github_login: 'ashapatel-dev',
-        created_at: '2026-11-01T10:00:00Z'
-      },
-      {
-        id: 'm-ravi',
-        org_id: 'demo-org',
-        user_id: 'demo-ravi',
-        name: 'Ravi Kumar',
-        email: 'ravi.incoming@payments.demo',
-        role: 'member',
-        github_login: 'ravikumar-eng',
-        created_at: '2026-11-02T10:00:00Z'
-      },
-      {
-        id: 'm-meera',
-        org_id: 'demo-org',
-        user_id: 'demo-meera',
-        name: 'Meera Rao',
-        email: 'meera.devops@payments.demo',
-        role: 'member',
-        github_login: 'meerarao-ops',
-        created_at: '2026-11-02T10:00:00Z'
-      }
-    ],
-    repositories: [
-      {
-        id: 'repo-payments',
-        org_id: 'demo-org',
-        full_name: 'payments-org/checkout-service',
-        last_synced_at: now,
-        demo: true,
-        created_at: '2026-11-01T10:00:00Z'
-      }
-    ],
-    sources: [
-      {
-        id: 's-dec-1',
-        org_id: 'demo-org',
-        author_id: 'demo-asha',
-        author_login: 'ashapatel-dev',
-        type: 'decision',
-        content: 'Migrated invoice webhook dispatch to a durable retry queue with exponential backoff and jitter. Downstream payment gateways occasionally experience 504 timeouts.',
-        metadata: {
-          decision: 'Durable webhook retry queue',
-          reason: 'Prevent lost invoices during receiver outages and rate-limiting.',
-          files_affected: ['src/payments/queue.ts', 'src/webhooks/dispatcher.ts']
-        },
-        visibility: 'team',
-        created_at: '2026-11-08T14:30:00Z'
-      },
-      {
-        id: 's-blk-1',
-        org_id: 'demo-org',
-        author_id: 'demo-asha',
-        author_login: 'ashapatel-dev',
-        type: 'blocker',
-        content: 'Production release blocked: Webhook replay protection needs verification under synthetic duplicate delivery conditions.',
-        metadata: {
-          status: 'active',
-          problem: 'Replay protection needs verification',
-          workaround_notes: 'Keep the new queue behind feature flag FLAG_DURABLE_QUEUE until verified.'
-        },
-        visibility: 'team',
-        created_at: '2026-11-09T16:15:00Z'
-      },
-      {
-        id: 's-com-1',
-        org_id: 'demo-org',
-        author_id: 'demo-asha',
-        author_login: 'ashapatel-dev',
-        type: 'commit',
-        content: 'feat(payments): Add webhook retry queue behind opt-in feature flag (sha: 7a8f9c1)',
-        metadata: {
-          sha: '7a8f9c1',
-          files: ['src/payments/queue.ts'],
-          author_login: 'ashapatel-dev'
-        },
-        visibility: 'team',
-        created_at: '2026-11-08T18:00:00Z'
-      },
-      {
-        id: 's-com-2',
-        org_id: 'demo-org',
-        author_id: 'demo-asha',
-        author_login: 'ashapatel-dev',
-        type: 'commit',
-        content: 'fix(payments): Handle Stripe idempotent replay edge-case (sha: 3b2d1e0)',
-        metadata: {
-          sha: '3b2d1e0',
-          files: ['src/payments/idempotency.ts'],
-          author_login: 'ashapatel-dev'
-        },
-        visibility: 'team',
-        created_at: '2026-11-09T11:20:00Z'
-      },
-      {
-        id: 's-com-3',
-        org_id: 'demo-org',
-        author_id: 'demo-asha',
-        author_login: 'ashapatel-dev',
-        type: 'commit',
-        content: 'refactor(ui): Update checkout modal props (Asha Patel + Meera Rao)',
-        metadata: {
-          sha: '5e4d3c2',
-          files: ['src/ui/checkout.tsx'],
-          author_login: 'ashapatel-dev'
-        },
-        visibility: 'team',
-        created_at: '2026-11-09T14:00:00Z'
-      },
-      {
-        id: 's-pr-12',
-        org_id: 'demo-org',
-        author_id: 'demo-asha',
-        author_login: 'ashapatel-dev',
-        type: 'pull_request',
-        content: 'PR #12: Stripe signature validation and webhook idempotency checks. Open on branch feat/pay (4 commits ahead of main).',
-        metadata: {
-          number: 12,
-          state: 'open',
-          merged: false,
-          head: 'feat/pay',
-          files: ['src/payments/queue.ts', 'src/payments/idempotency.ts'],
-          author_login: 'ashapatel-dev'
-        },
-        visibility: 'team',
-        created_at: '2026-11-09T17:45:00Z'
-      },
-      {
-        id: 's-mem-sec',
-        org_id: 'demo-org',
-        author_id: 'demo-asha',
-        author_login: 'ashapatel-dev',
-        type: 'decision',
-        content: 'Stripe webhook endpoint configured with test key [REDACTED: API_KEY]. Client-side Shannon entropy filter scrubbed raw key.',
-        metadata: {
-          decision: 'Configured test webhook endpoint',
-          reason: 'Integration testing without cloud credential leakage',
-          files_affected: ['.env.test'],
-          redaction_applied: true
-        },
-        visibility: 'team',
-        created_at: '2026-11-07T09:00:00Z'
-      },
-      {
-        id: 's-inf-1',
-        org_id: 'demo-org',
-        author_id: 'demo-meera',
-        author_login: 'meerarao-ops',
-        type: 'decision',
-        content: 'Deploy runbook: Payment queue worker autoscaling configuration and dead-letter queue alert triggers.',
-        metadata: {
-          decision: 'Queue worker autoscaling parameters',
-          reason: 'Handle traffic spikes during Black Friday campaigns',
-          audience: ['infra']
-        },
-        visibility: 'team',
-        created_at: '2026-11-06T15:00:00Z'
-      }
-    ],
-    tasks: [
-      {
-        id: 'demo-task-1',
-        org_id: 'demo-org',
-        title: 'Verify webhook replay protection',
-        description: 'Simulate duplicate delivery and test consumer deduplication table. Note: Original due date 10 Nov moved to 15 Nov.',
-        assignee_id: 'm-asha',
-        assignee_name: 'Asha Patel',
-        status: 'open',
-        due_at: '2026-11-15',
-        created_by: 'Alex Rivera',
-        created_at: '2026-11-08T10:00:00Z'
-      }
-    ],
-    handovers: [
-      {
-        id: 'demo-ho-1',
-        org_id: 'demo-org',
-        title: 'Payments Core Service Handover (Asha -> Ravi)',
-        leaver_id: 'm-asha',
-        leaver_name: 'Asha Patel',
-        incoming_id: 'm-ravi',
-        incoming_name: 'Ravi Kumar',
-        status: 'in_review',
-        version: 2,
-        created_at: '2026-11-10T12:00:00Z',
-        summary: 'Architectural handover for the payments processing pipeline, webhook retry queues, and Stripe integration.',
-        questions: [
-          {
-            id: 'q-1',
-            prompt: 'Why is branch feat/pay unmerged and 4 commits ahead of main?',
-            answer: 'Pending final duplicate delivery verification with Meera before merging.',
-            status: 'answered',
-            author: 'Alex Rivera'
-          },
-          {
-            id: 'q-2',
-            prompt: 'Where are the DLQ alarms and alerting thresholds defined?',
-            answer: '',
-            status: 'unanswered',
-            author: 'Ravi Kumar'
-          }
-        ],
-        claims: [
-          {
-            id: 'c-1',
-            statement: 'All incoming invoice webhooks are deduplicated via a 48-hour Redis TTL cache.',
-            status: 'verified',
-            source: 'src/payments/queue.ts'
-          },
-          {
-            id: 'c-2',
-            statement: 'Stripe signature validation happens client-side before queuing.',
-            status: 'verified',
-            source: 'PR #12'
-          },
-          {
-            id: 'c-3',
-            statement: 'Payment worker autoscaling handles up to 5,000 req/min.',
-            status: 'inferred',
-            source: 'Deploy Runbook'
-          }
-        ]
-      },
-      {
-        id: 'demo-ho-v1',
-        org_id: 'demo-org',
-        title: 'Core Payments Service Handover v1 (Approved & Archived)',
-        leaver_id: 'm-asha',
-        leaver_name: 'Asha Patel',
-        incoming_id: 'm-ravi',
-        incoming_name: 'Ravi Kumar',
-        status: 'approved',
-        version: 1,
-        created_at: '2026-11-04T10:00:00Z',
-        summary: 'Initial architecture review before the durable retry queue migration.',
-        questions: [
-          {
-            id: 'q-v1',
-            prompt: 'What was the previous webhook dispatch architecture?',
-            answer: 'Direct synchronous HTTP calls with in-memory timeout retry.',
-            status: 'answered',
-            author: 'Alex Rivera'
-          }
-        ],
-        claims: [
-          {
-            id: 'c-v1',
-            statement: 'Legacy webhook dispatch used in-process setTimeout retry.',
-            status: 'verified',
-            source: 'Commit 1234567'
-          }
-        ]
-      }
-    ],
-    tokens: [
-      {
-        id: 'demo-tok-1',
-        name: 'Demo MCP Stdio Token',
-        created_at: '2026-11-05T10:00:00Z'
-      }
-    ],
-    risks: {
-      high: [
-        'Bus Factor Alert: Only Asha Patel has touched src/payments (100% single maintainer concentration)',
-        'Unmerged Ahead Branch: feat/pay is 4 commits ahead with pending webhook logic'
-      ],
-      medium: [
-        'Schedule Discrepancy: Task "Verify replay protection" moved from 10 Nov to 15 Nov'
-      ],
-      low: [
-        'Webhook Idempotency PR #12 has peer review pending'
-      ]
+    {
+      id: 'sample-decision-b', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(ADMIN_LOGIN), author_login: ADMIN_LOGIN, type: 'decision', visibility: 'team', created_at: now,
+      content: '[SAMPLE] Expose the MCP collector over HTTP so hosted agents can push decisions.',
+      metadata: { decision: '[SAMPLE] Collector is exposed over HTTP', reason: 'Sample of the opposing side of a conflict.', files_affected: ['mcp-server/'] }
+    },
+    {
+      id: 'sample-redaction', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, type: 'decision', visibility: 'team', created_at: now,
+      content: '[SAMPLE] Deploy notes mentioned an API key [REDACTED: API_KEY]; the raw value was scrubbed before it was stored.',
+      metadata: { decision: '[SAMPLE] Redaction example', reason: 'Shows secrets never reach storage.', files_affected: [] }
+    },
+    {
+      id: 'sample-blocker', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, type: 'blocker', visibility: 'team', created_at: now,
+      content: '[SAMPLE] Release waits for a review of the handover generation fallback.',
+      metadata: { status: 'active', problem: '[SAMPLE] Handover fallback needs review', workaround_notes: 'Evidence-only mode is used until a model key is configured.' }
     }
+  )
+
+  return {
+    organizations: [{ id: ORG_ID, name: 'BATON Team · DEMO', created_by: 'demo-admin', created_at: SEED_DATE }],
+    members,
+    repositories: [{ id: REPO_ID, org_id: ORG_ID, full_name: snapshot.repository, installation_id: DEMO_INSTALLATION_ID, last_synced_at: now, demo: true, created_at: SEED_DATE }],
+    sources,
+    tasks: [{
+      id: 'sample-task', org_id: ORG_ID, title: '[SAMPLE] Walk the incoming engineer through server/ and mcp-server/', description: 'Sample task for the handover story.',
+      assignee_id: 'demo-leaver', created_by: 'demo-admin', status: 'open', due_at: '2026-11-20', created_at: SEED_DATE
+    }],
+    handovers: []
   }
 }
 
 export function loadDemoState() {
   if (typeof window === 'undefined') return getInitialDemoState()
   try {
+    localStorage.removeItem(LEGACY_STORAGE_KEY)
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch (err) {
@@ -387,30 +165,93 @@ export function resetDemoState() {
   return getInitialDemoState()
 }
 
-// Global Fetch Interceptor for /demo-page sandbox
-let originalFetch = null
-let currentPersona = 'demo-admin'
-
-const PERSONA_PROFILES = {
-  'demo-admin': { id: 'demo-admin', name: 'Alex Rivera', email: 'alex.lead@payments.demo', role: 'admin' },
-  'demo-asha':  { id: 'demo-asha',  name: 'Asha Patel',  email: 'asha.leaving@payments.demo', role: 'member' },
-  'demo-ravi':  { id: 'demo-ravi',  name: 'Ravi Kumar',  email: 'ravi.incoming@payments.demo', role: 'member' },
-  'demo-meera': { id: 'demo-meera', name: 'Meera Rao',   email: 'meera.devops@payments.demo', role: 'member' },
+// Live refresh from GitHub's public API; the caller falls back to the snapshot when this fails.
+async function readLiveRepo(fetchImpl) {
+  const base = `https://api.github.com/repos/${snapshot.repository}`
+  const read = async path => {
+    const response = await fetchImpl.call(window, `${base}${path}`, { headers: { accept: 'application/vnd.github+json' } })
+    if (!response.ok) throw new Error(`GitHub returned ${response.status}`)
+    return response.json()
+  }
+  const [commits, pulls] = await Promise.all([read('/commits?per_page=30'), read('/pulls?state=all&per_page=30')])
+  return {
+    repository: snapshot.repository,
+    commits: commits.map(item => ({
+      sha: item.sha, author_login: item.author?.login ?? 'unknown', message: String(item.commit?.message ?? '').replace(/[^\s<>]+@[^\s<>]+/g, '').slice(0, 400),
+      date: item.commit?.author?.date, url: item.html_url
+    })),
+    pulls: pulls.map(pr => ({
+      number: pr.number, title: pr.title, state: pr.state, merged: Boolean(pr.merged_at), head: pr.head?.ref ?? null, base: pr.base?.ref ?? null,
+      author_login: pr.user?.login ?? 'unknown', created_at: pr.created_at, url: pr.html_url
+    }))
+  }
 }
 
+function mergeSources(state, incoming) {
+  for (const source of incoming) {
+    const index = state.sources.findIndex(item => item.external_id === source.external_id)
+    if (index < 0) state.sources.push(source)
+    else state.sources[index] = { ...state.sources[index], ...source, metadata: { ...state.sources[index].metadata, ...source.metadata } }
+  }
+}
+
+let originalFetch = null
+let currentPersona = 'demo-admin'
+let queue = Promise.resolve()
+
 export function setDemoPersona(personaId) {
-  currentPersona = personaId || 'demo-admin'
+  currentPersona = DEMO_PERSONAS.some(item => item.id === personaId) ? personaId : 'demo-admin'
 }
 
 export function isDemoRoute() {
   return typeof window !== 'undefined' && window.location.pathname.toLowerCase().startsWith('/demo-page')
 }
 
+const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
+
+async function callEngine(persona, method, path, body) {
+  const state = loadDemoState()
+  let response
+  try {
+    response = await originalFetch.call(window, '/api/demo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ persona, state, request: { method, path, body } })
+    })
+  } catch {
+    return { status: 503, body: { error: 'The demo engine could not be reached' } }
+  }
+  if (!response.ok) return { status: 503, body: { error: 'The demo engine is unavailable right now' } }
+  const result = await response.json()
+  if (result.state) saveDemoState(result.state)
+  return result
+}
+
+// The first visit opens with a handover generated from the repository data by the real engine.
+async function ensureSeedHandover() {
+  const state = loadDemoState()
+  if (state.handovers?.length) return
+  const started = await callEngine('demo-admin', 'POST', `/api/orgs/${ORG_ID}/handovers`, { leaverId: 'demo-leaver', incomingId: 'demo-incoming' })
+  if (started.body?.handover) await callEngine('demo-admin', 'POST', `/api/handovers/${started.body.handover.id}/generate`)
+}
+
+async function syncRepository() {
+  let data = snapshot
+  try {
+    data = await readLiveRepo(originalFetch)
+  } catch { /* keep the bundled snapshot */ }
+  const state = loadDemoState()
+  const repo = state.repositories[0]
+  mergeSources(state, sourcesFromSnapshot(data, repo.id))
+  repo.last_synced_at = new Date().toISOString()
+  saveDemoState(state)
+  return { commits: data.commits.length, pullRequests: data.pulls.length, issues: 0 }
+}
+
 export function installDemoInterceptor(initialPersona = 'demo-admin') {
   if (typeof window === 'undefined') return
   if (originalFetch) return // already installed
 
-  currentPersona = initialPersona
+  setDemoPersona(initialPersona)
   originalFetch = window.fetch
 
   window.fetch = async function (input, init = {}) {
@@ -430,287 +271,38 @@ export function installDemoInterceptor(initialPersona = 'demo-admin') {
     const pathname = url.pathname
     const method = (init.method || 'GET').toUpperCase()
 
-    // 1. Health check
+    if (pathname === '/api/demo') return originalFetch.apply(this, arguments)
+
     if (pathname === '/api/health') {
-      return new Response(JSON.stringify({
-        ok: true,
-        configured: { supabase: true, github: true, demo: true }
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return reply({ ok: true, configured: { supabase: true, github: true, demo: true } })
     }
 
-    // 2. /api/me (Current authenticated actor)
-    if (pathname === '/api/me') {
-      const p = PERSONA_PROFILES[currentPersona] || PERSONA_PROFILES['demo-admin']
-      return new Response(JSON.stringify({
-        user: { id: p.id, name: p.name, email: p.email },
-        organizations: [
-          { id: 'demo-org', name: 'Payments Team · DEMO', role: p.role }
-        ]
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-    }
-
-    const state = loadDemoState()
-
-    // 3. /api/orgs/:orgId/state
-    if (pathname.match(/^\/api\/orgs\/[^/]+\/state$/)) {
-      return new Response(JSON.stringify({
-        organization: state.organization,
-        members: state.members,
-        repositories: state.repositories,
-        sources: state.sources,
-        tasks: state.tasks,
-        handovers: state.handovers,
-        tokens: state.tokens
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-    }
-
-    // 4. /api/orgs/:orgId/risks
-    if (pathname.match(/^\/api\/orgs\/[^/]+\/risks$/)) {
-      return new Response(JSON.stringify(state.risks), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 5. /api/handovers/:id (Handover detail)
-    const hoMatch = pathname.match(/^\/api\/handovers\/([^/]+)$/)
-    if (hoMatch && method === 'GET') {
-      const ho = state.handovers.find(h => h.id === hoMatch[1]) || state.handovers[0]
-      return new Response(JSON.stringify(ho), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 6. Answer question: /api/handovers/:id/answers
-    if (pathname.match(/^\/api\/handovers\/[^/]+\/answers$/) && method === 'POST') {
-      let body = {}
-      try { body = JSON.parse(init.body || '{}') } catch (e) {}
-      const ho = state.handovers[0]
-      if (ho && ho.questions) {
-        const q = ho.questions.find(item => item.id === body.questionId)
-        if (q) {
-          q.answer = body.answer || 'Answer recorded.'
-          q.status = 'answered'
-          saveDemoState(state)
-        }
-      }
-      return new Response(JSON.stringify(ho), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 7. Approve handover: /api/handovers/:id/approve
-    if (pathname.match(/^\/api\/handovers\/[^/]+\/approve$/) && method === 'POST') {
-      const ho = state.handovers[0]
-      if (ho) {
-        ho.status = 'approved'
-        saveDemoState(state)
-      }
-      return new Response(JSON.stringify(ho), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 7b. Acknowledge handover: /api/handovers/:id/acknowledge
-    if (pathname.match(/^\/api\/handovers\/[^/]+\/acknowledge$/) && method === 'POST') {
-      const ho = state.handovers[0]
-      if (ho) {
-        ho.status = 'acknowledged'
-        saveDemoState(state)
-      }
-      return new Response(JSON.stringify(ho), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 7c. Generate/Synthesize handover: /api/handovers/:id/generate
-    if (pathname.match(/^\/api\/handovers\/[^/]+\/generate$/) && method === 'POST') {
-      const ho = state.handovers[0]
-      if (ho) {
-        ho.version = (ho.version || 1) + 1
-        saveDemoState(state)
-      }
-      return new Response(JSON.stringify(ho), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 7d. Start Handover: /api/orgs/:orgId/handovers
-    if (pathname.match(/^\/api\/orgs\/[^/]+\/handovers$/) && method === 'POST') {
-      let body = {}
-      try { body = JSON.parse(init.body || '{}') } catch (e) {}
-      const newHo = {
-        id: `demo-ho-${Date.now()}`,
-        org_id: 'demo-org',
-        title: `Payments Handover (${PERSONA_PROFILES[body.leaver_id]?.name || 'Asha'} -> ${PERSONA_PROFILES[body.incoming_id]?.name || 'Ravi'})`,
-        leaver_id: body.leaver_id || 'demo-asha',
-        leaver_name: PERSONA_PROFILES[body.leaver_id]?.name || 'Asha Patel',
-        incoming_id: body.incoming_id || 'demo-ravi',
-        incoming_name: PERSONA_PROFILES[body.incoming_id]?.name || 'Ravi Kumar',
-        status: 'draft',
-        version: 1,
-        created_at: new Date().toISOString(),
-        summary: 'New architectural handover session initialized.',
-        questions: [
-          {
-            id: `q-${Date.now()}`,
-            prompt: 'Explain unmerged commits on feat/pay branch before departure.',
-            answer: '',
-            status: 'unanswered',
-            author: 'Alex Rivera'
-          }
-        ],
-        claims: []
-      }
-      state.handovers.unshift(newHo)
-      saveDemoState(state)
-      return new Response(JSON.stringify({ handover: newHo }), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 8. Ask Handover Q&A: /api/handovers/:id/ask
-    if (pathname.match(/^\/api\/handovers\/[^/]+\/ask$/) && method === 'POST') {
-      let body = {}
-      try { body = JSON.parse(init.body || '{}') } catch (e) {}
-      const q = (body.question || '').toLowerCase()
-      let answer = 'All webhook processing is wrapped with idempotency keys and exponential backoff retry logic.'
-      let citations = ['src/payments/queue.ts:L42-L88', 'PR #12']
-
-      if (q.includes('unmerged') || q.includes('branch') || q.includes('ahead')) {
-        answer = 'Branch feat/pay is 4 commits ahead of main containing Stripe signature verification. Pending final synthetic duplicate delivery verification before merging.'
-        citations = ['PR #12: feat/pay', 'Asha Patel exit interview notes']
-      } else if (q.includes('date') || q.includes('when') || q.includes('launch')) {
-        answer = 'Payments launch task was rescheduled from 10 Nov to 15 Nov to allow full testing of queue recovery.'
-        citations = ['Task: Verify webhook replay protection', 'Commit 7a8f9c1']
-      } else if (q.includes('alarm') || q.includes('dlq') || q.includes('infra')) {
-        answer = 'Dead-letter queue alarms and worker autoscaling limits are defined in the Deploy Runbook (handled by Meera Rao).'
-        citations = ['Deploy Runbook: Queue Worker Autoscaling', 'AWS SQS Alarm tf-queue-dlq']
-      }
-
-      return new Response(JSON.stringify({
-        answer,
-        citations,
-        confidence: 'high',
-        evidence_mode: 'deterministic_grounded'
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-    }
-
-    // 9. Memory creation in simulator or modal
-    if (pathname.match(/^\/api\/orgs\/[^/]+\/sources$/) && method === 'POST') {
-      let body = {}
-      try { body = JSON.parse(init.body || '{}') } catch (e) {}
-      const newSource = {
-        id: `s-live-${Date.now()}`,
-        org_id: 'demo-org',
-        author_id: currentPersona,
-        author_login: PERSONA_PROFILES[currentPersona]?.name || 'Demo User',
-        type: body.type || 'decision',
-        content: body.content || '',
-        metadata: body.metadata || {},
-        visibility: body.visibility || 'team',
-        created_at: new Date().toISOString()
-      }
-      state.sources.unshift(newSource)
-      saveDemoState(state)
-      return new Response(JSON.stringify({ success: true, memory: newSource }), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 10. Tasks creation & update
-    if (pathname.match(/^\/api\/orgs\/[^/]+\/tasks$/) && method === 'POST') {
-      let body = {}
-      try { body = JSON.parse(init.body || '{}') } catch (e) {}
-      const newTask = {
-        id: `task-${Date.now()}`,
-        org_id: 'demo-org',
-        title: body.title || 'New Task',
-        description: body.description || '',
-        assignee_id: body.assignee_id || 'm-asha',
-        assignee_name: 'Asha Patel',
-        status: 'open',
-        due_at: body.due_at || '2026-11-20',
-        created_by: PERSONA_PROFILES[currentPersona]?.name || 'Alex Rivera',
-        created_at: new Date().toISOString()
-      }
-      state.tasks.unshift(newTask)
-      saveDemoState(state)
-      return new Response(JSON.stringify({ task: newTask }), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    if (pathname.match(/^\/api\/tasks\/[^/]+$/) && method === 'PATCH') {
-      let body = {}
-      try { body = JSON.parse(init.body || '{}') } catch (e) {}
-      const t = state.tasks[0]
-      if (t) {
-        if (body.status) t.status = body.status
-        saveDemoState(state)
-      }
-      return new Response(JSON.stringify({ task: t }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // GitHub connection in the demo: the public BATON repository, read through GitHub's public API.
-    // No sign-in, token, or production API call is involved.
-    const demoJson = (data, status = 200) => new Response(JSON.stringify(data), {
-      status,
-      headers: { 'Content-Type': 'application/json' }
-    })
-
-    if (pathname.match(/^\/api\/orgs\/[^/]+\/github\/connect$/)) {
-      return demoJson({ url: null, demo: true })
-    }
-
+    // GitHub in the demo: the repository is already connected; sync reads the public API or the snapshot.
+    if (pathname.match(/^\/api\/orgs\/[^/]+\/github\/connect$/)) return reply({ url: null, demo: true })
     if (pathname.match(/^\/api\/orgs\/[^/]+\/github\/installations$/)) {
-      return demoJson([{ id: DEMO_INSTALLATION_ID, account: { login: DEMO_REPO.split('/')[0], type: 'User' }, repository_selection: 'selected' }])
+      return reply([{ id: DEMO_INSTALLATION_ID, account: { login: snapshot.repository.split('/')[0], type: 'User' }, repository_selection: 'selected' }])
     }
-
     if (pathname.match(/^\/api\/orgs\/[^/]+\/github\/installations\/[^/]+\/repositories$/)) {
-      return demoJson([{ full_name: DEMO_REPO, private: false, default_branch: 'main' }])
+      return reply([{ full_name: snapshot.repository, private: false, default_branch: snapshot.default_branch }])
     }
-
     if (pathname.match(/^\/api\/orgs\/[^/]+\/repositories$/) && method === 'POST') {
-      let repo = state.repositories.find(r => r.full_name.toLowerCase() === DEMO_REPO.toLowerCase())
-      if (!repo) {
-        repo = { id: 'repo-baton', org_id: 'demo-org', full_name: DEMO_REPO, installation_id: DEMO_INSTALLATION_ID, last_synced_at: null, demo: true }
-        state.repositories.push(repo)
-        saveDemoState(state)
-      }
-      return demoJson(repo, 201)
+      return reply(loadDemoState().repositories[0], 201)
+    }
+    if (pathname.match(/^\/api\/orgs\/[^/]+\/repositories\/[^/]+\/sync$/) && method === 'POST') {
+      return reply(await syncRepository())
     }
 
-    const syncMatch = pathname.match(/^\/api\/orgs\/[^/]+\/repositories\/([^/]+)\/sync$/)
-    if (syncMatch && method === 'POST') {
-      const repo = state.repositories.find(r => r.id === decodeURIComponent(syncMatch[1]))
-      if (!repo) return demoJson({ error: 'Repository not found' }, 404)
-      let counts = { commits: 0, pullRequests: 0, issues: 0 }
-      if (repo.full_name.toLowerCase() === DEMO_REPO.toLowerCase()) {
-        try {
-          counts = await importPublicRepo(state, repo)
-        } catch (err) {
-          return demoJson({ error: err.message }, 502)
-        }
-      }
-      repo.last_synced_at = new Date().toISOString()
-      saveDemoState(state)
-      return demoJson(counts)
-    }
-
-    // Pass through any other unexpected calls
-    return originalFetch.apply(this, arguments)
+    let body
+    try { body = init.body ? JSON.parse(init.body) : undefined } catch { body = undefined }
+    const persona = currentPersona
+    // Requests are serialized so concurrent calls never overwrite each other's state.
+    const run = queue.then(async () => {
+      if (/^\/api\/orgs\/[^/]+\/state$/.test(pathname)) await ensureSeedHandover()
+      return callEngine(persona, method, pathname + url.search, body)
+    })
+    queue = run.catch(() => {})
+    const result = await run
+    return reply(result.body, result.status)
   }
 }
 
@@ -721,3 +313,4 @@ export function uninstallDemoInterceptor() {
   }
 }
 
+export { PRODUCTION_ONLY }

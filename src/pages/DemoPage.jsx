@@ -9,6 +9,8 @@ import {
   uninstallDemoInterceptor,
   setDemoPersona,
   resetDemoState,
+  DEMO_PERSONAS,
+  DEMO_SIMULATOR_SAMPLE,
   isDemoRoute
 } from './demoSandbox.js'
 
@@ -26,16 +28,17 @@ const C = {
   green: '#34d399'
 }
 
-const DEMO_PERSONAS = [
-  { id: 'demo-admin', name: 'Alex Rivera', role: 'Team Lead · Admin' },
-  { id: 'demo-asha',  name: 'Asha Patel',  role: 'Leaving · Backend' },
-  { id: 'demo-ravi',  name: 'Ravi Kumar',  role: 'Incoming · Backend' },
-  { id: 'demo-meera', name: 'Meera Rao',   role: 'DevOps · Infra' },
+// Persona and step per tour stop; the last stop returns to the admin for the MCP simulator.
+const TOUR = [
+  { persona: 'demo-admin', text: 'May (Admin): open Overview for the bus-factor and risk summary built from BATON\'s real commits and pull requests.' },
+  { persona: 'demo-leaver', text: 'Leaving engineer: open the "Handovers" tab to review or answer the exit-interview questions.' },
+  { persona: 'demo-incoming', text: 'Incoming engineer: ask a question in Handovers and read the answer with its cited evidence.' },
+  { persona: 'demo-admin', text: 'May (Admin): try the Live MCP simulator; the sample key is redacted before anything is stored.' }
 ]
 
 export function DemoPage() {
   const { navigate } = useRouter()
-  const [activePersona, setActivePersona] = useState(api.getDemoUser() || 'demo-admin')
+  const [activePersona, setActivePersona] = useState(DEMO_PERSONAS.some((p) => p.id === api.getDemoUser()) ? api.getDemoUser() : 'demo-admin')
   const [resetNotice, setResetNotice] = useState(false)
   const [tourStep, setTourStep] = useState(1)
   const [showTour, setShowTour] = useState(true)
@@ -220,7 +223,7 @@ export function DemoPage() {
               fontFamily: 'inherit'
             }}
           >
-            Payments Team · DEMO
+            BATON Team · DEMO
           </span>
         </div>
 
@@ -258,10 +261,10 @@ export function DemoPage() {
                   fontFamily: 'inherit'
                 }}
               >
-                {p.name}{' '}
-                <span style={{ fontSize: 9.5, opacity: 0.7 }}>
-                  ({p.role.split('·')[0].trim()})
-                </span>
+                {p.name}
+                {p.id !== 'demo-admin' && (
+                  <span style={{ fontSize: 9.5, opacity: 0.7 }}> ({p.role})</span>
+                )}
               </button>
             )
           })}
@@ -308,6 +311,11 @@ export function DemoPage() {
       <main style={{ flex: 1 }}>
         <Workspace
           key={activePersona}
+          mode="demo"
+          demoPersonas={DEMO_PERSONAS}
+          demoPersona={activePersona}
+          onDemoPersonaChange={handleSwitchPersona}
+          demoSimulatorSample={DEMO_SIMULATOR_SAMPLE}
           onBack={() => navigate('/usage')}
           onSignOut={() => navigate('/')}
         />
@@ -373,25 +381,14 @@ export function DemoPage() {
             </button>
           </div>
           <div style={{ fontSize: 12, color: '#e5e7eb', lineHeight: 1.5 }}>
-            {tourStep === 1 && 'Alex (Lead): Inspect the Critical Handover Gap & Bus Factor risk alert in Overview.'}
-            {tourStep === 2 && 'Asha (Leaving): Open the "Handovers" tab to review or answer exit interview questions.'}
-            {tourStep === 3 && 'Ravi (Incoming): Test Grounded Q&A Search in Handovers with cited evidence.'}
-            {tourStep === 4 && 'Meera (DevOps): Inspect role-filtered secrets & infra-only runbooks.'}
+            {TOUR[tourStep - 1].text}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
             <button
               onClick={() => {
-                const nextStep = tourStep > 1 ? tourStep - 1 : 4
+                const nextStep = tourStep > 1 ? tourStep - 1 : TOUR.length
                 setTourStep(nextStep)
-                const targetPersona =
-                  nextStep === 1
-                    ? 'demo-admin'
-                    : nextStep === 2
-                    ? 'demo-asha'
-                    : nextStep === 3
-                    ? 'demo-ravi'
-                    : 'demo-meera'
-                handleSwitchPersona(targetPersona)
+                handleSwitchPersona(TOUR[nextStep - 1].persona)
               }}
               style={{
                 background: 'transparent',
@@ -407,17 +404,9 @@ export function DemoPage() {
             </button>
             <button
               onClick={() => {
-                const nextStep = tourStep < 4 ? tourStep + 1 : 1
+                const nextStep = tourStep < TOUR.length ? tourStep + 1 : 1
                 setTourStep(nextStep)
-                const targetPersona =
-                  nextStep === 1
-                    ? 'demo-admin'
-                    : nextStep === 2
-                    ? 'demo-asha'
-                    : nextStep === 3
-                    ? 'demo-ravi'
-                    : 'demo-meera'
-                handleSwitchPersona(targetPersona)
+                handleSwitchPersona(TOUR[nextStep - 1].persona)
               }}
               style={{
                 background: 'rgba(52, 211, 153, 0.14)',

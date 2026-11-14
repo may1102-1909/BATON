@@ -80,6 +80,26 @@ test('production never falls back to demo identity', async () => {
   });
 });
 
+test('a new user is not auto-enrolled in any organization', async () => {
+  const store = fixture();
+  const supabaseClient = { auth: { getUser: async () => ({ data: { user: { id: 'user-new', email: 'new@example.com', user_metadata: {}, identities: [] } }, error: null }) } };
+  const app = createApp({ store, env: {}, supabaseClient });
+  const headers = { authorization: 'Bearer new-user-token' };
+  await serve(app, async url => {
+    const me = await jsonRequest(url, '/api/me', { headers });
+    assert.equal(me.status, 200);
+    assert.deepEqual((await me.json()).organizations, []);
+    assert.equal((await store.list('members', { user_id: 'user-new' })).length, 0);
+    assert.equal((await store.list('organizations')).length, 2);
+    const state = await jsonRequest(url, `/api/orgs/${orgId}/state`, { headers });
+    assert.equal(state.status, 403);
+    const created = await jsonRequest(url, '/api/orgs', { method: 'POST', headers, body: { name: 'Own Team' } });
+    assert.equal(created.status, 201);
+    const after = await (await jsonRequest(url, '/api/me', { headers })).json();
+    assert.deepEqual(after.organizations.map(org => org.name), ['Own Team']);
+  });
+});
+
 test('Supabase access tokens are validated and collector JWTs must name an organization', async () => {
   const store = fixture();
   const checked = [];

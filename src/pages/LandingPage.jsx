@@ -53,7 +53,13 @@ export function LandingPage() {
         </Link>
 
         {/* Top CTA */}
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Link
+            to="/demo-page"
+            style={{ color: '#f4f4f5', fontSize: 13, fontWeight: 500, textDecoration: 'none', cursor: 'pointer' }}
+          >
+            Try the demo
+          </Link>
           <Link
             to="/auth"
             style={{
