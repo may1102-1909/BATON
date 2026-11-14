@@ -134,7 +134,7 @@ export function getInitialDemoState() {
   )
 
   return {
-    organizations: [{ id: ORG_ID, name: 'BATON Team · DEMO', created_by: 'demo-admin', created_at: SEED_DATE }],
+    organizations: [{ id: ORG_ID, name: 'Mumbai_wale Hackathon Org · DEMO', created_by: 'demo-admin', created_at: SEED_DATE }],
     members,
     repositories: [{ id: REPO_ID, org_id: ORG_ID, full_name: snapshot.repository, installation_id: DEMO_INSTALLATION_ID, last_synced_at: now, demo: true, created_at: SEED_DATE }],
     sources,

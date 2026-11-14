@@ -12,7 +12,7 @@ test('the admin persona is signed in without any email in responses or state', a
   const me = await call(seed, 'demo-admin', 'GET', '/api/me');
   assert.equal(me.status, 200);
   assert.equal(me.body.user.name, 'May (Admin)');
-  assert.equal(me.body.organizations[0].name, 'BATON Team · DEMO');
+  assert.equal(me.body.organizations[0].name, 'Mumbai_wale Hackathon Org · DEMO');
   assert.equal(me.body.organizations[0].role, 'admin');
   assert.equal(hasEmail(me), false);
   assert.equal(seed.members.find(member => member.user_id === 'demo-admin').github_login, 'may1102-1909');

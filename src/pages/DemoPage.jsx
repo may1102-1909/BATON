@@ -223,7 +223,7 @@ export function DemoPage() {
               fontFamily: 'inherit'
             }}
           >
-            BATON Team · DEMO
+            Mumbai_wale Hackathon Org · DEMO
           </span>
         </div>
 
