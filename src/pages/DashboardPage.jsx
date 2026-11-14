@@ -26,7 +26,7 @@ export function DashboardPage() {
     return (
       <div role="alert" style={{ maxWidth: 520, margin: '20vh auto', padding: 24, textAlign: 'center', fontFamily: 'inherit' }}>
         <h2>Baton is not configured</h2>
-        <p>Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then rebuild.</p>
+        <p>Set SUPABASE_URL and SUPABASE_ANON_KEY (or their VITE_ equivalents), then rebuild.</p>
         <button type="button" onClick={() => navigate('/')}>Back</button>
       </div>
     )

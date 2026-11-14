@@ -15,10 +15,12 @@ function getEnv(key) {
 }
 
 const supabaseUrl =
+  (typeof __BATON_SUPABASE_URL__ !== 'undefined' && __BATON_SUPABASE_URL__) ||
   getEnv('NEXT_PUBLIC_SUPABASE_URL') ||
   getEnv('VITE_SUPABASE_URL')
 
 const supabaseKey =
+  (typeof __BATON_SUPABASE_ANON_KEY__ !== 'undefined' && __BATON_SUPABASE_ANON_KEY__) ||
   getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') ||
   getEnv('VITE_SUPABASE_ANON_KEY') ||
   getEnv('SUPABASE_SERVICE_ROLE_KEY')

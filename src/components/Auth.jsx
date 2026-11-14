@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Brand } from './Brand'
 import { Icon } from './Icon'
 import { Button } from './Button'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 const C = {
   bg: '#0c0d0e',
@@ -50,7 +50,7 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
   const [submitted, setSubmitted] = useState(false)
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState(isSupabaseConfigured ? '' : 'Baton is not configured: set SUPABASE_URL and SUPABASE_ANON_KEY, then rebuild.')
 
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   const isEmailInvalid = (submitted || (touched && email.length > 0)) && !valid
