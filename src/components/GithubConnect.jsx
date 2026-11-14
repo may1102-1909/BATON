@@ -27,6 +27,7 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
   const [manualName, setManualName] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null); // { tone: 'ok' | 'error', text, installUrl? }
+  const [linkedLogin, setLinkedLogin] = useState('');
 
   const hasRepos = connectedNames.length > 0;
   const connected = new Set(connectedNames.map(name => name.toLowerCase()));
@@ -40,6 +41,7 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
       setInstallations(list);
       setInstallationId(cur => (list.some(item => String(item.id) === cur) ? cur : list.length ? String(list[0].id) : ''));
       setPhase('linked');
+      api.getGithubAccount(orgId).then(res => setLinkedLogin(res?.account?.login ?? '')).catch(() => setLinkedLogin(''));
     } catch (err) {
       if (err.status === 409) {
         setPhase('unlinked');
@@ -52,6 +54,14 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
   }
 
   useEffect(() => { loadInstallations(); }, [orgId]);
+
+  // Coming back from GitHub's install page in another tab: pick up the new installation.
+  useEffect(() => {
+    if (phase !== 'linked' || installations.length) return undefined;
+    const onFocus = () => loadInstallations();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [phase, installations.length, orgId]);
 
   useEffect(() => {
     if (outcome?.status === 'linked') setMessage({ tone: 'ok', text: 'GitHub account linked. Now choose a repository to connect.' });
@@ -82,6 +92,19 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
     } catch (err) {
       setMessage({ tone: 'error', text: err.message });
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function switchAccount() {
+    setBusy(true);
+    try {
+      await api.unlinkGithubAccount(orgId);
+      setLinkedLogin('');
+      setInstallations([]);
+      await startLink();
+    } catch (err) {
+      setMessage({ tone: 'error', text: err.message });
       setBusy(false);
     }
   }
@@ -141,7 +164,7 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
 
       {phase === 'unlinked' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Step 1 of 2: link your GitHub account.</span>
+          <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Step 1 of 2: sign in with your GitHub account. GitHub lets you choose which account to use.</span>
           <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" disabled={busy} onClick={startLink}>{busy ? 'Opening GitHub…' : 'Connect GitHub'}</button>
         </div>
       )}
@@ -150,11 +173,18 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
         <button type="button" className="ws-btn ws-btn-sm" onClick={loadInstallations} style={{ alignSelf: 'flex-start' }}>Try again</button>
       )}
 
+      {phase === 'linked' && linkedLogin && (
+        <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+          Signed in to GitHub as <strong style={{ color: '#fff' }}>@{linkedLogin}</strong>. Not you?{' '}
+          <button type="button" className="ws-btn ws-btn-sm" onClick={switchAccount} disabled={busy}>Use a different GitHub account</button>
+        </div>
+      )}
+
       {phase === 'linked' && installations.length === 0 && (
         <div style={{ fontSize: '0.85rem', color: 'var(--muted)', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span>Your GitHub account is linked, but the Baton GitHub App is not installed on any account or repository you can access.</span>
-          {installUrl && <a className="ws-btn ws-btn-primary ws-btn-sm" href={installUrl} target="_blank" rel="noreferrer">Install the GitHub App</a>}
-          <button type="button" className="ws-btn ws-btn-sm" onClick={loadInstallations}>Refresh</button>
+          <span>Step 2 of 2: install the Baton GitHub App on your account and choose which repositories it can read.</span>
+          {installUrl && <a className="ws-btn ws-btn-primary ws-btn-sm" href={installUrl} target="_blank" rel="noreferrer">Install on GitHub</a>}
+          <button type="button" className="ws-btn ws-btn-sm" onClick={loadInstallations}>I've installed it</button>
         </div>
       )}
 
@@ -184,12 +214,12 @@ export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [],
 
       {(phase === 'linked' || phase === 'unlinked') && (
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--muted)' }}>
-          {installUrl && <a href={installUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>Install the app on more repositories or accounts</a>}
+          {installUrl && !(phase === 'linked' && installations.length === 0) && <a href={installUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>Install the app on more repositories or accounts</a>}
           {phase === 'linked' && (
             <button type="button" className="ws-btn ws-btn-sm" onClick={loadInstallations} disabled={busy}>Refresh list</button>
           )}
-          {phase === 'linked' && (
-            <button type="button" className="ws-btn ws-btn-sm" onClick={startLink} disabled={busy}>Use a different GitHub account</button>
+          {phase === 'linked' && !linkedLogin && (
+            <button type="button" className="ws-btn ws-btn-sm" onClick={switchAccount} disabled={busy}>Use a different GitHub account</button>
           )}
         </div>
       )}

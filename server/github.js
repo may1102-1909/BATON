@@ -110,10 +110,28 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
   }
 
   function installHint() {
-    const slug = String(env.GITHUB_APP_SLUG ?? '').trim();
+    const slug = cachedSlug || String(env.GITHUB_APP_SLUG ?? '').trim();
     return /^[a-z0-9-]+$/i.test(slug)
       ? ` Install the GitHub App on it (https://github.com/apps/${slug}/installations/new) or choose another repository.`
       : ' Install the GitHub App on that repository or choose another repository.';
+  }
+
+  // GITHUB_APP_SLUG wins; otherwise ask GitHub for the app's slug once so the install page can be offered.
+  let cachedSlug = '';
+  async function appSlug() {
+    const configured = String(env.GITHUB_APP_SLUG ?? '').trim();
+    if (/^[a-z0-9-]+$/i.test(configured)) return configured;
+    if (cachedSlug) return cachedSlug;
+    try {
+      const app = await request('/app', { token: appJwt() });
+      if (/^[a-z0-9-]+$/i.test(String(app?.slug ?? ''))) cachedSlug = app.slug;
+    } catch {}
+    return cachedSlug || null;
+  }
+
+  async function installUrl() {
+    const slug = await appSlug();
+    return slug ? `https://github.com/apps/${slug}/installations/new` : null;
   }
 
   async function installationToken(installationId) {
@@ -290,6 +308,8 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('scope', 'read:user,repo');
     url.searchParams.set('state', state);
+    // Without this GitHub silently reuses whichever account is signed in on the browser.
+    url.searchParams.set('prompt', 'select_account');
     return { url: url.toString() };
   }
 
@@ -361,6 +381,20 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       id: item.id, account: item.account ? { login: item.account.login, type: item.account.type } : null,
       repository_selection: item.repository_selection,
     }));
+  }
+
+  async function linkedAccount({ userId, orgId }) {
+    const rows = await store.list('github_accounts', { user_id: userId, org_id: orgId });
+    return rows[0] ? { login: rows[0].github_login } : null;
+  }
+
+  /** Forgets this member's GitHub link in this organization so another GitHub account can be linked. */
+  async function unlink({ userId, orgId }) {
+    const rows = await store.list('github_accounts', { user_id: userId, org_id: orgId });
+    for (const row of rows) await store.remove('github_accounts', row.id);
+    const membership = (await store.list('members', { org_id: orgId, user_id: userId })).find((member) => !member.disabled_at);
+    if (membership?.github_login) await store.update('members', membership.id, { github_login: null });
+    return { unlinked: rows.length > 0 };
   }
 
   async function repositories({ userId, orgId, installationId }) {
@@ -599,5 +633,5 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     }
   }
 
-  return { startLink, finishLink, installations, repositories, connect, sync, webhook };
+  return { startLink, finishLink, installations, linkedAccount, unlink, installUrl, repositories, connect, sync, webhook };
 }

@@ -100,7 +100,7 @@ Any repository can be connected, not only this one.
 
 1. Create a GitHub App (callback `<PUBLIC_APP_URL>/api/github/callback`, webhook `<PUBLIC_APP_URL>/api/github/webhook`) with read access to metadata, contents, issues and pull requests, subscribed to `push`, `pull_request` and `issues`. Set the environment variables above and redeploy.
 2. Install the app on the account or organization that owns the repository, choosing the repository (or all repositories). Install it again for each additional owner.
-3. In the workspace open **GitHub**, link your GitHub account, pick the installation and repository, and connect. Then sync.
+3. In the workspace open **GitHub** and click **Connect GitHub**. GitHub always asks which account to use. If the app is not installed on that account yet, you land on its install page; choose the repositories, install, and come back. Pick the repository, connect, then sync. **Use a different GitHub account** unlinks the current one first.
 4. If the repository is not covered by an installation, connecting returns a clear error with the install link (when `GITHUB_APP_SLUG` is set). A repository your linked GitHub account can read (for example a public one) can still be connected without an installation by sending only `full_name`; it syncs with your own token and does not receive webhooks, so sync it manually.
 5. To switch projects, disconnect the repository (this deletes the sources synced from it) or reset the workspace's data, then connect another one. Re-connecting the same repository and re-syncing never duplicates data.
 

@@ -165,6 +165,14 @@ export async function getGithubInstallationRepos(orgId, installationId) {
   return request(`/api/orgs/${encodeURIComponent(orgId)}/github/installations/${encodeURIComponent(installationId)}/repositories`);
 }
 
+export async function getGithubAccount(orgId) {
+  return request(`/api/orgs/${encodeURIComponent(orgId)}/github/account`);
+}
+
+export async function unlinkGithubAccount(orgId) {
+  return request(`/api/orgs/${encodeURIComponent(orgId)}/github/account`, { method: 'DELETE' });
+}
+
 // installationId is optional: the server can resolve the installation from the repository name.
 export async function connectRepo(orgId, installationId, fullName) {
   const body = { fullName, full_name: fullName };
