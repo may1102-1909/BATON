@@ -13,7 +13,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "baton": "node mcp-server/dist/cli.js",
-    "test": "node --test tests/backend.test.js tests/github.test.js tests/handover.test.js tests/demo.test.js tests/mcp-integration.test.js",
+    "test": "node --test tests/backend.test.js tests/github.test.js tests/handover.test.js tests/demo.test.js tests/round3.test.js tests/mcp-integration.test.js",
     "build:mcp": "npm --prefix mcp-server run build",
     "start:mcp": "npm --prefix mcp-server start"
   },

@@ -1,9 +1,12 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, sign, timingSafeEqual } from 'node:crypto';
+import { audienceFromPaths } from './audience.js';
+import { filesOf } from './risk.js';
 import { redactData } from './redact.js';
 
 const API_URL = 'https://api.github.com';
 const API_VERSION = '2022-11-28';
 const STATE_TTL_MS = 10 * 60 * 1000;
+const COMMIT_DETAIL_LIMIT = 30;
 
 function required(env, name) {
   const value = env[name];
@@ -147,7 +150,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       author_login: source.author_login ?? null,
       type: source.type,
       content: (source.content ?? '').slice(0, 100_000),
-      metadata: source.metadata ?? {},
+      metadata: { ...(source.metadata ?? {}), audience: source.metadata?.audience ?? audienceFromPaths(filesOf(source)) },
       external_id: source.external_id,
       url: source.url ?? null,
       created_at: asDate(source.created_at),
@@ -346,6 +349,54 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     return store.insert('repositories', { ...data, last_synced_at: null });
   }
 
+  // File lists feed module ownership; reuse stored ones and never fail a sync because details are unavailable.
+  async function commitFiles(repository, record, token, repoPath, sha) {
+    try {
+      const [known] = await store.list('sources', { org_id: repository.org_id, repository_id: repository.id, external_id: record.external_id });
+      if (Array.isArray(known?.metadata?.files) && known.metadata.files.length) return known.metadata.files;
+      const detail = await request(`/repos/${repoPath}/commits/${sha}`, { token });
+      return (detail?.files ?? []).slice(0, 100).map((file) => ({ filename: file.filename, status: file.status }));
+    } catch {
+      return [];
+    }
+  }
+
+  // Only branches ahead of the default branch are kept; a branch that was merged is refreshed to ahead_by 0.
+  async function syncBranch(repository, token, repoPath, base, branch) {
+    const compared = await request(`/repos/${repoPath}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch.name)}`, { token });
+    const externalId = `github:${repository.full_name}:branch:${branch.name}`;
+    const ahead = Number(compared?.ahead_by) || 0;
+    const [known] = await store.list('sources', { org_id: repository.org_id, repository_id: repository.id, external_id: externalId });
+    if (!ahead && !known) return false;
+    const last = compared?.commits?.at?.(-1) ?? {};
+    await upsertSource(repository, {
+      external_id: externalId, author_login: last.author?.login ?? last.commit?.author?.name ?? null, type: 'branch',
+      content: `Branch ${branch.name}: ${ahead} ahead, ${Number(compared?.behind_by) || 0} behind ${base}`,
+      url: `https://github.com/${repository.full_name}/tree/${encodeURIComponent(branch.name)}`, created_at: last.commit?.author?.date,
+      metadata: {
+        kind: 'branch', name: branch.name, base, ahead_by: ahead, behind_by: Number(compared?.behind_by) || 0,
+        sha: branch.commit?.sha ?? last.sha ?? null, repository: repository.full_name,
+        last_commit: { sha: last.sha ?? null, message: String(last.commit?.message ?? '').split('\n')[0], date: last.commit?.author?.date ?? null, author_login: last.author?.login ?? null },
+        files: (compared?.files ?? []).slice(0, 100).map((file) => ({ filename: file.filename })),
+      },
+    });
+    return ahead > 0;
+  }
+
+  async function syncBranches(repository, token, repoPath) {
+    try {
+      const base = (await request(`/repos/${repoPath}`, { token }))?.default_branch;
+      if (!base) return 0;
+      let ahead = 0;
+      for (const branch of (await paginate(`/repos/${repoPath}/branches`, token)).filter((item) => item.name !== base)) {
+        try { if (await syncBranch(repository, token, repoPath, base, branch)) ahead += 1; } catch { /* one unreadable branch must not stop the rest */ }
+      }
+      return ahead;
+    } catch {
+      return 0;
+    }
+  }
+
   async function sync({ repository, actorId }) {
     if (!repository?.id || !repository.org_id || !repository.full_name || !repository.installation_id) {
       throw new TypeError('A connected repository record is required');
@@ -359,8 +410,10 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     let commits = 0, pullRequests = 0, issues = 0;
     const repoPath = repositoryPath(fullName);
     const commitList = await paginate(`/repos/${repoPath}/commits`, token);
-    for (const commit of commitList) {
-      await upsertSource(current, commitSource(current, commit));
+    for (const [index, commit] of commitList.entries()) {
+      const record = commitSource(current, commit);
+      if (index < COMMIT_DETAIL_LIMIT) record.metadata.files = await commitFiles(current, record, token, repoPath, commit.sha);
+      await upsertSource(current, record);
       commits += 1;
     }
     const prs = await paginate(`/repos/${repoPath}/pulls?state=all&sort=updated&direction=desc`, token);
@@ -374,8 +427,9 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       await upsertSource(current, issueSource(current, issue));
       issues += 1;
     }
+    const branches = await syncBranches(current, token, repoPath);
     await store.update('repositories', current.id, { last_synced_at: new Date().toISOString() });
-    return { commits, pullRequests, issues, actorId: actorId ?? null };
+    return { commits, pullRequests, issues, ...(branches ? { branches } : {}), actorId: actorId ?? null };
   }
 
   function verifyWebhook(rawBody, headers) {
@@ -429,6 +483,13 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
             sender: actor.login ?? null },
         });
         count += 1;
+      }
+      const pushed = typeof payload.ref === 'string' && payload.ref.startsWith('refs/heads/') ? payload.ref.slice('refs/heads/'.length) : null;
+      const base = payload.repository?.default_branch;
+      if (pushed && base && pushed !== base && !payload.deleted && repo.installation_id) {
+        try {
+          await syncBranch(repo, await installationToken(repo.installation_id), repositoryPath(name), base, { name: pushed, commit: { sha: payload.after } });
+        } catch { /* the branch is refreshed again on the next sync */ }
       }
     } else if (event === 'pull_request' && payload.pull_request) {
       await upsertSource(repo, pullRequestSource(repo, payload.pull_request, []));

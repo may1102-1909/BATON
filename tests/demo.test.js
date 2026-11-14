@@ -72,3 +72,35 @@ test('oversized or empty demo state is rejected', async () => {
   assert.equal((await call(seed, 'demo-admin', 'GET', '/api/me')).status, 413);
   assert.equal((await call({}, 'demo-admin', 'GET', '/api/me')).status, 400);
 });
+
+test('the demo shows a deadline conflict, bus-factor alerts, a top-risk question and role-hidden items through the real engine', async () => {
+  const seed = getInitialDemoState();
+  assert.ok(seed.tasks.every(task => /^\[SAMPLE\]/.test(task.title)) && seed.task_comments.every(item => /^\[SAMPLE\]/.test(item.content)));
+  const started = await call(seed, 'demo-admin', 'POST', '/api/orgs/demo-org/handovers', { leaverId: 'demo-leaver', incomingId: 'demo-incoming' });
+  const top = started.body.questions[0];
+  assert.match(top.question_text, /only recorded contributor to src\/webhooks/);
+  assert.ok(top.risk_score >= 40 && top.risk_reasons.length);
+  const generated = await call(started.state, 'demo-admin', 'POST', `/api/handovers/${started.body.handover.id}/generate`);
+  const detail = await call(generated.state, 'demo-admin', 'GET', `/api/handovers/${started.body.handover.id}`);
+  assert.equal(detail.body.conflicts.length, 1);
+  assert.deepEqual(detail.body.conflicts[0].sides.map(side => side.date), ['2026-11-10', '2026-11-15']);
+  const risks = await call(generated.state, 'demo-admin', 'GET', '/api/orgs/demo-org/risks');
+  assert.ok(risks.body.alerts.length >= 1 && risks.body.modules.length && risks.body.matrix.cells.length);
+  assert.ok(risks.body.alerts.some(alert => alert.module === 'src/webhooks'));
+
+  let state = generated.state;
+  for (const claim of detail.body.claims) {
+    const response = claim.conflict
+      ? await call(state, 'demo-admin', 'POST', `/api/handovers/${started.body.handover.id}/conflicts/${claim.id}/resolve`, { resolution: 'Use 15 Nov.' })
+      : await call(state, 'demo-admin', 'PATCH', `/api/handovers/${started.body.handover.id}/claims/${claim.id}`, { status: 'approved' });
+    assert.equal(response.status, 200);
+    state = response.state;
+  }
+  const approved = await call(state, 'demo-admin', 'POST', `/api/handovers/${started.body.handover.id}/approve`);
+  assert.equal(approved.status, 200);
+  const incomingView = await call(approved.state, 'demo-incoming', 'GET', `/api/handovers/${started.body.handover.id}`);
+  assert.equal(incomingView.status, 200);
+  assert.ok(incomingView.body.hidden_count >= 1);
+  assert.doesNotMatch(JSON.stringify(incomingView.body), /Terraform state/);
+  assert.equal(hasEmail([detail, risks, incomingView]), false);
+});

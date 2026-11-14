@@ -2,8 +2,8 @@
 // answered by the real engine through POST /api/demo (server/demo.js), which keeps nothing and uses no credentials.
 import snapshot from './demoSnapshot.json' with { type: 'json' }
 
-const STORAGE_KEY = 'baton_demo_state_v2'
-const LEGACY_STORAGE_KEY = 'baton_demo_state'
+const STORAGE_KEY = 'baton_demo_state_v3'
+const LEGACY_STORAGE_KEY = 'baton_demo_state_v2'
 const ORG_ID = 'demo-org'
 const REPO_ID = 'demo-repo'
 const DEMO_INSTALLATION_ID = 'demo-installation'
@@ -23,7 +23,7 @@ export function sourcesFromSnapshot(data, repoId = REPO_ID) {
     sources.push({
       ...common, id: `gh-commit-${commit.sha.slice(0, 12)}`, external_id: `github:${repo}:commit:${commit.sha}`,
       author_login: commit.author_login, type: 'commit', content: String(commit.message ?? '').slice(0, 500), url: commit.url,
-      metadata: { kind: 'commit', sha: commit.sha, author_login: commit.author_login, url: commit.url, repository: repo, ...(commit.files ? { files: toFiles(commit.files) } : {}) },
+      metadata: { kind: 'commit', sha: commit.sha, author_login: commit.author_login, url: commit.url, repository: repo, audience: ['all'], ...(commit.files ? { files: toFiles(commit.files) } : {}) },
       created_at: commit.date
     })
   }
@@ -33,7 +33,7 @@ export function sourcesFromSnapshot(data, repoId = REPO_ID) {
       author_login: pr.author_login, type: 'pull_request', content: `PR #${pr.number}: ${pr.title}`, url: pr.url,
       metadata: {
         kind: 'pull_request', number: pr.number, title: pr.title, state: pr.state, merged: Boolean(pr.merged), head: pr.head,
-        base_ref: pr.base, author_login: pr.author_login, url: pr.url, repository: repo, ...(pr.files ? { files: toFiles(pr.files) } : {})
+        base_ref: pr.base, author_login: pr.author_login, url: pr.url, repository: repo, audience: ['all'], ...(pr.files ? { files: toFiles(pr.files) } : {})
       },
       created_at: pr.created_at
     })
@@ -42,7 +42,7 @@ export function sourcesFromSnapshot(data, repoId = REPO_ID) {
     sources.push({
       ...common, id: `gh-branch-${branch.name}`, external_id: `github:${repo}:branch:${branch.name}`, author_login: null,
       type: 'branch', content: `Branch ${branch.name}: ${branch.ahead_by} ahead, ${branch.behind_by} behind ${branch.base}`,
-      metadata: { kind: 'branch', name: branch.name, base: branch.base, ahead_by: branch.ahead_by, behind_by: branch.behind_by, sha: branch.sha, repository: repo },
+      metadata: { kind: 'branch', name: branch.name, base: branch.base, ahead_by: branch.ahead_by, behind_by: branch.behind_by, sha: branch.sha, repository: repo, audience: ['all'] },
       created_at: data.generated_at
     })
   }
@@ -77,7 +77,7 @@ export function getInitialDemoState() {
   const members = [
     member('m-admin', 'demo-admin', 'May (Admin)', 'admin', ADMIN_LOGIN),
     member('m-leaver', 'demo-leaver', `${DEMO_PERSONAS[1].name} (Leaving)`, 'member', people.leaver),
-    member('m-incoming', 'demo-incoming', `${DEMO_PERSONAS[2].name} (Incoming)`, 'member', people.incoming)
+    { ...member('m-incoming', 'demo-incoming', `${DEMO_PERSONAS[2].name} (Incoming)`, 'member', people.incoming), function_role: 'backend' }
   ]
   const idFor = login => members.find(item => item.github_login === login)?.user_id ?? null
   const sources = sourcesFromSnapshot(snapshot)
@@ -120,6 +120,16 @@ export function getInitialDemoState() {
       id: 'sample-blocker', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, type: 'blocker', visibility: 'team', created_at: now,
       content: '[SAMPLE] Release waits for a review of the handover generation fallback.',
       metadata: { status: 'active', problem: '[SAMPLE] Handover fallback needs review', workaround_notes: 'Evidence-only mode is used until a model key is configured.' }
+    },
+    ...[['queue', ['src/webhooks/queue.js', 'src/webhooks/retry.js']], ['backoff', ['src/webhooks/retry.js']], ['signing', ['src/webhooks/signing.js']]].map(([name, files]) => ({
+      id: `sample-commit-${name}`, org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, type: 'commit', visibility: 'team', created_at: now,
+      content: `[SAMPLE] Webhook delivery ${name} work (only the leaving engineer has touched src/webhooks).`,
+      metadata: { kind: 'commit', sha: `sample${name}`, author_login: people.leaver, repository: snapshot.repository, files: toFiles(files), audience: ['all'] }
+    })),
+    {
+      id: 'sample-infra-blocker', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(ADMIN_LOGIN), author_login: ADMIN_LOGIN, type: 'blocker', visibility: 'team', created_at: now,
+      content: '[SAMPLE] Infra-only: the staging cluster certificate expires soon and only the Terraform state bucket credentials can rotate it.',
+      metadata: { status: 'active', problem: '[SAMPLE] Infra-only certificate rotation', audience: ['infra'] }
     }
   )
 
@@ -130,7 +140,11 @@ export function getInitialDemoState() {
     sources,
     tasks: [{
       id: 'sample-task', org_id: ORG_ID, title: '[SAMPLE] Walk the incoming engineer through server/ and mcp-server/', description: 'Sample task for the handover story.',
-      assignee_id: 'demo-leaver', created_by: 'demo-admin', status: 'open', due_at: '2026-11-20', created_at: SEED_DATE
+      assignee_id: 'demo-leaver', created_by: 'demo-admin', status: 'open', due_at: '2026-11-10', created_at: SEED_DATE
+    }],
+    task_comments: [{
+      id: 'sample-comment', org_id: ORG_ID, task_id: 'sample-task', author_id: 'demo-admin', parent_id: null, created_at: SEED_DATE,
+      content: '[SAMPLE] Walkthrough moved to 15 Nov because the review slipped.'
     }],
     handovers: []
   }
@@ -140,6 +154,7 @@ export function loadDemoState() {
   if (typeof window === 'undefined') return getInitialDemoState()
   try {
     localStorage.removeItem(LEGACY_STORAGE_KEY)
+    localStorage.removeItem('baton_demo_state')
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch (err) {
