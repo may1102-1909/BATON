@@ -30,6 +30,10 @@
 
 .ws-logo-wrap {
   display: flex;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
   align-items: center;
   gap: 10px;
   text-decoration: none;
@@ -548,3 +552,36 @@
 
 .ws-packet { max-width: 960px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
 .ws-muted { color: var(--muted, #999ba5); font-size: 0.85rem; }
+
+/* Accessibility and shared helpers */
+.ws-modal-title { margin: 0; }
+.ws-card-title { margin: 0; }
+h1.ws-page-title { margin: 0; }
+.ws-btn:focus-visible, .ws-tab-btn:focus-visible, .ws-filter-pill:focus-visible, .ws-client-btn:focus-visible, .ws-input:focus-visible, .ws-org-select:focus-visible {
+  outline: 2px solid var(--green, #34d399);
+  outline-offset: 2px;
+}
+.ws-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+
+/* Checklist */
+.ws-checklist-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ws-checklist-item { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 0.9rem; }
+.ws-checklist-item .ws-badge { min-width: 52px; justify-content: center; }
+
+/* Repositories */
+.ws-repo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.ws-repo-row { background: #131417; border: 1px solid var(--line, #27282d); border-radius: 6px; padding: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ws-repo-name { font-size: 1rem; font-weight: 600; color: #fff; }
+.ws-evidence-row { background: #121316; border: 1px solid var(--line, #27282d); border-radius: 6px; padding: 12px; font-size: 0.85rem; }
+.ws-status-tile { background: #131417; padding: 14px; border-radius: 6px; border: 1px solid var(--line, #27282d); }
+.ws-client-btn { background: #14161a; color: #a3a9b6; border: 1px solid var(--line, #27282d); border-radius: 6px; padding: 6px 12px; font-size: 0.78rem; cursor: pointer; font-family: monospace; }
+.ws-client-btn.active { background: #1e2430; color: #34d399; border-color: #2a4d3d; font-weight: 600; }
+
+/* Settings */
+.ws-settings-block { display: flex; flex-direction: column; gap: 8px; padding: 16px 0; border-top: 1px solid var(--line, #27282d); }
+.ws-settings-block:first-of-type { border-top: 0; padding-top: 0; }
+.ws-settings-title { font-weight: 600; color: #fff; }
+.ws-danger-zone .ws-settings-title { color: #fca5a5; }
+.ws-scope-fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ws-scope-option { display: flex; gap: 10px; align-items: flex-start; font-size: 0.85rem; cursor: pointer; }
+.ws-scope-option input { margin-top: 3px; }

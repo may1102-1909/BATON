@@ -8,7 +8,7 @@ test('admin resolves the conflict and approves; incoming engineer acknowledges a
   await expect(alerts.getByRole('button', { name: /^Start handover for/ }).first()).toBeVisible();
   await expect(page.getByRole('table')).toContainText('Bus factor');
 
-  await page.getByRole('button', { name: /^Handovers/ }).click();
+  await page.getByRole('tab', { name: /^Handovers/ }).click();
   await page.getByRole('button', { name: /^Handover .*\(draft\)/ }).click();
 
   // The top question is the single-contributor module, with its score and reason.
@@ -35,7 +35,7 @@ test('admin resolves the conflict and approves; incoming engineer acknowledges a
   await expect(page.getByText('Status: APPROVED')).toBeVisible();
 
   await page.getByRole('button', { name: /Incoming engineer/ }).click();
-  await page.getByRole('button', { name: /^Handovers/ }).click();
+  await page.getByRole('tab', { name: /^Handovers/ }).click();
   await page.getByRole('button', { name: /^Handover .*\(approved\)/ }).click();
   await page.getByRole('button', { name: 'Open packet' }).click();
   await expect(page.getByText(/items? hidden for your role/)).toBeVisible();

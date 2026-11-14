@@ -1,6 +1,6 @@
 # Baton MCP server
 
-The MCP stdio server gives agents repository-scoped continuity tools: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `github_activity`, `get_exit_interview`, and `answer_exit_question`. It sends data only to the configured Baton API; there is no pretend offline success or local event queue.
+The MCP stdio server gives agents repository-scoped continuity tools, ten in total: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `get_file_context`, `sync_history`, `github_activity`, `get_exit_interview`, and `answer_exit_question`. It sends data only to the configured Baton API; there is no pretend offline success or local event queue.
 
 ## Configure and start
 

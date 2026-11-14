@@ -219,3 +219,190 @@ test('webhooks use timing-safe signatures, ignore disconnected repositories, and
   assert.equal(store.rows('sources')[0].metadata.head_sha, 'def456');
   assert.equal(store.rows('github_deliveries').length, 2);
 });
+
+// ---- Connecting repositories other than the first one ----
+
+const SLUG_ENV = { GITHUB_APP_SLUG: 'baton-app' };
+function linkedStore(env, extra = {}) {
+  return makeStore({
+    github_accounts: [{ id: 'account-1', user_id: 'u1', org_id: 'o1', access_token_encrypted: encryptTokenForTest('user-token', Buffer.from(env.TOKEN_ENCRYPTION_KEY, 'base64')) }],
+    ...extra,
+  });
+}
+const pageOf = (url) => Number(new URL(url).searchParams.get('page') ?? 1);
+const commitFor = (sha) => ({ sha, html_url: 'https://github.com/x', author: { id: 1, login: 'a' }, commit: { message: 'm', author: { date: '2024-01-01T00:00:00Z' } } });
+
+test('connect finds the installation by itself, across accounts and more than 100 repositories', async () => {
+  const env = environment();
+  const store = linkedStore(env);
+  const asked = [];
+  const github = createGithub({ store, env, fetchImpl: async (url) => {
+    const { pathname } = new URL(url);
+    if (pathname === '/user/installations') return json({ installations: [{ id: 1, account: { login: 'me' } }, { id: 2, account: { login: 'BigOrg' } }] });
+    asked.push(pathname);
+    if (pathname === '/user/installations/1/repositories') return json({ repositories: [{ full_name: 'me/own' }] });
+    if (pathname === '/user/installations/2/repositories') {
+      return json({ repositories: pageOf(url) === 1 ? Array.from({ length: 100 }, (_, index) => ({ full_name: `bigorg/r${index}` })) : [{ full_name: 'bigorg/target' }] });
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  } });
+  const repository = await github.connect({ userId: 'u1', orgId: 'o1', fullName: 'BigOrg/Target' });
+  assert.equal(repository.installation_id, '2');
+  assert.equal(repository.access, 'installation');
+  assert.equal(asked[0], '/user/installations/2/repositories');
+  assert.equal(store.rows('repositories').length, 1);
+});
+
+test('installations and repositories are paginated beyond one page', async () => {
+  const env = environment();
+  const github = createGithub({ store: linkedStore(env), env, fetchImpl: async (url) => {
+    const { pathname } = new URL(url);
+    const page = pageOf(url);
+    if (pathname === '/user/installations') return json({ installations: page === 1 ? Array.from({ length: 100 }, (_, id) => ({ id: id + 1, account: { login: `a${id}`, type: 'User' } })) : [{ id: 101, account: { login: 'last', type: 'Organization' } }] });
+    if (pathname === '/user/installations/7/repositories') return json({ repositories: page === 1 ? Array.from({ length: 100 }, (_, index) => ({ full_name: `x/r${index}` })) : Array.from({ length: 20 }, (_, index) => ({ full_name: `x/s${index}` })) });
+    throw new Error(`Unexpected URL ${url}`);
+  } });
+  const installations = await github.installations({ userId: 'u1', orgId: 'o1' });
+  assert.equal(installations.length, 101);
+  assert.equal(installations.at(-1).account.login, 'last');
+  assert.equal((await github.repositories({ userId: 'u1', orgId: 'o1', installationId: 7 })).length, 120);
+});
+
+test('a repository the app is not installed on and the user cannot read gets an actionable error with the install link', async () => {
+  const env = environment(SLUG_ENV);
+  const github = createGithub({ store: linkedStore(env), env, fetchImpl: async (url) => {
+    const { pathname } = new URL(url);
+    if (pathname === '/user/installations') return json({ installations: [{ id: 1, account: { login: 'me' } }] });
+    if (pathname === '/user/installations/1/repositories') return json({ repositories: [{ full_name: 'me/own' }] });
+    if (pathname === '/repos/acme/secret') return json({ message: 'Not Found' }, 404);
+    throw new Error(`Unexpected URL ${url}`);
+  } });
+  const installUrl = 'https://github.com/apps/baton-app/installations/new';
+  await assert.rejects(github.connect({ userId: 'u1', orgId: 'o1', fullName: 'acme/secret' }), (error) => /not found or the linked GitHub account cannot read it/.test(error.message) && error.message.includes(installUrl));
+  await assert.rejects(github.connect({ userId: 'u1', orgId: 'o1', installationId: 1, fullName: 'acme/secret' }), (error) => /not accessible/.test(error.message) && error.message.includes(installUrl));
+  const noSlug = environment();
+  const plain = createGithub({ store: linkedStore(noSlug), env: noSlug, fetchImpl: async (url) => new URL(url).pathname === '/user/installations' ? json({ installations: [] }) : json({ message: 'Not Found' }, 404) });
+  await assert.rejects(plain.connect({ userId: 'u1', orgId: 'o1', fullName: 'acme/secret' }), (error) => /Install the GitHub App/.test(error.message) && !error.message.includes('github.com/apps'));
+});
+
+test('without an installation the linked user token connects and syncs a readable repository, and is never leaked', async () => {
+  const env = environment(SLUG_ENV);
+  const store = linkedStore(env);
+  const seen = [];
+  const logged = [];
+  const originals = ['log', 'warn', 'error', 'info'].map((name) => [name, console[name]]);
+  for (const [name] of originals) console[name] = (...args) => logged.push(args.join(' '));
+  try {
+    const github = createGithub({ store, env, fetchImpl: async (url, options = {}) => {
+      const parsed = new URL(url);
+      if (parsed.pathname.startsWith('/app/')) throw new Error('The app must not be used for a user-token repository');
+      seen.push([parsed.pathname, options.headers?.authorization]);
+      if (parsed.pathname === '/user/installations') return json({ installations: [] });
+      if (parsed.pathname === '/repos/octo/public') return json({ full_name: 'octo/public', private: false });
+      if (parsed.pathname === '/repos/octo/public/commits') return json([{ ...commitFor('a1'), commit: { message: 'Init', author: { date: '2024-01-01T00:00:00Z' } } }]);
+      if (parsed.pathname === '/repos/octo/public/commits/a1') return json({ files: [{ filename: 'README.md', status: 'added' }] });
+      if (parsed.pathname === '/repos/octo/public/pulls' || parsed.pathname === '/repos/octo/public/issues') return json([]);
+      if (parsed.pathname === '/repos/octo/public/branches') return json([{ name: 'main' }]);
+      throw new Error(`Unexpected URL ${url}`);
+    } });
+    const repository = await github.connect({ userId: 'u1', orgId: 'o1', fullName: 'Octo/Public' });
+    assert.equal(repository.access, 'user');
+    const stored = store.rows('repositories')[0];
+    assert.equal(stored.installation_id, null);
+    await assert.rejects(github.sync({ repository: stored, actorId: 'stranger' }), /Link a GitHub account/);
+    const result = await github.sync({ repository: stored, actorId: 'u1' });
+    assert.deepEqual(result, { commits: 1, pullRequests: 0, issues: 0, actorId: 'u1' });
+    assert.equal(store.rows('sources')[0].metadata.files[0].filename, 'README.md');
+    assert.equal(seen.filter(([path]) => path.startsWith('/repos/')).every(([, authorization]) => authorization === 'Bearer user-token'), true);
+  } finally {
+    for (const [name, original] of originals) console[name] = original;
+  }
+  assert.equal(logged.some((line) => line.includes('user-token')), false);
+  assert.equal(JSON.stringify(store.rows('repositories')).includes('user-token'), false);
+});
+
+test('connecting several repositories is idempotent and never duplicates legacy mixed-case rows', async () => {
+  const env = environment();
+  const store = linkedStore(env, { repositories: [{ id: 'legacy', org_id: 'o1', full_name: 'Acme/Beta', installation_id: '9' }] });
+  const github = createGithub({ store, env, fetchImpl: async (url) => {
+    const { pathname } = new URL(url);
+    if (pathname === '/user/installations') return json({ installations: [{ id: 5, account: { login: 'acme' } }] });
+    if (pathname === '/user/installations/5/repositories') return json({ repositories: [{ full_name: 'acme/alpha' }, { full_name: 'acme/beta' }] });
+    throw new Error(`Unexpected URL ${url}`);
+  } });
+  const alpha = await github.connect({ userId: 'u1', orgId: 'o1', installationId: 5, fullName: 'acme/alpha' });
+  const beta = await github.connect({ userId: 'u1', orgId: 'o1', installationId: 5, fullName: 'ACME/BETA' });
+  const alphaAgain = await github.connect({ userId: 'u1', orgId: 'o1', installationId: 5, fullName: 'acme/alpha' });
+  assert.equal(alphaAgain.id, alpha.id);
+  assert.equal(beta.id, 'legacy');
+  assert.equal(store.rows('repositories').length, 2);
+  assert.deepEqual(store.rows('repositories').map((row) => row.full_name).sort(), ['acme/alpha', 'acme/beta']);
+});
+
+function routedFetch(overrides = {}) {
+  return async (url) => {
+    const parsed = new URL(url);
+    for (const [suffix, handler] of Object.entries(overrides)) if (parsed.pathname.endsWith(suffix)) return handler(parsed);
+    if (parsed.pathname === '/app/installations/41/access_tokens') return json({ token: 'install-token' });
+    if (/\/(commits|pulls|issues|branches)$/.test(parsed.pathname)) return json([]);
+    if (/^\/repos\/[^/]+\/[^/]+$/.test(parsed.pathname)) return json({ default_branch: 'main' });
+    throw new Error(`Unexpected URL ${url}`);
+  };
+}
+
+test('sync tolerates an empty repository and disabled issues, and keeps each repository separate', async () => {
+  const one = { id: 'r1', org_id: 'org-1', full_name: 'acme/one', installation_id: '41' };
+  const two = { id: 'r2', org_id: 'org-1', full_name: 'acme/two', installation_id: '41' };
+  const store = makeStore({ repositories: [one, two] });
+  const github = createGithub({ store, env: environment(), fetchImpl: routedFetch({
+    '/repos/acme/one/commits': () => json({ message: 'Git Repository is empty.' }, 409),
+    '/repos/acme/one/issues': () => json({ message: 'Issues are disabled for this repo' }, 410),
+    '/repos/acme/two/commits': () => json([commitFor('same-sha')]),
+    '/commits/same-sha': () => json({ files: [] }),
+  }) });
+  assert.deepEqual(await github.sync({ repository: one, actorId: 'a' }), { commits: 0, pullRequests: 0, issues: 0, actorId: 'a' });
+  assert.equal((await github.sync({ repository: two, actorId: 'a' })).commits, 1);
+  await github.sync({ repository: two, actorId: 'a' });
+  assert.equal(store.rows('sources').length, 1);
+  assert.equal(store.rows('sources')[0].repository_id, 'r2');
+});
+
+test('sync reads at most 300 commits and reports truncation', async () => {
+  const repository = { id: 'r1', org_id: 'org-1', full_name: 'acme/big', installation_id: '41' };
+  const store = makeStore({ repositories: [repository] });
+  const listing = routedFetch({
+    '/repos/acme/big/commits': (parsed) => json(Array.from({ length: 100 }, (_, index) => commitFor(`p${parsed.searchParams.get('page')}-${index}`))),
+  });
+  const github = createGithub({ store, env: environment(), fetchImpl: async (url, options) => /\/commits\/p\d+-\d+$/.test(new URL(url).pathname) ? json({ files: [] }) : listing(url, options) });
+  const result = await github.sync({ repository, actorId: 'a' });
+  assert.equal(result.commits, 300);
+  assert.equal(result.truncated, true);
+  assert.equal(store.rows('sources').length, 300);
+});
+
+test('a removed installation or renamed repository produces a readable sync error', async () => {
+  const repository = { id: 'r1', org_id: 'org-1', full_name: 'acme/gone', installation_id: '41' };
+  const store = makeStore({ repositories: [repository] });
+  const removed = createGithub({ store, env: environment(SLUG_ENV), fetchImpl: async () => json({ message: 'Not Found' }, 404) });
+  await assert.rejects(removed.sync({ repository, actorId: 'a' }), (error) => /GitHub App is not installed/.test(error.message) && error.message.includes('github.com/apps/baton-app/installations/new'));
+  const renamed = createGithub({ store, env: environment(), fetchImpl: async (url) => new URL(url).pathname.startsWith('/app/') ? json({ token: 't' }) : json({ message: 'Not Found' }, 404) });
+  await assert.rejects(renamed.sync({ repository, actorId: 'a' }), /GitHub could not find acme\/gone/);
+});
+
+test('webhooks update every organization that connected the repository and keep stored PR files', async () => {
+  const store = makeStore({ repositories: [
+    { id: 'r1', org_id: 'org-1', full_name: 'acme/shared', installation_id: '41' },
+    { id: 'r2', org_id: 'org-2', full_name: 'acme/shared', installation_id: '41' },
+    { id: 'r3', org_id: 'org-3', full_name: 'acme/shared', installation_id: '99' },
+    { id: 'r4', org_id: 'org-4', full_name: 'acme/shared', installation_id: null },
+  ], sources: [{ id: 'old', org_id: 'org-1', repository_id: 'r1', external_id: 'github:acme/shared:pull_request:5', type: 'pull_request', metadata: { files: [{ filename: 'src/a.js' }] } }] });
+  const github = createGithub({ store, env: environment(), fetchImpl: async () => { throw new Error('No network expected'); } });
+  const rawBody = JSON.stringify({ repository: { full_name: 'acme/shared' }, installation: { id: 41 }, sender: { login: 'x' },
+    pull_request: { number: 5, title: 'PR', body: 'B', state: 'open', created_at: '2024-02-01T00:00:00Z', html_url: 'https://github.com/acme/shared/pull/5', user: { id: 9, login: 'author' } } });
+  const headers = { 'x-hub-signature-256': `sha256=${createHmac('sha256', 'webhook-secret').update(rawBody).digest('hex')}`, 'x-github-delivery': 'd-1', 'x-github-event': 'pull_request' };
+  assert.deepEqual(await github.webhook({ rawBody, headers }), { processed: true, count: 2 });
+  const sources = store.rows('sources');
+  assert.deepEqual(sources.map((source) => source.org_id).sort(), ['org-1', 'org-2']);
+  assert.equal(sources.find((source) => source.org_id === 'org-1').metadata.files[0].filename, 'src/a.js');
+  assert.equal(sources.length, 2);
+});
