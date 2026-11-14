@@ -7,7 +7,7 @@ flowchart TD
     A[AI Coding Agent / Engineer] -->|Stdio MCP| B[Baton Local MCP Server]
     B -->|Client-side Redaction| C[Baton REST API]
     D[GitHub App Webhooks] -->|HMAC Verified Push/PR| C
-    C -->|Store Abstraction| E[(Supabase Postgres / In-Memory Demo Store)]
+    C -->|Store Abstraction| E[(Supabase Postgres / in-memory store for tests and demo)]
     C -->|Handover Domain Engine| F[Knowledge Gaps & Grounded Claims]
     F -->|Review / Approve / Acknowledge| G[Interactive Product Workspace]
     G -->|Cited Q&A Engine| H[Newcomer Engineer]
@@ -18,27 +18,33 @@ flowchart TD
 ## 🏛️ Core Architectural Pillars
 
 ### 1. Dual-Mode Store Abstraction (`server/store.js`)
-- **Production Mode**: Backed by Supabase PostgreSQL with Row-Level Security (RLS). Enforces organization isolation, membership checks, and visibility tiers (`team`, `admin`, `private`).
-- **Demo Mode**: Fully self-contained in-memory store preseeded with synthetic developer history (`server/demo.js`). Allows instant local and hackathon evaluation without external cloud dependencies.
+- **Production Mode**: Backed by Supabase PostgreSQL. The API uses the service-role key and enforces organization isolation, membership checks and visibility tiers (`team`, `admin`, `private`) itself; the schema also enables RLS for direct client access.
+- **Demo**: `/demo-page` keeps its state in the browser and answers every call with the real engine through `POST /api/demo` (`server/demo.js`) and a bundled synthetic snapshot; it needs no credentials and never touches production data. `BATON_DEMO_MODE=true` swaps Supabase for a seeded in-memory store and exists for tests and offline use only.
 
 ### 2. Client-Side Secret Redaction (`server/redact.js` & `mcp-server/src/redact.ts`)
-- Redacts high-entropy tokens, JWTs, private keys, database URLs, and environment variables before transmission to any network endpoint or storage layer.
+- Pattern- and entropy-based redaction of tokens, JWTs, private keys, database URLs and environment variables before data leaves the MCP client and again before the server stores it. It reduces, but cannot eliminate, the chance of a secret being stored.
 - Shannon entropy threshold (>= 4.5) catches random credentials and API keys.
 
 ### 3. Grounded Handover Domain Engine (`server/handover.js`)
 - **Gap Detection**: Identifies decisions lacking rationale or affected files, active blockers without workarounds, and unmerged ahead branches.
 - **Exit Interview Generation**: Synthesizes targeted questions for departing engineers to capture uncommitted context.
-- **Evidence-Based Claims**: Produces categorized claims with confidence ratings (`verified` with exact verbatim source evidence vs. `inferred`).
+- **Evidence-Based Claims**: Produces categorized claims with confidence ratings. Citations are validated against the supplied sources (unknown ids are dropped) and a claim is `verified` only when its text appears verbatim in a cited source; otherwise it is `inferred`. If Gemini is unavailable or returns invalid output, a deterministic evidence-only compiler is used and the result is labelled `evidence-only`.
 - **Cited Q&A**: Answers newcomer queries strictly grounded in approved handover evidence with direct citations.
 
 ### 4. Local Model Context Protocol (`mcp-server/`)
 - Integrates with modern AI agent harnesses (Antigravity, Cursor, Claude Desktop).
-- Implements tools: `log_decision`, `log_blocker`, `get_context`, `save_memory`, `bootstrap_project`, `get_github_activity`, `get_exit_interviews`, `answer_exit_question`.
+- Implements ten tools: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `get_file_context`, `sync_history`, `github_activity`, `get_exit_interview`, `answer_exit_question`.
 - Tracks incremental file snapshots with SHA-256 caching.
 
 ### 5. Product Frontend (`src/components/Workspace.jsx`)
-- 6 Interactive Tabs: Overview (continuous risk metrics), Memory & Decisions (searchable context feed), GitHub Integration (repo sync), Team & Tokens (RBAC & MCP tokens), Tasks (threaded discussions), Handovers (complete lifecycle & cited Q&A).
+- Workspace tabs: Overview (risk metrics), Memory & Decisions, GitHub (connect, sync, disconnect), Team & Tokens, Tasks, Handovers (lifecycle, cited Q&A, Markdown export), plus workspace settings (rename, reset, delete).
 
+
+## Workspace management and export
+
+Admin-only routes (never available to API tokens): `PATCH /api/orgs/:id` renames, `DELETE /api/orgs/:id` removes the organization and everything in it, `POST /api/orgs/:id/reset` removes memory (`scope: "sources"`) or memory plus tasks and handovers (`scope: "all"`), and `DELETE /api/orgs/:id/repositories/:repoId` disconnects a repository and the sources synced from it. Destructive organization routes require `confirm` to equal the exact organization name. Deletes are explicit per table, not database cascades; members, tokens, invites and the GitHub link survive a reset. `GET /api/handovers/:id/export.md` returns an approved handover as a Markdown attachment (claims by section with cited sources, resolved conflicts, known gaps; participants by GitHub login, never email) using the same visibility and audience filtering as the detail route.
+
+Search (`GET /api/collector/search`) re-checks every hit, vector or text, against source visibility and the caller's audience, because the database function `match_memory` does not filter by visibility.
 
 ## Round 3 handover intelligence
 
