@@ -96,6 +96,7 @@ export function GithubTab({ orgId, isDemo, isAdmin, health, outcome, repositorie
               outcome={outcome}
               connectedNames={repositories.map(repo => repo.full_name)}
               onConnected={onRefresh}
+              ownOnly={!isDemo}
             />
           </div>
         )}
