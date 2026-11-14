@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { handleDemoRequest } from './demo.js';
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const roles = new Set(['admin', 'member', 'team']);
@@ -99,7 +100,7 @@ function sourceVisible(source, actor) {
 }
 
 // GitHub's redirect cannot carry a bearer token; the one-use OAuth state identifies the user instead.
-const PUBLIC_PATHS = new Set(['/api/health', '/api/github/callback']);
+const PUBLIC_PATHS = new Set(['/api/health', '/api/github/callback', '/api/demo']);
 
 function githubCallbackReason(error) {
   const message = String(error?.message ?? '');
@@ -210,22 +211,14 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     const method = req.method ?? 'GET';
     let match;
 
+    if (method === 'POST' && url.pathname === '/api/demo') return json(res, 200, await handleDemoRequest(body, { createApp }));
+
     if (method === 'GET' && url.pathname === '/api/health') {
       const slug = String(configuration.GITHUB_APP_SLUG ?? '').trim();
       return json(res, 200, { ok: true, configured: { supabase: Boolean(configuration.SUPABASE_URL && configuration.SUPABASE_SERVICE_ROLE_KEY), github: Boolean(configuration.GITHUB_APP_ID && (configuration.GITHUB_APP_PRIVATE_KEY || configuration.GITHUB_PRIVATE_KEY)), demo: configuration.BATON_DEMO_MODE === 'true' }, githubInstallUrl: /^[a-z0-9-]+$/i.test(slug) ? `https://github.com/apps/${slug}/installations/new` : null });
     }
     if (method === 'GET' && url.pathname === '/api/me') {
-      let memberships = auth.memberships.filter(item => !item.disabled_at);
-      if (!auth.demo && memberships.length === 0 && auth.user?.id) {
-        const existingOrgs = await store.list('organizations');
-        let org = existingOrgs[0];
-        if (!org) {
-          org = await store.insert('organizations', { name: 'Mumbai_wale Hackathon Org', created_by: auth.user.id });
-        }
-        const newMember = await store.insert('members', { org_id: org.id, user_id: auth.user.id, role: 'admin', email: auth.user.email ?? null });
-        memberships = [newMember];
-        auth.memberships = [newMember];
-      }
+      const memberships = auth.memberships.filter(item => !item.disabled_at);
       const organizations = [];
       for (const member of memberships) {
         const organization = await store.get('organizations', member.org_id);

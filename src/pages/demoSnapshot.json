@@ -1,0 +1,1366 @@
+{
+ "repository": "may1102-1909/BATON",
+ "default_branch": "main",
+ "generated_at": "2026-11-14T03:45:32.379Z",
+ "contributors": [
+  {
+   "login": "may1102-1909",
+   "contributions": 52,
+   "type": "User"
+  },
+  {
+   "login": "renoschubert",
+   "contributions": 10,
+   "type": "User"
+  },
+  {
+   "login": "usehoplite[bot]",
+   "contributions": 1,
+   "type": "Bot"
+  }
+ ],
+ "commits": [
+  {
+   "sha": "617dfa7e6d951692b1fa607811c4f1ad2f0ab622",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #14 from may1102-1909/hoplite/fix-github-link-demo-leak\n\nfix(github): save the link without a schema change; keep demo data off /dashboard",
+   "date": "2026-11-14T03:20:57Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/617dfa7e6d951692b1fa607811c4f1ad2f0ab622",
+   "files": [
+    "server/github.js",
+    "src/pages/DemoPage.jsx",
+    "src/pages/demoSandbox.js",
+    "supabase/migrations/20261114_github_account_token.sql",
+    "supabase/schema.sql",
+    "tests/backend.test.js",
+    "tests/github.test.js"
+   ]
+  },
+  {
+   "sha": "adbbf3e675afc65e4f2f23f7e0094ad52f44f798",
+   "author_login": "usehoplite[bot]",
+   "message": "fix(github): prefer the current token column when both are present",
+   "date": "2026-11-14T03:20:45Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/adbbf3e675afc65e4f2f23f7e0094ad52f44f798",
+   "files": [
+    "server/github.js"
+   ]
+  },
+  {
+   "sha": "8cd536044c734eb8c86060902c69dd3e26326243",
+   "author_login": "may1102-1909",
+   "message": "fix(github): save the link without a schema change; keep demo data off /dashboard\n\n- Store the encrypted GitHub token in the existing github_accounts.access_token\n  column (the live database has no access_token_encrypted column, so the\n  callback failed). Rows using the old column are still read.\n- The demo fetch interceptor was installed when the app loaded on any page, so a\n  full reload of /das",
+   "date": "2026-11-14T03:04:59Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/8cd536044c734eb8c86060902c69dd3e26326243",
+   "files": [
+    "server/github.js",
+    "src/pages/DemoPage.jsx",
+    "src/pages/demoSandbox.js",
+    "supabase/migrations/20261114_github_account_token.sql",
+    "supabase/schema.sql",
+    "tests/backend.test.js",
+    "tests/github.test.js"
+   ]
+  },
+  {
+   "sha": "548ed3efba0e9f1c6c0648ec65de7ad63e303a60",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #13 from may1102-1909/hoplite/pisa-7f90e4bb\n\nfix(github):connect flow work end to end",
+   "date": "2026-11-14T02:48:31Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/548ed3efba0e9f1c6c0648ec65de7ad63e303a60",
+   "files": [
+    "server/app.js",
+    "server/github.js",
+    "server/store.js",
+    "src/components/GithubConnect.jsx",
+    "src/components/Workspace.jsx",
+    "src/lib/api.js",
+    "src/pages/demoSandbox.js",
+    "supabase/migrations/20261114_github_account_token.sql",
+    "supabase/schema.sql",
+    "tests/backend.test.js",
+    "tests/github.test.js"
+   ]
+  },
+  {
+   "sha": "515ee10e2613b3c8bc2a4ce21be1d951a1f33cf4",
+   "author_login": "may1102-1909",
+   "message": "fix(github): make the connect flow work end to end\n\nThe OAuth callback required a bearer token that a browser redirect cannot\ncarry, so linking always failed. It is now public (the one-use state\nidentifies the user) and redirects back to /dashboard with the result.\n\n- add account and repository selection after linking\n- map expected GitHub failures to readable errors and log real 500s\n- store sync",
+   "date": "2026-11-14T02:45:26Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/515ee10e2613b3c8bc2a4ce21be1d951a1f33cf4",
+   "files": [
+    "server/app.js",
+    "server/github.js",
+    "server/store.js",
+    "src/components/GithubConnect.jsx",
+    "src/components/Workspace.jsx",
+    "src/lib/api.js",
+    "src/pages/demoSandbox.js",
+    "supabase/migrations/20261114_github_account_token.sql",
+    "supabase/schema.sql",
+    "tests/backend.test.js",
+    "tests/github.test.js"
+   ]
+  },
+  {
+   "sha": "a5d4c816181c2ba8c974dd1e24439e371f839c2b",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #12 from may1102-1909/branch4\n\nfeat(demo,usage): standalone demo mode sandbox, unified header, and p…",
+   "date": "2026-11-14T02:19:20Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/a5d4c816181c2ba8c974dd1e24439e371f839c2b",
+   "files": [
+    "DEVELOPER_NOTES_AND_GLOW.md",
+    "src/App.jsx",
+    "src/pages/DashboardPage.jsx",
+    "src/pages/DemoPage.jsx",
+    "src/pages/UsagePage.jsx",
+    "src/pages/demoSandbox.js"
+   ]
+  },
+  {
+   "sha": "cd16a3d7810920512b73673fd3d0a49f4acf7815",
+   "author_login": "renoschubert",
+   "message": "feat(demo,usage): standalone demo mode sandbox, unified header, and polished developer notes showcase",
+   "date": "2026-11-13T21:49:52Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/cd16a3d7810920512b73673fd3d0a49f4acf7815",
+   "files": [
+    "DEVELOPER_NOTES_AND_GLOW.md",
+    "src/App.jsx",
+    "src/pages/DashboardPage.jsx",
+    "src/pages/DemoPage.jsx",
+    "src/pages/UsagePage.jsx",
+    "src/pages/demoSandbox.js"
+   ]
+  },
+  {
+   "sha": "70727afe0010efd11543536055f50ded468e5046",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #11 from may1102-1909/branch4\n\nfeat(dashboard,usage): add authentic Baton brand logo to dashboard & …",
+   "date": "2026-11-10T16:52:58Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/70727afe0010efd11543536055f50ded468e5046",
+   "files": [
+    "src/components/Brand.jsx",
+    "src/components/Workspace.jsx",
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "165b1cb4842a64868b947bb8c012410a9ca9938c",
+   "author_login": "renoschubert",
+   "message": "feat(dashboard,usage): add authentic Baton brand logo to dashboard & loader, refine usage flow spacing and TOC",
+   "date": "2026-11-10T16:04:40Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/165b1cb4842a64868b947bb8c012410a9ca9938c",
+   "files": [
+    "src/components/Brand.jsx",
+    "src/components/Workspace.jsx",
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "745b3d40725592605e3b110dba5d5beea15161a0",
+   "author_login": "may1102-1909",
+   "message": "feat(mcp): implement zero-clone npx configuration, multi-client tabs, and live judge simulation console",
+   "date": "2026-11-10T15:34:39Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/745b3d40725592605e3b110dba5d5beea15161a0",
+   "files": [
+    "UPDATE.md",
+    "mcp-server/dist/cli.js",
+    "mcp-server/package.json",
+    "mcp-server/src/cli.ts",
+    "package.json",
+    "src/components/Workspace.jsx"
+   ]
+  },
+  {
+   "sha": "bf27ece65a4ff5892e2f32de384ca8f8054ca413",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #10 from may1102-1909/branch4\n\nfeat(landing): streamline hero UI, rebalance 3D paper layout, and opt…",
+   "date": "2026-11-10T12:48:36Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/bf27ece65a4ff5892e2f32de384ca8f8054ca413",
+   "files": [
+    "src/pages/LandingPage.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html"
+   ]
+  },
+  {
+   "sha": "e3adc63d255cf34a73088e95d2ef067650f5991c",
+   "author_login": "may1102-1909",
+   "message": "clean(usage): remove banner, sign-in button, hero buttons, simulator, and core architecture sections",
+   "date": "2026-11-10T12:31:55Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/e3adc63d255cf34a73088e95d2ef067650f5991c",
+   "files": [
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "c13f5592407b353d43dc4ac5f9844e585a759534",
+   "author_login": "renoschubert",
+   "message": "feat(landing): streamline hero UI, rebalance 3D paper layout, and optimize shader performance",
+   "date": "2026-11-10T10:18:10Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/c13f5592407b353d43dc4ac5f9844e585a759534",
+   "files": [
+    "src/pages/LandingPage.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html"
+   ]
+  },
+  {
+   "sha": "664e999f22eb2a09fae3cf0683aa6ff93817e05f",
+   "author_login": "may1102-1909",
+   "message": "fix(store): normalize source type and visibility for PostgreSQL schema compatibility",
+   "date": "2026-11-10T09:17:20Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/664e999f22eb2a09fae3cf0683aa6ff93817e05f",
+   "files": [
+    "server/store.js"
+   ]
+  },
+  {
+   "sha": "d6787c786914928dfdbe0ed27325e6752392700b",
+   "author_login": "may1102-1909",
+   "message": "fix(api): fix Vercel /api rewrite, auto-enroll user in default org, and add env fallbacks",
+   "date": "2026-11-10T08:33:59Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/d6787c786914928dfdbe0ed27325e6752392700b",
+   "files": [
+    "api/[...path].js",
+    "server/app.js",
+    "server/runtime.js",
+    "server/store.js",
+    "src/components/Workspace.jsx",
+    "vercel.json"
+   ]
+  },
+  {
+   "sha": "83b627f36a2dc99f9f31dedb874cbef01c3b22dd",
+   "author_login": "may1102-1909",
+   "message": "feat(brand): add high-res clear vector SVG and PNG logos for Baton",
+   "date": "2026-11-10T08:06:41Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/83b627f36a2dc99f9f31dedb874cbef01c3b22dd",
+   "files": [
+    "public/baton-icon-1024.png",
+    "public/baton-icon-512.png",
+    "public/baton-icon-clear.png",
+    "public/baton-icon-clear.svg",
+    "public/baton-icon-dark.png",
+    "public/baton-icon-dark.svg",
+    "public/baton-logo-clear.png",
+    "public/baton-logo-clear.svg",
+    "public/baton-logo-dark.png",
+    "public/baton-logo-dark.svg"
+   ]
+  },
+  {
+   "sha": "76af8819c265ed63fcfdbb08673b430b7d2a07a6",
+   "author_login": "may1102-1909",
+   "message": "fix(db): add universal column injection ensuring org_id on all tables before policies",
+   "date": "2026-11-10T07:52:42Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/76af8819c265ed63fcfdbb08673b430b7d2a07a6",
+   "files": [
+    "supabase/migrations/20261110_mcp_memory_v2.sql",
+    "supabase/schema.sql"
+   ]
+  },
+  {
+   "sha": "25ad49b3f6bc15b674e683a15a3177e599783684",
+   "author_login": "may1102-1909",
+   "message": "fix(db): ensure idempotent schema upgrades for pre-existing sources and decisions tables",
+   "date": "2026-11-10T07:35:50Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/25ad49b3f6bc15b674e683a15a3177e599783684",
+   "files": [
+    "supabase/migrations/20261110_mcp_memory_v2.sql",
+    "supabase/schema.sql"
+   ]
+  },
+  {
+   "sha": "b4e5bb5edd6034fcd910e088fe5c17f3edd25036",
+   "author_login": "may1102-1909",
+   "message": "feat(mcp): implement real persistent vector memory system, CLI sync, and transcript ingest",
+   "date": "2026-11-10T06:48:07Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/b4e5bb5edd6034fcd910e088fe5c17f3edd25036",
+   "files": [
+    ".env.example",
+    ".gitignore",
+    "app/api/collector/push/route.ts",
+    "app/api/collector/search/route.ts",
+    "app/api/handover/[id]/route.ts",
+    "app/api/handover/generate/route.ts",
+    "mcp-server/dist/api.d.ts",
+    "mcp-server/dist/api.js",
+    "mcp-server/dist/cli.d.ts",
+    "mcp-server/dist/cli.js",
+    "mcp-server/dist/index.js",
+    "mcp-server/package.json",
+    "mcp-server/src/api.ts",
+    "mcp-server/src/cli.ts",
+    "mcp-server/src/index.ts",
+    "mcp-server/test/mcp.test.mjs",
+    "package.json",
+    "scripts/post-commit",
+    "server/app.js",
+    "server/store.js",
+    "supabase/migrations/20261110_mcp_memory_v2.sql",
+    "supabase/schema.sql"
+   ]
+  },
+  {
+   "sha": "689991c72ae59bb3ee8dd692640bc5831fbaf1dc",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #9 from may1102-1909/branch4\n\nfeat(usage): display usernames in floating hover pill for dev stickers",
+   "date": "2026-11-10T05:08:55Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/689991c72ae59bb3ee8dd692640bc5831fbaf1dc",
+   "files": [
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "d7092ed1b2a314f7d753bb03307b9d9fec41f486",
+   "author_login": "may1102-1909",
+   "message": "feat(auth): redirect user to /usage page upon sign in, sign up, or GitHub OAuth",
+   "date": "2026-11-09T18:33:46Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/d7092ed1b2a314f7d753bb03307b9d9fec41f486",
+   "files": [
+    "docs/ARCHITECTURE.md",
+    "docs/SETUP.md",
+    "src/components/Auth.jsx",
+    "src/components/BatonLandingPage.jsx",
+    "src/components/Workspace.jsx",
+    "src/components/workspace.css",
+    "src/lib/api.js"
+   ]
+  },
+  {
+   "sha": "67231e2d3a59f0ae2cdfbf3bc3744106b5a708fd",
+   "author_login": "renoschubert",
+   "message": "feat(usage): display usernames in floating hover pill for dev stickers",
+   "date": "2026-11-09T16:04:40Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/67231e2d3a59f0ae2cdfbf3bc3744106b5a708fd",
+   "files": [
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "86c341842ad5d6ecbecd7c8d10af2904e9c8499f",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #8 from may1102-1909/branch4\n\nfeat(usage): add ambient background glow and developer notes dialogue…",
+   "date": "2026-11-09T15:46:19Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/86c341842ad5d6ecbecd7c8d10af2904e9c8499f",
+   "files": [
+    "public/stickers/dev-glasses.png",
+    "public/stickers/dev-mustache.png",
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "70c5a178e33aa510417d74889f1a8cb2a84b4db6",
+   "author_login": "renoschubert",
+   "message": "feat(usage): add ambient background glow and developer notes dialogue card",
+   "date": "2026-11-09T15:41:41Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/70c5a178e33aa510417d74889f1a8cb2a84b4db6",
+   "files": [
+    "public/stickers/dev-glasses.png",
+    "public/stickers/dev-mustache.png",
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "c8fa03b5fd995258575081796bce9822b3af7c54",
+   "author_login": "may1102-1909",
+   "message": "feat(core): implement end-to-end AI memory, GitHub handover platform, MCP client, and Workspace dashboard",
+   "date": "2026-11-09T13:19:11Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/c8fa03b5fd995258575081796bce9822b3af7c54",
+   "files": [
+    "api/index.js",
+    "docs/ARCHITECTURE.md",
+    "docs/GITHUB.md",
+    "docs/MCP.md",
+    "docs/SETUP.md",
+    "mcp-server/.env.example",
+    "mcp-server/.gitignore",
+    "mcp-server/dist/api.d.ts",
+    "mcp-server/dist/api.js",
+    "mcp-server/dist/index.js",
+    "mcp-server/dist/redact.js",
+    "mcp-server/dist/snapshot.d.ts",
+    "mcp-server/dist/snapshot.js",
+    "mcp-server/package.json",
+    "mcp-server/src/api.ts",
+    "mcp-server/src/index.ts",
+    "mcp-server/src/redact.ts",
+    "mcp-server/src/snapshot.ts",
+    "mcp-server/test/mcp.test.mjs",
+    "package.json",
+    "server/app.js",
+    "server/demo.js",
+    "server/github.js",
+    "server/handover.js",
+    "server/index.js"
+   ]
+  },
+  {
+   "sha": "5e8e644fa7c6fb23700ad507aecbdad5756004cc",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #7 from may1102-1909/branch4\n\nrefineuiusagepage",
+   "date": "2026-11-09T08:54:33Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/5e8e644fa7c6fb23700ad507aecbdad5756004cc",
+   "files": [
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "24e01fa937361e4a029e9cf908c1e24d6a444a92",
+   "author_login": "renoschubert",
+   "message": "feat(usage): add minimal On this page TOC sidebar with verified section navigation",
+   "date": "2026-11-09T08:44:51Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/24e01fa937361e4a029e9cf908c1e24d6a444a92",
+   "files": [
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "d442d2a623d32d299e60b2a2e66b2f514258c93f",
+   "author_login": "may1102-1909",
+   "message": "fix(auth): restore create account tab switching, password input, and state management",
+   "date": "2026-11-09T07:38:19Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/d442d2a623d32d299e60b2a2e66b2f514258c93f",
+   "files": [
+    "src/App.jsx",
+    "src/components/Auth.jsx"
+   ]
+  },
+  {
+   "sha": "cc07683ce963df03256fa5503bfad44ece89e65d",
+   "author_login": "may1102-1909",
+   "message": "feat(landing): remove grounded reasoning inventory table and heading from 3D card",
+   "date": "2026-11-08T18:13:24Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/cc07683ce963df03256fa5503bfad44ece89e65d",
+   "files": [
+    "src/shaders/3d-paper/sources/3d-paper-baton.html"
+   ]
+  },
+  {
+   "sha": "2b4f462f298c35ee2cbe02ec43e66d45a9c3dac0",
+   "author_login": "may1102-1909",
+   "message": "feat(landing): enrich 3D card typography, add team roster and interaction cue, boost background green",
+   "date": "2026-11-08T17:51:05Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/2b4f462f298c35ee2cbe02ec43e66d45a9c3dac0",
+   "files": [
+    "src/pages/UsagePage.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html"
+   ]
+  },
+  {
+   "sha": "f4bcfe4c8f4cfe96a8579f87d7ab3e04002c1900",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #6 from may1102-1909/revert-5-branch4\n\nRevert \"feat(landing): isolated 3D paper hero, 0-100 loader, and team roster\"",
+   "date": "2026-11-08T17:09:57Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/f4bcfe4c8f4cfe96a8579f87d7ab3e04002c1900",
+   "files": [
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/Auth.jsx",
+    "src/components/Dashboard.jsx",
+    "src/components/Scene.jsx",
+    "src/components/TransitionOverlay.jsx",
+    "src/index.css",
+    "src/lib/db.js",
+    "src/lib/supabase.js",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/threeui.css"
+   ]
+  },
+  {
+   "sha": "efdddcd6b21df042f5807758dea9f04f2cd02bd5",
+   "author_login": "may1102-1909",
+   "message": "Revert \"feat(landing): isolated 3D paper hero, 0-100 loader, and team roster\"",
+   "date": "2026-11-08T17:07:23Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/efdddcd6b21df042f5807758dea9f04f2cd02bd5",
+   "files": [
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/Auth.jsx",
+    "src/components/Dashboard.jsx",
+    "src/components/Scene.jsx",
+    "src/components/TransitionOverlay.jsx",
+    "src/index.css",
+    "src/lib/db.js",
+    "src/lib/supabase.js",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/threeui.css"
+   ]
+  },
+  {
+   "sha": "ef0c396c72b98027f5f5e2c7edbba047944298fd",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #5 from may1102-1909/branch4\n\nfeat(landing): isolated 3D paper hero, 0-100 loader, and team roster",
+   "date": "2026-11-08T17:04:46Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/ef0c396c72b98027f5f5e2c7edbba047944298fd",
+   "files": [
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/Auth.jsx",
+    "src/components/Dashboard.jsx",
+    "src/components/Scene.jsx",
+    "src/components/TransitionOverlay.jsx",
+    "src/index.css",
+    "src/lib/db.js",
+    "src/lib/supabase.js",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/threeui.css"
+   ]
+  },
+  {
+   "sha": "207c9d9951ed54cde84b66970c26af81410a8413",
+   "author_login": "may1102-1909",
+   "message": "Merge branch 'main' into branch4",
+   "date": "2026-11-08T17:02:10Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/207c9d9951ed54cde84b66970c26af81410a8413",
+   "files": [
+    "app/handover/[id]/page.tsx",
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/CtaBanner.jsx",
+    "src/components/HandoverReview.jsx",
+    "src/pages/LandingPage.jsx",
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "4892b3893f4fa549283444e60802bebd78696a96",
+   "author_login": "renoschubert",
+   "message": "feat(landing): isolated 3D paper hero, 0-100 loader, and team roster",
+   "date": "2026-11-08T16:48:33Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/4892b3893f4fa549283444e60802bebd78696a96",
+   "files": [
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/Auth.jsx",
+    "src/components/Dashboard.jsx",
+    "src/components/Scene.jsx",
+    "src/components/TransitionOverlay.jsx",
+    "src/index.css",
+    "src/lib/db.js",
+    "src/lib/supabase.js",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/threeui.css"
+   ]
+  },
+  {
+   "sha": "545168ef4b34472d1b6078b0599fb37c07531e71",
+   "author_login": "may1102-1909",
+   "message": "feat: add /usage onboarding page with Framer Baton component and View Dashboard action",
+   "date": "2026-11-08T16:39:56Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/545168ef4b34472d1b6078b0599fb37c07531e71",
+   "files": [
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/CtaBanner.jsx",
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "sha": "d7e08dad404bb900eb1e961dbddec3d720b2bd1a",
+   "author_login": "may1102-1909",
+   "message": "feat: route handover review to /dashboard/handover/active and wire Launch App through /auth to /dashboard",
+   "date": "2026-11-08T16:06:34Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/d7e08dad404bb900eb1e961dbddec3d720b2bd1a",
+   "files": [
+    "app/handover/[id]/page.tsx",
+    "src/App.jsx",
+    "src/components/HandoverReview.jsx",
+    "src/pages/LandingPage.jsx"
+   ]
+  },
+  {
+   "sha": "205d34716fcdccb560ee5fdedd4d03d354a4b245",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #4 from may1102-1909/revert-2-branch3\n\nRevert \"perf(3d-paper): optimize mesh segments, smooth lerp damping, …",
+   "date": "2026-11-08T14:32:01Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/205d34716fcdccb560ee5fdedd4d03d354a4b245",
+   "files": []
+  },
+  {
+   "sha": "fce70d5fda89cca1f241308db83832747699ac8e",
+   "author_login": "may1102-1909",
+   "message": "Revert \"perf(3d-paper): optimize mesh segments, smooth lerp damping, clamp dpr, and update team roster\"",
+   "date": "2026-11-08T14:30:19Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/fce70d5fda89cca1f241308db83832747699ac8e",
+   "files": []
+  },
+  {
+   "sha": "fb977618129a69aa6928402c814b20b867dc0c88",
+   "author_login": "may1102-1909",
+   "message": "fix: embed Tailwind CSS engine in index.html and add robust fallback styling for landing page and handover review",
+   "date": "2026-11-08T12:28:56Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/fb977618129a69aa6928402c814b20b867dc0c88",
+   "files": [
+    "app/handover/[id]/page.tsx",
+    "index.html",
+    "src/pages/LandingPage.jsx"
+   ]
+  },
+  {
+   "sha": "57b71d864f48fd3cabde0cee596cbe55c8840a50",
+   "author_login": "may1102-1909",
+   "message": "feat: add quick navigation links to Dashboard, Handover Review, and Auth on landing page",
+   "date": "2026-11-08T12:14:35Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/57b71d864f48fd3cabde0cee596cbe55c8840a50",
+   "files": [
+    "README.md",
+    "src/pages/LandingPage.jsx",
+    "vercel.json"
+   ]
+  },
+  {
+   "sha": "0a8431d0e81079c055cfbf62cc0b3b06b6844ea7",
+   "author_login": "may1102-1909",
+   "message": "ci: add vercel.json with SPA rewrites for Vercel deployment",
+   "date": "2026-11-08T12:03:55Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/0a8431d0e81079c055cfbf62cc0b3b06b6844ea7",
+   "files": [
+    "vercel.json"
+   ]
+  },
+  {
+   "sha": "e7ea1767e71723f4676e71a8f01dc4174d3e94c1",
+   "author_login": "may1102-1909",
+   "message": "feat: add Full Review View link and Markdown export to HandoverReview",
+   "date": "2026-11-08T12:02:31Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/e7ea1767e71723f4676e71a8f01dc4174d3e94c1",
+   "files": [
+    "app/handover/[id]/page.tsx",
+    "src/components/HandoverReview.jsx"
+   ]
+  },
+  {
+   "sha": "87d66c32126c81b1aad0e7b32cf25b84cb035b0c",
+   "author_login": "may1102-1909",
+   "message": "feat: build Interactive Handover Review Screen at app/handover/[id]/page.tsx with expandable sections and shareable acknowledge view",
+   "date": "2026-11-08T11:57:49Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/87d66c32126c81b1aad0e7b32cf25b84cb035b0c",
+   "files": [
+    "app/handover/[id]/page.tsx",
+    "src/App.jsx",
+    "src/components/HandoverReview.jsx"
+   ]
+  },
+  {
+   "sha": "5c31db93ac28b5fb3f5569c5d2746539afed0dcf",
+   "author_login": "may1102-1909",
+   "message": "feat: complete handover generation pipeline, claim citations, and dual-port post-commit hook",
+   "date": "2026-11-08T11:46:15Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/5c31db93ac28b5fb3f5569c5d2746539afed0dcf",
+   "files": [
+    "app/api/handover/[id]/route.ts",
+    "app/api/handover/generate/route.ts",
+    "scripts/post-commit",
+    "src/index.css",
+    "src/server/apiMiddleware.js",
+    "vite.config.js"
+   ]
+  },
+  {
+   "sha": "799bc13bd6f30090f02e58b132b6793cd87ebd45",
+   "author_login": "may1102-1909",
+   "message": "feat: enhance auth validation, add auth switcher, and wire handover review in dashboard",
+   "date": "2026-11-08T11:27:03Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/799bc13bd6f30090f02e58b132b6793cd87ebd45",
+   "files": [
+    "app/api/collector/push/route.ts",
+    "app/api/handover/[id]/route.ts",
+    "app/api/handover/generate/route.ts",
+    "scripts/post-commit",
+    "src/components/Auth.jsx",
+    "src/components/Dashboard.jsx",
+    "src/components/HandoverReview.jsx"
+   ]
+  },
+  {
+   "sha": "32c7fb9ee714224c3740e9be53eff05158a029ad",
+   "author_login": "may1102-1909",
+   "message": "Merge pull request #1 from may1102-1909/branch3\n\nfeat(landing): 3D paper hero, brand typography & loading transitionBranch3",
+   "date": "2026-11-08T10:43:03Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/32c7fb9ee714224c3740e9be53eff05158a029ad",
+   "files": [
+    "README.md",
+    "index.html",
+    "package-lock.json",
+    "package.json",
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/BatonLandingPage.jsx",
+    "src/components/Brand.jsx",
+    "src/components/Scene.jsx",
+    "src/index.css",
+    "src/pages/DashboardPage.jsx",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/ThreeDPaper.canonical.tsx",
+    "src/shaders/3d-paper/ThreeDPaper.tsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/3d-paper/sources/3d-paper-certificate.html",
+    "src/shaders/3d-paper/sources/3d-paper-japanese.html",
+    "src/shaders/3d-paper/sources/3d-paper-site-of-the-year.html",
+    "src/shaders/3d-paper/sources/3d-paper.html",
+    "src/shaders/fonts/fragment-mono.woff2",
+    "src/shaders/threeui.css",
+    "vite.config.js"
+   ]
+  },
+  {
+   "sha": "51ba81c3686a10c944d377fd745bb0cbdf217049",
+   "author_login": "may1102-1909",
+   "message": "Configure dynamic environment bindings for Supabase service role and add live sources stream to dashboard",
+   "date": "2026-11-08T10:35:37Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/51ba81c3686a10c944d377fd745bb0cbdf217049",
+   "files": [
+    "app/api/collector/push/route.ts",
+    "app/api/collector/search/route.ts",
+    "src/components/Dashboard.jsx",
+    "src/lib/db.js",
+    "src/lib/supabase.js"
+   ]
+  },
+  {
+   "sha": "c2b7745684880860fe11a43c9c8a4a8eaa972f85",
+   "author_login": "may1102-1909",
+   "message": "Log architectural decision: Chose Supabase Postgres over Firebase for strict RLS and pgvector support via Baton",
+   "date": "2026-11-08T10:17:55Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/c2b7745684880860fe11a43c9c8a4a8eaa972f85",
+   "files": [
+    "src/components/Dashboard.jsx"
+   ]
+  },
+  {
+   "sha": "29f7c159b79d17e94f320223b1200e9dea1dd1fd",
+   "author_login": "may1102-1909",
+   "message": "Update Supabase project endpoint to nqkkgk and sync environment bindings",
+   "date": "2026-11-08T10:10:56Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/29f7c159b79d17e94f320223b1200e9dea1dd1fd",
+   "files": [
+    "app/api/collector/push/route.ts",
+    "app/api/collector/search/route.ts",
+    "src/lib/supabase.js"
+   ]
+  },
+  {
+   "sha": "3e9881db2f57fe469cb599dcb45fb939bb1a13e7",
+   "author_login": "renoschubert",
+   "message": "feat: integrate ThreeUI 3D Paper landing page and full routing into branch3",
+   "date": "2026-11-08T09:56:18Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/3e9881db2f57fe469cb599dcb45fb939bb1a13e7",
+   "files": [
+    "README.md",
+    "index.html",
+    "package-lock.json",
+    "package.json",
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/BatonLandingPage.jsx",
+    "src/components/Brand.jsx",
+    "src/components/Scene.jsx",
+    "src/index.css",
+    "src/pages/DashboardPage.jsx",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/ThreeDPaper.canonical.tsx",
+    "src/shaders/3d-paper/ThreeDPaper.tsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/3d-paper/sources/3d-paper-certificate.html",
+    "src/shaders/3d-paper/sources/3d-paper-japanese.html",
+    "src/shaders/3d-paper/sources/3d-paper-site-of-the-year.html",
+    "src/shaders/3d-paper/sources/3d-paper.html",
+    "src/shaders/fonts/fragment-mono.woff2",
+    "src/shaders/threeui.css",
+    "vite.config.js"
+   ]
+  },
+  {
+   "sha": "c800558625a5af1c90dc781de5f37a035a1ef361",
+   "author_login": "may1102-1909",
+   "message": "Log architectural decision: Chose Supabase Postgres over Firebase for RLS requirements via Baton protocol",
+   "date": "2026-11-08T09:44:22Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/c800558625a5af1c90dc781de5f37a035a1ef361",
+   "files": [
+    "src/components/Dashboard.jsx",
+    "src/lib/db.js"
+   ]
+  },
+  {
+   "sha": "5ba8d41578e707fbf3ff4c3d9ae576e145ff3624",
+   "author_login": "renoschubert",
+   "message": "feat: refine 3D paper landing page typography, entrance animation, and sub-routes",
+   "date": "2026-11-08T09:13:31Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/5ba8d41578e707fbf3ff4c3d9ae576e145ff3624",
+   "files": [
+    "README.md",
+    "index.html",
+    "src/App.jsx",
+    "src/components/BatonLandingPage.jsx",
+    "src/components/Brand.jsx",
+    "src/components/Scene.jsx",
+    "src/pages/DashboardPage.jsx",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/ThreeDPaper.tsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html"
+   ]
+  },
+  {
+   "sha": "12fab03a5e0f4af7bb85ba09e95b9b612b5849f8",
+   "author_login": "may1102-1909",
+   "message": "Sync: all components, routes, and configs verified on main",
+   "date": "2026-11-08T09:08:33Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/12fab03a5e0f4af7bb85ba09e95b9b612b5849f8",
+   "files": []
+  },
+  {
+   "sha": "d0e676b2c98c88f92954d030772e04619e624c24",
+   "author_login": "may1102-1909",
+   "message": "Connect Baton MCP server collector to Supabase sources table with org lookup, formatted content, and ilike search",
+   "date": "2026-11-08T08:59:27Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/d0e676b2c98c88f92954d030772e04619e624c24",
+   "files": [
+    ".gitignore",
+    "app/api/collector/push/route.ts",
+    "app/api/collector/search/route.ts",
+    "supabase/schema.sql"
+   ]
+  },
+  {
+   "sha": "316d24f5038bd47a8ef3345d9bb8b6de638a06b5",
+   "author_login": "may1102-1909",
+   "message": "Add search endpoint app/api/collector/search/route.ts for get_context query support",
+   "date": "2026-11-08T08:56:12Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/316d24f5038bd47a8ef3345d9bb8b6de638a06b5",
+   "files": [
+    ".env.example",
+    "app/api/collector/push/route.ts",
+    "app/api/collector/search/route.ts",
+    "src/lib/db.js"
+   ]
+  },
+  {
+   "sha": "b66eb7347456797cdefaf85a0acf42be86ce613f",
+   "author_login": "may1102-1909",
+   "message": "Add Next.js collector endpoint app/api/collector/push/route.ts with BATON_PROJECT_KEY auth and Supabase sources table persistence",
+   "date": "2026-11-08T08:51:28Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/b66eb7347456797cdefaf85a0acf42be86ce613f",
+   "files": [
+    ".env.example",
+    "app/api/collector/push/route.ts",
+    "mcp-server/.env.example",
+    "mcp-server/dist/api.js",
+    "mcp-server/src/api.ts",
+    "src/components/Dashboard.jsx",
+    "src/lib/db.js",
+    "supabase/schema.sql"
+   ]
+  },
+  {
+   "sha": "ec1798e5ca60daeb9666e62536ad56af48817a89",
+   "author_login": "may1102-1909",
+   "message": "Route users to /dashboard immediately after sign-in and sign-up with Handover Hub workspace",
+   "date": "2026-11-08T08:27:54Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/ec1798e5ca60daeb9666e62536ad56af48817a89",
+   "files": [
+    "src/App.jsx",
+    "src/components/Auth.jsx",
+    "src/components/CtaBanner.jsx",
+    "src/components/Dashboard.jsx",
+    "src/lib/supabase.js"
+   ]
+  },
+  {
+   "sha": "8c7b54f046fe3ee6103121a30fa2eab08f35d95b",
+   "author_login": "may1102-1909",
+   "message": "Integrate Supabase Auth client: SignUp, SignInWithPassword, OTP MagicLink, and session state",
+   "date": "2026-11-08T08:03:56Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/8c7b54f046fe3ee6103121a30fa2eab08f35d95b",
+   "files": [
+    ".antigravity/mcp.json",
+    "AGENTS.md",
+    "mcp-server/.env.example",
+    "mcp-server/package.json",
+    "mcp-server/src/api.ts",
+    "mcp-server/src/index.ts",
+    "mcp-server/src/redact.ts",
+    "mcp-server/tsconfig.json",
+    "package-lock.json",
+    "package.json",
+    "src/App.jsx",
+    "src/components/Auth.jsx",
+    "src/components/CtaBanner.jsx",
+    "src/lib/supabase.js"
+   ]
+  },
+  {
+   "sha": "bada27f1654e61313525940794d2142761e2e830",
+   "author_login": "may1102-1909",
+   "message": "Add Baton local MCP server with secret redaction, collector dispatch, tools, and AGENTS.md protocol",
+   "date": "2026-11-08T07:41:59Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/bada27f1654e61313525940794d2142761e2e830",
+   "files": [
+    ".antigravity/mcp.json",
+    ".gitignore",
+    "AGENTS.md",
+    "mcp-server/.env.example",
+    "mcp-server/dist/api.d.ts",
+    "mcp-server/dist/api.js",
+    "mcp-server/dist/index.d.ts",
+    "mcp-server/dist/index.js",
+    "mcp-server/dist/redact.d.ts",
+    "mcp-server/dist/redact.js",
+    "mcp-server/package-lock.json",
+    "mcp-server/package.json",
+    "mcp-server/src/api.ts",
+    "mcp-server/src/index.ts",
+    "mcp-server/src/redact.ts",
+    "mcp-server/tsconfig.json",
+    "package.json",
+    "src/components/Comparison.jsx",
+    "src/components/TerminalDemo.jsx"
+   ]
+  },
+  {
+   "sha": "5e1bf0dcb1dcbe7ab872711f6c0fa1c49ffd690b",
+   "author_login": "renoschubert",
+   "message": "feat: integrate ThreeUI 3D Paper landing page with custom Baton branding and interactive dashboard",
+   "date": "2026-11-08T07:07:26Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/5e1bf0dcb1dcbe7ab872711f6c0fa1c49ffd690b",
+   "files": [
+    "package-lock.json",
+    "package.json",
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/BatonLandingPage.jsx",
+    "src/components/Scene.jsx",
+    "src/index.css",
+    "src/shaders/3d-paper/ThreeDPaper.canonical.tsx",
+    "src/shaders/3d-paper/ThreeDPaper.tsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/3d-paper/sources/3d-paper-certificate.html",
+    "src/shaders/3d-paper/sources/3d-paper-japanese.html",
+    "src/shaders/3d-paper/sources/3d-paper-site-of-the-year.html",
+    "src/shaders/3d-paper/sources/3d-paper.html",
+    "src/shaders/fonts/fragment-mono.woff2",
+    "src/shaders/threeui.css",
+    "vite.config.js"
+   ]
+  },
+  {
+   "sha": "822a55848e815aa77a993854430cb5606727d5a0",
+   "author_login": "may1102-1909",
+   "message": "Remove handover preview card from landing page hero section",
+   "date": "2026-11-08T07:00:36Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/822a55848e815aa77a993854430cb5606727d5a0",
+   "files": [
+    ".gitignore",
+    "README.md",
+    "index.html",
+    "package.json",
+    "src/App.jsx",
+    "src/components/Auth.jsx",
+    "src/components/Brand.jsx",
+    "src/components/Button.jsx",
+    "src/components/Icon.jsx",
+    "src/components/Preview.jsx",
+    "src/index.css",
+    "src/main.jsx",
+    "vite.config.js"
+   ]
+  },
+  {
+   "sha": "ce7da48e80c3eed90f1e70df5c606a849e51d80c",
+   "author_login": "may1102-1909",
+   "message": "Initial commit: Baton landing page matching Framer specification with interactive preview and simulated auth",
+   "date": "2026-11-08T06:08:30Z",
+   "url": "https://github.com/may1102-1909/BATON/commit/ce7da48e80c3eed90f1e70df5c606a849e51d80c",
+   "files": [
+    ".gitignore",
+    "README.md",
+    "index.html",
+    "package-lock.json",
+    "package.json",
+    "src/App.jsx",
+    "src/components/Auth.jsx",
+    "src/components/Brand.jsx",
+    "src/components/Button.jsx",
+    "src/components/Icon.jsx",
+    "src/components/Preview.jsx",
+    "src/index.css",
+    "src/main.jsx",
+    "vite.config.js"
+   ]
+  }
+ ],
+ "pulls": [
+  {
+   "number": 14,
+   "title": "fix(github): save the link without a schema change; keep demo data off /dashboard",
+   "body": "## Problems (from production)\n1. Connect GitHub still failed. Vercel log: `[github callback] Supabase insert github_accounts failed: Could not find the 'access_token_encrypted' column of 'github_accounts' in the schema cache`.\n2. After GitHub redirected back, `/dashboard` showed the demo team (Payme",
+   "state": "closed",
+   "merged": true,
+   "head": "hoplite/fix-github-link-demo-leak",
+   "base": "main",
+   "author_login": "usehoplite[bot]",
+   "created_at": "2026-11-14T03:05:04Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/14",
+   "files": [
+    "server/github.js",
+    "src/pages/DemoPage.jsx",
+    "src/pages/demoSandbox.js",
+    "supabase/migrations/20261114_github_account_token.sql",
+    "supabase/schema.sql",
+    "tests/backend.test.js",
+    "tests/github.test.js"
+   ]
+  },
+  {
+   "number": 13,
+   "title": "fix(github): make the connect flow work end to end",
+   "body": "## Problem\nClicking **Connect GitHub App** always ended on `{\"error\":\"Internal server error\"}` at `/api/github/callback`.\n\nThe server required a bearer token on every route except health and the webhook. GitHub's browser redirect cannot carry that header, so the callback failed with 401, or with 500",
+   "state": "closed",
+   "merged": true,
+   "head": "hoplite/pisa-7f90e4bb",
+   "base": "main",
+   "author_login": "usehoplite[bot]",
+   "created_at": "2026-11-14T02:46:48Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/13",
+   "files": [
+    "server/app.js",
+    "server/github.js",
+    "server/store.js",
+    "src/components/GithubConnect.jsx",
+    "src/components/Workspace.jsx",
+    "src/lib/api.js",
+    "src/pages/demoSandbox.js",
+    "supabase/migrations/20261114_github_account_token.sql",
+    "supabase/schema.sql",
+    "tests/backend.test.js",
+    "tests/github.test.js"
+   ]
+  },
+  {
+   "number": 12,
+   "title": "feat(demo,usage): standalone demo mode sandbox, unified header, and p…",
+   "body": "…olished developer notes showcase",
+   "state": "closed",
+   "merged": true,
+   "head": "branch4",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-13T21:51:56Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/12",
+   "files": [
+    "DEVELOPER_NOTES_AND_GLOW.md",
+    "src/App.jsx",
+    "src/pages/DashboardPage.jsx",
+    "src/pages/DemoPage.jsx",
+    "src/pages/UsagePage.jsx",
+    "src/pages/demoSandbox.js"
+   ]
+  },
+  {
+   "number": 11,
+   "title": "feat(dashboard,usage): add authentic Baton brand logo to dashboard & …",
+   "body": "…loader, refine usage flow spacing and TOC",
+   "state": "closed",
+   "merged": true,
+   "head": "branch4",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-10T16:05:41Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/11",
+   "files": [
+    "src/components/Brand.jsx",
+    "src/components/Workspace.jsx",
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "number": 10,
+   "title": "feat(landing): streamline hero UI, rebalance 3D paper layout, and opt…",
+   "body": "…imize shader performance",
+   "state": "closed",
+   "merged": true,
+   "head": "branch4",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-10T10:19:38Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/10",
+   "files": [
+    "src/pages/LandingPage.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html"
+   ]
+  },
+  {
+   "number": 9,
+   "title": "feat(usage): display usernames in floating hover pill for dev stickers",
+   "body": "",
+   "state": "closed",
+   "merged": true,
+   "head": "branch4",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-09T17:29:11Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/9",
+   "files": [
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "number": 8,
+   "title": "feat(usage): add ambient background glow and developer notes dialogue…",
+   "body": "… card",
+   "state": "closed",
+   "merged": true,
+   "head": "branch4",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-09T15:43:35Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/8",
+   "files": [
+    "public/stickers/dev-glasses.png",
+    "public/stickers/dev-mustache.png",
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "number": 7,
+   "title": "refineuiusagepage",
+   "body": "",
+   "state": "closed",
+   "merged": true,
+   "head": "branch4",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-09T08:46:01Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/7",
+   "files": [
+    "src/pages/UsagePage.jsx"
+   ]
+  },
+  {
+   "number": 6,
+   "title": "Revert \"feat(landing): isolated 3D paper hero, 0-100 loader, and team roster\"",
+   "body": "Reverts may1102-1909/BATON#5",
+   "state": "closed",
+   "merged": true,
+   "head": "revert-5-branch4",
+   "base": "main",
+   "author_login": "may1102-1909",
+   "created_at": "2026-11-08T17:07:40Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/6",
+   "files": [
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/Auth.jsx",
+    "src/components/Dashboard.jsx",
+    "src/components/Scene.jsx",
+    "src/components/TransitionOverlay.jsx",
+    "src/index.css",
+    "src/lib/db.js",
+    "src/lib/supabase.js",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/threeui.css"
+   ]
+  },
+  {
+   "number": 5,
+   "title": "feat(landing): isolated 3D paper hero, 0-100 loader, and team roster",
+   "body": "",
+   "state": "closed",
+   "merged": true,
+   "head": "branch4",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-08T16:50:59Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/5",
+   "files": [
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/Auth.jsx",
+    "src/components/Dashboard.jsx",
+    "src/components/Scene.jsx",
+    "src/components/TransitionOverlay.jsx",
+    "src/index.css",
+    "src/lib/db.js",
+    "src/lib/supabase.js",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/threeui.css"
+   ]
+  },
+  {
+   "number": 4,
+   "title": "Revert \"perf(3d-paper): optimize mesh segments, smooth lerp damping, …",
+   "body": "…clamp dpr, and update team roster\"",
+   "state": "closed",
+   "merged": true,
+   "head": "revert-2-branch3",
+   "base": "main",
+   "author_login": "may1102-1909",
+   "created_at": "2026-11-08T14:31:47Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/4",
+   "files": []
+  },
+  {
+   "number": 3,
+   "title": "feat(landing): decoupled 3D paper hero, 0-100 loader, brand color harmony, and team roster",
+   "body": "",
+   "state": "closed",
+   "merged": false,
+   "head": "branch3",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-08T13:53:34Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/3",
+   "files": [
+    "package-lock.json",
+    "package.json",
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/Dashboard.jsx",
+    "src/components/Scene.jsx",
+    "src/components/TransitionOverlay.jsx",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/threeui.css"
+   ]
+  },
+  {
+   "number": 2,
+   "title": "perf(3d-paper): optimize mesh segments, smooth lerp damping, clamp dpr, and update team roster",
+   "body": "### Summary of Changes\n- **Performance:** Reduced mesh segments to 32x32, clamped DPR to 1.5, added damped lerp (0.065) for ultra-smooth 60fps tracking, and replaced full-screen blur filters with performant CSS alpha overlays.\n- **Lighting & Glow:** Enhanced luminous emerald #10B981 glow and ambient",
+   "state": "closed",
+   "merged": true,
+   "head": "branch3",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-08T11:12:37Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/2",
+   "files": [
+    "package-lock.json",
+    "package.json",
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/Dashboard.jsx",
+    "src/components/Scene.jsx",
+    "src/components/TransitionOverlay.jsx",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/threeui.css"
+   ]
+  },
+  {
+   "number": 1,
+   "title": "feat(landing): 3D paper hero, brand typography & loading transitionBranch3",
+   "body": "",
+   "state": "closed",
+   "merged": true,
+   "head": "branch3",
+   "base": "main",
+   "author_login": "vikrannntttt8",
+   "created_at": "2026-11-08T10:42:26Z",
+   "url": "https://github.com/may1102-1909/BATON/pull/1",
+   "files": [
+    "README.md",
+    "index.html",
+    "package-lock.json",
+    "package.json",
+    "src/App.jsx",
+    "src/ClassicApp.jsx",
+    "src/components/BatonLandingPage.jsx",
+    "src/components/Brand.jsx",
+    "src/components/Scene.jsx",
+    "src/index.css",
+    "src/pages/DashboardPage.jsx",
+    "src/pages/LandingPage.jsx",
+    "src/pages/ReviewPage.jsx",
+    "src/pages/TasksPage.jsx",
+    "src/router.jsx",
+    "src/shaders/3d-paper/ThreeDPaper.canonical.tsx",
+    "src/shaders/3d-paper/ThreeDPaper.tsx",
+    "src/shaders/3d-paper/sources/3d-paper-baton.html",
+    "src/shaders/3d-paper/sources/3d-paper-certificate.html",
+    "src/shaders/3d-paper/sources/3d-paper-japanese.html",
+    "src/shaders/3d-paper/sources/3d-paper-site-of-the-year.html",
+    "src/shaders/3d-paper/sources/3d-paper.html",
+    "src/shaders/fonts/fragment-mono.woff2",
+    "src/shaders/threeui.css",
+    "vite.config.js"
+   ]
+  }
+ ],
+ "branches": [
+  {
+   "name": "branch4",
+   "base": "main",
+   "sha": "cd16a3d7810920512b73673fd3d0a49f4acf7815",
+   "ahead_by": 0,
+   "behind_by": 6
+  },
+  {
+   "name": "hoplite/fix-github-link-demo-leak",
+   "base": "main",
+   "sha": "adbbf3e675afc65e4f2f23f7e0094ad52f44f798",
+   "ahead_by": 0,
+   "behind_by": 1
+  },
+  {
+   "name": "hoplite/pisa-7f90e4bb",
+   "base": "main",
+   "sha": "515ee10e2613b3c8bc2a4ce21be1d951a1f33cf4",
+   "ahead_by": 0,
+   "behind_by": 4
+  },
+  {
+   "name": "revert-2-branch3",
+   "base": "main",
+   "sha": "fce70d5fda89cca1f241308db83832747699ac8e",
+   "ahead_by": 0,
+   "behind_by": 38
+  },
+  {
+   "name": "revert-5-branch4",
+   "base": "main",
+   "sha": "efdddcd6b21df042f5807758dea9f04f2cd02bd5",
+   "ahead_by": 0,
+   "behind_by": 31
+  }
+ ],
+ "agents": "# Agent Instructions & Continuity Protocol (BATON)\n\nThis project integrates the **Baton Local MCP Server** (`baton`) to capture architectural decisions and operational blockers in real-time, ensuring zero context loss across multi-turn agent sessions."
+}
