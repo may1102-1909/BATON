@@ -16,7 +16,7 @@ test('demo data never shows an email address', async ({ page }) => {
   await page.goto('/demo-page');
   await expect(page.getByRole('region', { name: 'Bus factor alerts' })).toBeVisible();
   for (const tab of ['Team & Tokens', 'Memory & Decisions']) {
-    await page.getByRole('button', { name: new RegExp(`^${tab}`) }).click();
+    await page.getByRole('tab', { name: new RegExp(`^${tab}`) }).click();
     expect(await page.locator('body').innerText()).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
   }
 });

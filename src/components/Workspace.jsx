@@ -1,18 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Brand } from './Brand';
 import * as api from '../lib/api.js';
-import { GithubConnect } from './GithubConnect';
 import { Citations, ClaimsView, ConflictsPanel, ContributionMatrix, RiskBadge, VersionHistory } from './HandoverParts';
 import { HandoverPage } from '../pages/HandoverPage';
 import { FUNCTION_ROLES } from '../../server/audience.js';
+import { downloadText, slugify } from '../lib/download.js';
+import { inviteErrorMessage, parseInviteToken } from '../lib/invite.js';
+import { ConfirmDialog } from './workspace/Modal';
+import { CreateOrgModal, InviteModal, MemoryModal, StartHandoverModal, TaskModal, TokenModal } from './workspace/Modals';
+import { SettingsCard } from './workspace/SettingsCard';
+import { OnboardingChecklist, buildChecklist } from './workspace/OnboardingChecklist';
+import { GithubTab } from './workspace/GithubTab';
+import { McpConfig } from './workspace/McpConfig';
+import { SystemStatus } from './workspace/SystemStatus';
 import './workspace.css';
 
-const MCP_PACKAGE_SOURCE = 'github:may1102-1909/BATON';
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'memory', label: 'Memory & Decisions' },
+  { id: 'github', label: 'GitHub' },
+  { id: 'team', label: 'Team & Tokens' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'handovers', label: 'Handovers' },
+];
 
 export function Workspace({
   onSignOut,
   onBack,
   mode = 'production',
+  inviteResult,
   demoPersonas = [],
   demoPersona,
   onDemoPersonaChange,
@@ -25,46 +41,41 @@ export function Workspace({
   const [orgs, setOrgs] = useState([]);
   const [selectedOrgId, setSelectedOrgId] = useState(null);
   const [orgState, setOrgState] = useState(null);
+  const [orgError, setOrgError] = useState(null);
   const [risks, setRisks] = useState(null);
+  const [riskRepoId, setRiskRepoId] = useState('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [githubOutcome, setGithubOutcome] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [inviteToken, setInviteToken] = useState('');
+  const [busy, setBusy] = useState({});
+  const busyRef = useRef({});
+  const preferredOrgRef = useRef(inviteResult?.status === 'accepted' ? inviteResult.organizationId : null);
 
-  // Modals & form states
+  // Modals & form states (each modal owns its own form fields)
   const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteRole, setInviteRole] = useState('member');
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [generatedInviteToken, setGeneratedInviteToken] = useState(null);
   const [showTokenModal, setShowTokenModal] = useState(false);
-  const [newTokenName, setNewTokenName] = useState('');
-  const [revealedToken, setRevealedToken] = useState(null);
+  const [newestToken, setNewestToken] = useState(null);
   const [showMemoryModal, setShowMemoryModal] = useState(false);
-  const [memoryType, setMemoryType] = useState('decision');
-  const [memoryContent, setMemoryContent] = useState('');
-  const [memoryMetadata, setMemoryMetadata] = useState('');
-  const [memoryVisibility, setMemoryVisibility] = useState('team');
   const [memoryFilter, setMemoryFilter] = useState('all');
   const [memorySearch, setMemorySearch] = useState('');
+  const [confirming, setConfirming] = useState(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   // Tasks state
   const [showTaskModal, setShowTaskModal] = useState(false);
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskDesc, setTaskDesc] = useState('');
-  const [taskAssignee, setTaskAssignee] = useState('');
-  const [taskDue, setTaskDue] = useState('');
   const [activeTaskIdForComments, setActiveTaskIdForComments] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
 
   // Handover state
   const [showStartHandoverModal, setShowStartHandoverModal] = useState(false);
   const [handoverLeaverId, setHandoverLeaverId] = useState('');
-  const [handoverIncomingId, setHandoverIncomingId] = useState('');
   const [activeHandoverDetail, setActiveHandoverDetail] = useState(null);
+  const [loadingHandoverId, setLoadingHandoverId] = useState(null);
   const [answeringQuestionId, setAnsweringQuestionId] = useState(null);
   const [answerText, setAnswerText] = useState('');
   const [qaQuestion, setQaQuestion] = useState('');
@@ -72,10 +83,7 @@ export function Workspace({
   const [qaLoading, setQaLoading] = useState(false);
   const [packetId, setPacketId] = useState(null);
 
-
-  // Zero-Clone MCP Client Config & demo-only simulator state
-  const [mcpClientTab, setMcpClientTab] = useState('cursor');
-  const [copiedMcpSnippet, setCopiedMcpSnippet] = useState(false);
+  // Demo-only MCP simulator state
   const [simDecisionText, setSimDecisionText] = useState(demoSimulatorSample?.decision ?? '');
   const [simReasonText, setSimReasonText] = useState(demoSimulatorSample?.reason ?? '');
   const [simRunning, setSimRunning] = useState(false);
@@ -85,11 +93,35 @@ export function Workspace({
     setNotice({ message: String(message), kind });
   }
 
+  const isBusy = key => Boolean(busy[key]);
+
+  // Runs one request per key at a time and exposes its pending state to the UI.
+  async function runBusy(key, task) {
+    if (busyRef.current[key]) return undefined;
+    busyRef.current[key] = true;
+    setBusy(cur => ({ ...cur, [key]: true }));
+    try {
+      return await task();
+    } finally {
+      delete busyRef.current[key];
+      setBusy(cur => {
+        const next = { ...cur };
+        delete next[key];
+        return next;
+      });
+    }
+  }
+
   useEffect(() => {
     if (notice?.kind !== 'success') return undefined;
     const timer = setTimeout(() => setNotice(null), 5000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (inviteResult?.status === 'accepted') notify('Invite accepted. You joined the team.', 'success');
+    if (inviteResult?.status === 'error') notify(inviteResult.message);
+  }, []);
 
   const handleSimulateMcp = async () => {
     if (!selectedOrgId || simRunning || !simDecisionText.trim()) return;
@@ -133,7 +165,7 @@ export function Workspace({
     boot();
   }, [demoPersona]);
 
-  async function boot() {
+  async function boot(preferredId) {
     setLoading(true);
     setError(null);
     try {
@@ -141,18 +173,27 @@ export function Workspace({
       const h = await api.fetchHealth().catch(() => null);
       setHealth(h);
 
-      const meData = await api.fetchMe().catch(() => null);
-      if (meData) {
-        setMe(meData);
-        const orgList = meData.organizations || [];
-        setOrgs(orgList);
-        if (orgList.length > 0) {
-          setSelectedOrgId(cur => (orgList.some(o => o.id === cur) ? cur : orgList[0].id));
-        } else {
-          setSelectedOrgId(null);
-          setOrgState(null);
-          setRisks(null);
-        }
+      let meData;
+      try {
+        meData = await api.fetchMe();
+      } catch (err) {
+        setError(err.status === 401 ? 'Your session has expired. Sign out and sign in again.' : `Could not load your account: ${err.message}`);
+        return;
+      }
+      setMe(meData);
+      const orgList = meData.organizations || [];
+      setOrgs(orgList);
+      const wanted = preferredId || preferredOrgRef.current;
+      preferredOrgRef.current = null;
+      if (orgList.length > 0) {
+        setSelectedOrgId(cur => {
+          if (wanted && orgList.some(o => o.id === wanted)) return wanted;
+          return orgList.some(o => o.id === cur) ? cur : orgList[0].id;
+        });
+      } else {
+        setSelectedOrgId(null);
+        setOrgState(null);
+        setRisks(null);
       }
     } catch (err) {
       setError(err.message || 'Failed to initialize session');
@@ -173,6 +214,10 @@ export function Workspace({
 
   // Load org state when selectedOrgId changes
   useEffect(() => {
+    setActiveHandoverDetail(null);
+    setPacketId(null);
+    setNewestToken(null);
+    setRiskRepoId('all');
     if (!selectedOrgId) return;
     refreshOrgState(selectedOrgId);
   }, [selectedOrgId, demoPersona]);
@@ -181,232 +226,153 @@ export function Workspace({
     try {
       const state = await api.fetchOrgState(orgId);
       setOrgState(state);
+      setOrgError(null);
       const r = await api.fetchRisks(orgId).catch(() => null);
       setRisks(r);
     } catch (err) {
-      console.error('Failed to load org state:', err);
+      setOrgError(err.message || 'Failed to load workspace data');
     }
   }
 
   async function handleCreateOrg(e) {
     e.preventDefault();
     if (!newOrgName.trim()) return;
-    try {
-      const res = await api.createOrg(newOrgName.trim());
-      setNewOrgName('');
-      setShowCreateOrgModal(false);
-      await boot();
-      if (res?.organization?.id) setSelectedOrgId(res.organization.id);
-      notify('Team created.', 'success');
-    } catch (err) {
-      notify(err.message);
-    }
+    await runBusy('createOrg', async () => {
+      try {
+        const res = await api.createOrg(newOrgName.trim());
+        setNewOrgName('');
+        await boot(res?.organization?.id);
+        notify('Team created.', 'success');
+      } catch (err) {
+        notify(err.message);
+      }
+    });
   }
 
   async function handleAcceptInvite(e) {
     e.preventDefault();
-    const token = inviteToken.trim();
+    const token = parseInviteToken(inviteToken);
     if (!token) return;
-    try {
-      const res = await api.acceptInvite(token);
-      setInviteToken('');
-      await boot();
-      if (res?.organization_id) setSelectedOrgId(res.organization_id);
-      notify('Invite accepted.', 'success');
-    } catch (err) {
-      notify(err.message);
-    }
-  }
-
-  async function handleCreateInvite(e) {
-    e.preventDefault();
-    if (!selectedOrgId) return;
-    try {
-      const res = await api.createInvite(selectedOrgId, inviteRole, inviteEmail.trim() || null);
-      setGeneratedInviteToken(res.token);
-    } catch (err) {
-      notify(err.message);
-    }
-  }
-
-  async function handleCreateToken(e) {
-    e.preventDefault();
-    const orgId = selectedOrgId || orgs[0]?.id;
-    if (!orgId) {
-      notify('Please create or select an organization before generating an MCP token.');
-      return;
-    }
-    if (!newTokenName.trim()) {
-      notify('Please enter a name for the MCP token.');
-      return;
-    }
-    try {
-      const res = await api.createToken(orgId, newTokenName.trim());
-      setRevealedToken(res.token);
-      setNewTokenName('');
-      refreshOrgState(orgId);
-    } catch (err) {
-      notify(`Token generation failed: ${err.message}`);
-    }
-  }
-
-  async function handleDeleteToken(tokenId) {
-    if (!selectedOrgId || !confirm('Are you sure you want to revoke this MCP API token?')) return;
-    try {
-      await api.deleteToken(selectedOrgId, tokenId);
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      notify(err.message);
-    }
-  }
-
-  async function handleToggleOffboarding(member) {
-    if (!selectedOrgId) return;
-    try {
-      await api.updateMember(selectedOrgId, member.id, {
-        offboarding: !member.offboarding
-      });
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      notify(err.message);
-    }
-  }
-
-  async function handleCreateMemory(e) {
-    e.preventDefault();
-    if (!selectedOrgId || !memoryContent.trim()) return;
-    let meta = {};
-    if (memoryMetadata.trim()) {
+    await runBusy('join', async () => {
       try {
-        meta = JSON.parse(memoryMetadata);
-      } catch {
-        meta = { notes: memoryMetadata };
+        const res = await api.acceptInvite(token);
+        setInviteToken('');
+        await boot(res?.organization_id);
+        notify('Invite accepted.', 'success');
+      } catch (err) {
+        notify(inviteErrorMessage(err));
       }
-    }
-    try {
-      await api.createMemory(selectedOrgId, {
-        type: memoryType,
-        content: memoryContent.trim(),
-        metadata: meta,
-        visibility: memoryVisibility
-      });
-      setShowMemoryModal(false);
-      setMemoryContent('');
-      setMemoryMetadata('');
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      notify(err.message);
-    }
+    });
   }
 
-  async function handleDeleteMemory(memoryId) {
-    if (!selectedOrgId || !confirm('Delete this memory record?')) return;
-    try {
-      await api.deleteMemory(selectedOrgId, memoryId);
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      notify(err.message);
-    }
+  function handleDeleteToken(token) {
+    if (!selectedOrgId) return;
+    setConfirming({
+      title: 'Revoke MCP token?',
+      confirmLabel: 'Revoke token',
+      body: <>Any MCP client using <strong>{token.name}</strong> will stop working immediately.</>,
+      run: () => runBusy(`token:${token.id}`, async () => {
+        await api.deleteToken(selectedOrgId, token.id);
+        await refreshOrgState(selectedOrgId);
+        notify('Token revoked.', 'success');
+      }),
+    });
   }
 
-  async function handleCreateTask(e) {
-    e.preventDefault();
-    if (!selectedOrgId || !taskTitle.trim()) return;
-    try {
-      await api.createTask(selectedOrgId, {
-        title: taskTitle.trim(),
-        description: taskDesc.trim(),
-        assignee_id: taskAssignee || null,
-        due_at: taskDue || null
-      });
-      setShowTaskModal(false);
-      setTaskTitle('');
-      setTaskDesc('');
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      notify(err.message);
-    }
+  function handleToggleOffboarding(member) {
+    if (!selectedOrgId) return Promise.resolve();
+    return runBusy(`member:${member.id}`, async () => {
+      try {
+        await api.updateMember(selectedOrgId, member.id, { offboarding: !member.offboarding });
+        await refreshOrgState(selectedOrgId);
+      } catch (err) {
+        notify(err.message);
+      }
+    });
   }
 
-  async function handleUpdateTaskStatus(taskId, status) {
-    try {
-      await api.updateTask(taskId, { status });
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      notify(err.message);
-    }
+  function handleDeleteMemory(memoryId) {
+    if (!selectedOrgId) return;
+    setConfirming({
+      title: 'Delete this memory record?',
+      confirmLabel: 'Delete record',
+      body: 'The record is removed from this workspace and from future handover evidence.',
+      run: () => runBusy(`memory:${memoryId}`, async () => {
+        await api.deleteMemory(selectedOrgId, memoryId);
+        await refreshOrgState(selectedOrgId);
+        notify('Record deleted.', 'success');
+      }),
+    });
+  }
+
+  function handleUpdateTaskStatus(taskId, status) {
+    return runBusy(`task:${taskId}`, async () => {
+      try {
+        await api.updateTask(taskId, { status });
+        await refreshOrgState(selectedOrgId);
+      } catch (err) {
+        notify(err.message);
+      }
+    });
   }
 
   async function handleAddTaskComment(e, taskId) {
     e.preventDefault();
     if (!newCommentText.trim()) return;
-    try {
-      await api.createTaskComment(taskId, newCommentText.trim());
-      setNewCommentText('');
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      notify(err.message);
-    }
-  }
-
-  async function handleSyncRepo(repoId) {
-    if (!selectedOrgId) return;
-    try {
-      await api.syncRepo(selectedOrgId, repoId);
-      notify('Repository synced successfully.', 'success');
-      refreshOrgState(selectedOrgId);
-    } catch (err) {
-      notify(err.message);
-    }
+    await runBusy(`comment:${taskId}`, async () => {
+      try {
+        await api.createTaskComment(taskId, newCommentText.trim());
+        setNewCommentText('');
+        await refreshOrgState(selectedOrgId);
+      } catch (err) {
+        notify(err.message);
+      }
+    });
   }
 
   // Handover actions
-  async function handleStartHandover(e) {
-    e.preventDefault();
-    if (!selectedOrgId || !handoverLeaverId || !handoverIncomingId) return;
-    try {
-      const res = await api.startHandover(selectedOrgId, handoverLeaverId, handoverIncomingId);
-      setShowStartHandoverModal(false);
-      setActiveTab('handovers');
-      refreshOrgState(selectedOrgId);
-      if (res?.handover?.id) await loadHandover(res.handover.id);
-    } catch (err) {
-      notify(err.message);
-    }
-  }
-
   async function loadHandover(id) {
+    setLoadingHandoverId(id);
     try {
       const detail = await api.getHandover(id);
       setActiveHandoverDetail(detail);
     } catch (err) {
       notify(`Failed to load handover: ${err.message}`);
+    } finally {
+      setLoadingHandoverId(null);
     }
   }
 
   // Run a handover action, then reload the full detail the server returns from GET.
   async function runHandoverAction(action, successMessage) {
     const id = activeHandoverDetail?.handover?.id;
-    if (!id) return;
-    try {
-      await action(id);
-      await loadHandover(id);
-      refreshOrgState(selectedOrgId);
-      if (successMessage) notify(successMessage, 'success');
-    } catch (err) {
-      notify(err.message);
-    }
+    if (!id) return false;
+    const ok = await runBusy('handover', async () => {
+      try {
+        await action(id);
+        await loadHandover(id);
+        refreshOrgState(selectedOrgId);
+        if (successMessage) notify(successMessage, 'success');
+        return true;
+      } catch (err) {
+        notify(err.message);
+        return false;
+      }
+    });
+    return Boolean(ok);
   }
 
   async function handleAnswerQuestion(e, questionId) {
     e.preventDefault();
     if (!answerText.trim()) return;
-    await runHandoverAction(id => api.answerQuestion(id, questionId, answerText.trim()));
-    setAnsweringQuestionId(null);
-    setAnswerText('');
+    const ok = await runHandoverAction(id => api.answerQuestion(id, questionId, answerText.trim()));
+    if (ok) {
+      setAnsweringQuestionId(null);
+      setAnswerText('');
+    }
   }
 
-  const handleGenerateHandover = () => runHandoverAction(id => api.generateHandover(id));
+  const handleGenerateHandover = () => runHandoverAction(id => api.generateHandover(id), 'Claims compiled.');
   const handleClaimReview = (claimId, status) => runHandoverAction(id => api.updateClaim(id, claimId, { status }));
   const handleSkipQuestion = questionId => runHandoverAction(id => api.skipQuestion(id, questionId));
   const handleResolveConflict = (claimId, body) => runHandoverAction(id => api.resolveConflict(id, claimId, body), 'Conflict resolved.');
@@ -424,22 +390,39 @@ export function Workspace({
     }
   }
 
-  async function handleSetFunctionRole(member, value) {
-    try {
-      await api.updateMember(selectedOrgId, member.id, { function_role: value || null });
-      await refreshOrgState(selectedOrgId);
-    } catch (err) {
-      notify(err.message);
-    }
+  function handleSetFunctionRole(member, value) {
+    return runBusy(`role:${member.id}`, async () => {
+      try {
+        await api.updateMember(selectedOrgId, member.id, { function_role: value || null });
+        await refreshOrgState(selectedOrgId);
+      } catch (err) {
+        notify(err.message);
+      }
+    });
   }
 
   function startHandoverFor(leaverUserId) {
     setHandoverLeaverId(leaverUserId || '');
-    setHandoverIncomingId('');
     setShowStartHandoverModal(true);
   }
   const handleApproveHandover = () => runHandoverAction(id => api.approveHandover(id), 'Handover approved.');
   const handleAcknowledgeHandover = () => runHandoverAction(id => api.acknowledgeHandover(id), 'Handover acknowledged.');
+
+  function handleExportHandover() {
+    const handover = activeHandoverDetail?.handover;
+    if (!handover) return Promise.resolve();
+    return runBusy('export', async () => {
+      try {
+        const markdown = await api.getHandoverMarkdown(handover.id);
+        const from = slugify(memberLabel(handover.leaver_id), 'leaver');
+        const to = slugify(memberLabel(handover.incoming_id), 'incoming');
+        downloadText(`handover-${from}-to-${to}.md`, typeof markdown === 'string' ? markdown : JSON.stringify(markdown, null, 2));
+        notify('Markdown exported.', 'success');
+      } catch (err) {
+        notify(`Export failed: ${err.message}`);
+      }
+    });
+  }
 
   async function handleAskQuestion(e) {
     e.preventDefault();
@@ -456,33 +439,34 @@ export function Workspace({
     }
   }
 
+  function onTabKeyDown(event) {
+    const keys = { ArrowRight: 1, ArrowLeft: -1 };
+    const index = TABS.findIndex(tab => tab.id === activeTab);
+    let next = null;
+    if (event.key in keys) next = (index + keys[event.key] + TABS.length) % TABS.length;
+    if (event.key === 'Home') next = 0;
+    if (event.key === 'End') next = TABS.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    setActiveTab(TABS[next].id);
+    document.getElementById(`ws-tab-${TABS[next].id}`)?.focus();
+  }
+
   if (loading && !orgState) {
     return (
-      <div className="ws-container" style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <div className="ws-container" role="status" style={{ alignItems: 'center', justifyContent: 'center' }}>
         <style>{`
           @keyframes batonLoaderGlow {
-            0% {
-              opacity: 0.65;
-              filter: drop-shadow(0 0 4px rgba(52, 211, 153, 0.2));
-              transform: scale(0.97);
-            }
-            50% {
-              opacity: 1;
-              filter: drop-shadow(0 0 14px rgba(52, 211, 153, 0.65));
-              transform: scale(1.03);
-            }
-            100% {
-              opacity: 0.65;
-              filter: drop-shadow(0 0 4px rgba(52, 211, 153, 0.2));
-              transform: scale(0.97);
-            }
+            0% { opacity: 0.65; transform: scale(0.97); }
+            50% { opacity: 1; transform: scale(1.03); }
+            100% { opacity: 0.65; transform: scale(0.97); }
           }
         `}</style>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           <div style={{ animation: 'batonLoaderGlow 2.4s ease-in-out infinite' }}>
             <Brand size={32} iconOnly />
           </div>
-          <div style={{ color: 'var(--muted)', fontSize: '0.9rem', letterSpacing: '0.02em' }}>Loading Baton Workspace...</div>
+          <div style={{ color: 'var(--muted)', fontSize: '0.9rem', letterSpacing: '0.02em' }}>Loading Baton workspace…</div>
         </div>
       </div>
     );
@@ -497,7 +481,8 @@ export function Workspace({
 
   const hv = activeHandoverDetail?.handover;
   const myUserId = me?.user?.id;
-  const isAdmin = orgs.find(o => o.id === selectedOrgId)?.role === 'admin';
+  const selectedOrg = orgs.find(o => o.id === selectedOrgId);
+  const isAdmin = selectedOrg?.role === 'admin';
   const riskAlerts = Array.isArray(risks?.alerts) ? risks.alerts : [];
   const hiddenRiskCount = risks?.hidden_count ?? 0;
   const openConflicts = (activeHandoverDetail?.claims || []).filter(c => c.conflict && !c.conflict.resolved && c.status !== 'rejected').length;
@@ -513,22 +498,12 @@ export function Workspace({
   const riskItems = Array.isArray(risks?.risks) ? risks.risks : [];
   const riskCounts = risks?.counts || {};
   const busFactor = Array.isArray(risks?.bus_factor) ? risks.bus_factor : risks?.bus_factor ? [risks.bus_factor] : [];
-
-  function buildMcpSnippet(tab) {
-    const repoId = repositories[0]?.id;
-    if (!selectedOrgId || !repoId) return null;
-    const apiUrl = window.location.origin.includes('localhost') ? 'https://baton-nu.vercel.app' : window.location.origin;
-    const apiKey = revealedToken || (tokens[0]?.name ? `<TOKEN_FOR_${tokens[0].name.toUpperCase()}>` : '<GENERATE_A_TOKEN_ABOVE>');
-    const env = { BATON_API_URL: apiUrl, BATON_API_KEY: apiKey, BATON_ORG_ID: selectedOrgId, BATON_REPOSITORY_ID: repoId };
-    if (tab === 'claude_cli') {
-      const flags = Object.entries(env).map(([k, v]) => `-e ${k}="${v}"`).join(' ');
-      return `claude mcp add baton -s user ${flags} -- npx -y ${MCP_PACKAGE_SOURCE} baton-mcp`;
-    }
-    if (tab === 'local_node') {
-      return JSON.stringify({ mcpServers: { baton: { command: 'node', args: ['mcp-server/dist/index.js'], env } } }, null, 2);
-    }
-    return JSON.stringify({ mcpServers: { baton: { command: 'npx', args: ['-y', MCP_PACKAGE_SOURCE, 'baton-mcp'], env } } }, null, 2);
-  }
+  const sourceRepo = new Map(sources.map(s => [s.id, s.repository_id]));
+  const visibleRiskItems = riskRepoId === 'all'
+    ? riskItems
+    : riskItems.filter(r => (r.source_ids || []).some(id => sourceRepo.get(id) === riskRepoId));
+  const visibleBusFactor = riskRepoId === 'all' ? busFactor : busFactor.filter(b => b.repository_id === riskRepoId);
+  const checklistItems = buildChecklist({ members, repositories, tokens, sources, handovers });
 
   const noticeBar = notice && (
     <div
@@ -545,6 +520,7 @@ export function Workspace({
   const decisionsCount = sources.filter(s => s.type === 'decision').length;
   const blockersCount = sources.filter(s => s.type === 'blocker').length;
   const commitsCount = sources.filter(s => s.type === 'commit' || s.type === 'pull_request').length;
+  const tabCounts = { memory: sources.length, github: repositories.length, team: members.length, tasks: tasks.length, handovers: handovers.length };
 
   // Filtered sources
   const filteredSources = sources.filter(s => {
@@ -560,16 +536,18 @@ export function Workspace({
 
   return (
     <div className="ws-container">
+      <h1 className="sr-only">{isDemo ? 'Baton demo workspace' : `Baton workspace${selectedOrg ? `: ${selectedOrg.name}` : ''}`}</h1>
       {/* Top Header */}
       <header className="ws-header">
         <div className="ws-header-left">
-          <div className="ws-logo-wrap" onClick={onBack}>
+          <button type="button" className="ws-logo-wrap" aria-label="Home" onClick={onBack}>
             <Brand size={20} />
-          </div>
+          </button>
 
           {orgs.length > 0 && (
             <select
               className="ws-org-select"
+              aria-label="Organization"
               value={selectedOrgId || ''}
               onChange={e => setSelectedOrgId(e.target.value)}
             >
@@ -581,7 +559,7 @@ export function Workspace({
             </select>
           )}
 
-          <button className="ws-btn ws-btn-sm" onClick={() => setShowCreateOrgModal(true)}>
+          <button type="button" className="ws-btn ws-btn-sm" aria-label="Create organization" onClick={() => setShowCreateOrgModal(true)}>
             + Org
           </button>
         </div>
@@ -593,6 +571,7 @@ export function Workspace({
               {demoPersonas.length > 0 && (
                 <select
                   className="ws-org-select"
+                  aria-label="Switch demo persona"
                   style={{ fontSize: '0.75rem', padding: '3px 8px' }}
                   value={demoPersona || ''}
                   onChange={e => onDemoPersonaChange?.(e.target.value)}
@@ -607,17 +586,17 @@ export function Workspace({
           )}
 
           <div className="ws-user-badge">
-            <span style={{ color: 'var(--green)', fontWeight: 600 }}>●</span>
+            <span aria-hidden="true" style={{ color: 'var(--green)', fontWeight: 600 }}>●</span>
             <span>{userLabel}</span>
           </div>
 
           {onSignOut && (
-            <button className="ws-btn ws-btn-sm" onClick={onSignOut}>
+            <button type="button" className="ws-btn ws-btn-sm" onClick={onSignOut}>
               Sign Out
             </button>
           )}
           {onBack && (
-            <button className="ws-btn ws-btn-sm" onClick={onBack}>
+            <button type="button" className="ws-btn ws-btn-sm" onClick={onBack}>
               Home
             </button>
           )}
@@ -626,37 +605,48 @@ export function Workspace({
 
       {noticeBar}
 
-      {error && <div className="ws-notice ws-notice-error" role="alert"><span>{error}</span></div>}
+      {error && (
+        <div className="ws-notice ws-notice-error" role="alert">
+          <span>{error}</span>
+          <button type="button" className="ws-btn ws-btn-sm" onClick={() => boot()} disabled={loading}>Retry</button>
+        </div>
+      )}
+
+      {orgError && (
+        <div className="ws-notice ws-notice-error" role="alert">
+          <span>Could not load workspace data: {orgError}</span>
+          <button type="button" className="ws-btn ws-btn-sm" onClick={() => refreshOrgState(selectedOrgId)}>Retry</button>
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       {!noOrgs && !packetId && (
-      <nav className="ws-nav-tabs">
-        {[
-          { id: 'overview', label: 'Overview' },
-          { id: 'memory', label: 'Memory & Decisions', count: sources.length },
-          { id: 'github', label: 'GitHub', count: repositories.length },
-          { id: 'team', label: 'Team & Tokens', count: members.length },
-          { id: 'tasks', label: 'Tasks', count: tasks.length },
-          { id: 'handovers', label: 'Handovers', count: handovers.length },
-        ].map(tab => (
+      <div className="ws-nav-tabs" role="tablist" aria-label="Workspace sections" onKeyDown={onTabKeyDown}>
+        {TABS.map(tab => (
           <button
             key={tab.id}
+            type="button"
+            role="tab"
+            id={`ws-tab-${tab.id}`}
+            aria-selected={activeTab === tab.id}
+            aria-controls="ws-panel"
+            tabIndex={activeTab === tab.id ? 0 : -1}
             className={`ws-tab-btn ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
-            {tab.count !== undefined && <span className="ws-tab-count">{tab.count}</span>}
+            {tabCounts[tab.id] !== undefined && <span className="ws-tab-count">{tabCounts[tab.id]}</span>}
           </button>
         ))}
-      </nav>
+      </div>
       )}
 
       {noOrgs && (
-        <main className="ws-main">
+        <main id="main" className="ws-main">
           <div className="ws-card ws-empty-state">
             <div className="ws-empty-icon">👥</div>
             <div className="ws-empty-title">You are not part of a team yet</div>
-            <div style={{ marginBottom: 20 }}>Create a team or join one with an invite token.</div>
+            <div style={{ marginBottom: 20 }}>Create a team, or join one with an invite link from your admin.</div>
             <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap' }}>
               <form onSubmit={handleCreateOrg} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 260 }}>
                 <label className="ws-form-label" htmlFor="ws-create-team">Create a team</label>
@@ -670,7 +660,7 @@ export function Workspace({
                   maxLength={120}
                   required
                 />
-                <button type="submit" className="ws-btn ws-btn-primary">Create a team</button>
+                <button type="submit" className="ws-btn ws-btn-primary" disabled={isBusy("createOrg") || !newOrgName.trim()}>{isBusy("createOrg") ? "Creating…" : "Create a team"}</button>
               </form>
               <form onSubmit={handleAcceptInvite} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 260 }}>
                 <label className="ws-form-label" htmlFor="ws-join-invite">Join with invite</label>
@@ -678,12 +668,12 @@ export function Workspace({
                   id="ws-join-invite"
                   type="text"
                   className="ws-input"
-                  placeholder="Invite token"
+                  placeholder="Paste an invite link or token"
                   value={inviteToken}
                   onChange={e => setInviteToken(e.target.value)}
                   required
                 />
-                <button type="submit" className="ws-btn">Join with invite</button>
+                <button type="submit" className="ws-btn" disabled={isBusy("join") || !inviteToken.trim()}>{isBusy("join") ? "Joining…" : "Join with invite"}</button>
               </form>
             </div>
           </div>
@@ -692,14 +682,19 @@ export function Workspace({
 
       {/* Main Workspace Body */}
       {!noOrgs && !packetId && (
-      <main className="ws-main">
+      <main id="main" className="ws-main">
+        <div role="tabpanel" id="ws-panel" aria-labelledby={`ws-tab-${activeTab}`}>
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div>
+            {!isDemo && (
+              <OnboardingChecklist orgId={selectedOrgId} items={checklistItems} onGo={setActiveTab} />
+            )}
+
             {riskAlerts.length > 0 && (
               <section className="ws-alert-list" aria-label="Bus factor alerts">
                 {(showAllAlerts ? riskAlerts : riskAlerts.slice(0, 3)).map(alert => (
-                  <div key={alert.module} className="ws-alert" role="alert">
+                  <div key={alert.module} className="ws-alert">
                     <span>
                       <strong>Bus factor alert · {alert.module}:</strong> {alert.message}
                     </span>
@@ -726,10 +721,9 @@ export function Workspace({
             {!hasGithubData && (
               <div className="ws-card ws-empty-state">
                 <div className="ws-empty-title">No GitHub data yet</div>
-                <div style={{ marginBottom: 14 }}>Connect GitHub to see who owns which modules, or explore the demo with sample data.</div>
+                <div style={{ marginBottom: 14 }}>Connect a GitHub repository to see who owns which modules and where the bus-factor risks are.</div>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                   <button type="button" className="ws-btn ws-btn-primary" onClick={() => setActiveTab('github')}>Connect GitHub</button>
-                  {!isDemo && <a className="ws-btn" href="/demo-page">Open the demo</a>}
                 </div>
               </div>
             )}
@@ -757,10 +751,13 @@ export function Workspace({
             {/* Risk Assessment Cards */}
             <div className="ws-card">
               <div className="ws-card-header">
-                <div className="ws-card-title">
-                  <span>Continuous Architectural Risk Assessment</span>
-                </div>
-                <span className="ws-badge ws-badge-verified">Grounded Evidence Engine</span>
+                <h2 className="ws-card-title">Architectural risk assessment</h2>
+                {repositories.length > 1 && (
+                  <select className="ws-org-select" aria-label="Repository for risk details" value={riskRepoId} onChange={e => setRiskRepoId(e.target.value)}>
+                    <option value="all">All repositories</option>
+                    {repositories.map(repo => <option key={repo.id} value={repo.id}>{repo.full_name}</option>)}
+                  </select>
+                )}
               </div>
 
               {risks ? (
@@ -780,13 +777,13 @@ export function Workspace({
                     </span>
                   </div>
 
-                  {riskItems.length > 0 ? (
+                  {visibleRiskItems.length > 0 ? (
                     <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: 14 }}>
                       <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: 8, fontSize: '0.9rem' }}>
                         Source-backed risks:
                       </div>
                       <ul style={{ margin: 0, paddingLeft: 20, fontSize: '0.85rem', color: '#fca5a5', lineHeight: 1.6 }}>
-                        {riskItems.map((r, i) => (
+                        {visibleRiskItems.map((r, i) => (
                           <li key={r.source_ids?.[0] || i}>{r.summary || r.kind}</li>
                         ))}
                       </ul>
@@ -797,7 +794,7 @@ export function Workspace({
                     </div>
                   )}
 
-                  {busFactor.map((b, i) => (
+                  {visibleBusFactor.map((b, i) => (
                     <div key={b.repository_id || i} style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
                       {b.available === false ? (
                         <span>Bus factor: {b.reason}</span>
@@ -819,7 +816,7 @@ export function Workspace({
 
             <div className="ws-card">
               <div className="ws-card-header">
-                <div className="ws-card-title">Who knows what: contribution matrix</div>
+                <h2 className="ws-card-title">Who knows what: contribution matrix</h2>
               </div>
               {!risks ? (
                 <div className="ws-muted">Loading contribution data…</div>
@@ -835,32 +832,7 @@ export function Workspace({
               )}
             </div>
 
-            {/* System Status Overview */}
-            <div className="ws-card">
-              <div className="ws-card-header">
-                <div className="ws-card-title">System Infrastructure & Sync Health</div>
-              </div>
-              <div className="ws-grid-3">
-                <div style={{ background: '#131417', padding: 14, borderRadius: 6, border: '1px solid var(--line)' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 4 }}>Storage Engine</div>
-                  <div style={{ fontWeight: 600, color: '#fff' }}>
-                    {health?.configured?.supabase ? 'Supabase Postgres (RLS enabled)' : 'In-Memory Synthetic Store'}
-                  </div>
-                </div>
-                <div style={{ background: '#131417', padding: 14, borderRadius: 6, border: '1px solid var(--line)' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 4 }}>GitHub App Integration</div>
-                  <div style={{ fontWeight: 600, color: health?.configured?.github ? 'var(--green)' : '#f59e0b' }}>
-                    {health?.configured?.github ? 'Configured & Active' : 'Not configured'}
-                  </div>
-                </div>
-                <div style={{ background: '#131417', padding: 14, borderRadius: 6, border: '1px solid var(--line)' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 4 }}>Local MCP Server</div>
-                  <div style={{ fontWeight: 600, color: 'var(--green)' }}>
-                    StdioServerTransport v0.1.0 Ready
-                  </div>
-                </div>
-              </div>
-            </div>
+            <SystemStatus health={health} isDemo={isDemo} repositories={repositories} tokens={tokens} />
           </div>
         )}
 
@@ -872,6 +844,8 @@ export function Workspace({
                 {['all', 'decision', 'blocker', 'commit', 'pull_request'].map(f => (
                   <button
                     key={f}
+                    type="button"
+                    aria-pressed={memoryFilter === f}
                     className={`ws-filter-pill ${memoryFilter === f ? 'active' : ''}`}
                     onClick={() => setMemoryFilter(f)}
                   >
@@ -882,14 +856,15 @@ export function Workspace({
 
               <div style={{ display: 'flex', gap: 10 }}>
                 <input
-                  type="text"
+                  type="search"
+                  aria-label="Search memories"
                   className="ws-input"
                   placeholder="Search decisions, files, rationale..."
                   value={memorySearch}
                   onChange={e => setMemorySearch(e.target.value)}
                   style={{ width: 260 }}
                 />
-                <button className="ws-btn ws-btn-primary" onClick={() => setShowMemoryModal(true)}>
+                <button type="button" className="ws-btn ws-btn-primary" onClick={() => setShowMemoryModal(true)}>
                   + Log Memory
                 </button>
               </div>
@@ -897,9 +872,13 @@ export function Workspace({
 
             {filteredSources.length === 0 ? (
               <div className="ws-card ws-empty-state">
-                <div className="ws-empty-icon">🧠</div>
-                <div className="ws-empty-title">No memory records found</div>
-                <div>Use the "+ Log Memory" button or the Baton Local MCP Server to capture context.</div>
+                <div className="ws-empty-icon" aria-hidden="true">🧠</div>
+                <div className="ws-empty-title">{sources.length === 0 ? 'No memory records yet' : 'No records match this filter'}</div>
+                <div>
+                  {sources.length === 0
+                    ? 'Use the “+ Log Memory” button, connect a repository, or capture context with the Baton MCP server.'
+                    : 'Try another filter or clear the search.'}
+                </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -925,11 +904,14 @@ export function Workspace({
                         </div>
 
                         <button
+                          type="button"
                           className="ws-btn ws-btn-danger ws-btn-sm"
+                          disabled={isBusy(`memory:${s.id}`)}
                           onClick={() => handleDeleteMemory(s.id)}
                           title="Delete memory"
+                          aria-label={`Delete ${s.type} record`}
                         >
-                          ✕
+                          {isBusy(`memory:${s.id}`) ? '…' : '✕'}
                         </button>
                       </div>
 
@@ -986,103 +968,17 @@ export function Workspace({
 
         {/* TAB 3: GITHUB INTEGRATION */}
         {activeTab === 'github' && (
-          <div>
-            <div className="ws-card">
-              <div className="ws-card-header">
-                <div className="ws-card-title">Connected GitHub Repositories</div>
-              </div>
-
-              <GithubConnect
-                orgId={selectedOrgId}
-                installUrl={health?.githubInstallUrl}
-                outcome={githubOutcome}
-                onConnected={() => refreshOrgState(selectedOrgId)}
-              />
-
-              {repositories.length === 0 ? (
-                <div className="ws-empty-state">
-                  <div className="ws-empty-icon">🐙</div>
-                  <div className="ws-empty-title">No repositories linked yet</div>
-                  <div>Connect your organization's GitHub App to sync pull requests and commits.</div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {repositories.map(repo => (
-                    <div
-                      key={repo.id}
-                      style={{
-                        background: '#131417',
-                        border: '1px solid var(--line)',
-                        borderRadius: 6,
-                        padding: 16,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '1rem', fontWeight: 600, color: '#fff' }}>
-                          {repo.full_name}
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 4 }}>
-                          Installation ID: #{repo.installation_id} · Last Synced:{' '}
-                          {repo.last_synced_at ? new Date(repo.last_synced_at).toLocaleString() : 'Never'}
-                        </div>
-                      </div>
-
-                      <button
-                        className="ws-btn ws-btn-sm"
-                        onClick={() => handleSyncRepo(repo.id)}
-                      >
-                        ↻ Sync Now
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Imported Commits & Pull Requests Feed */}
-            <div className="ws-card">
-              <div className="ws-card-header">
-                <div className="ws-card-title">Live Git & PR Evidence Activity</div>
-                <span className="ws-badge ws-badge-verified">Idempotent Sync</span>
-              </div>
-
-              {sources.filter(s => s.type === 'commit' || s.type === 'pull_request').length === 0 ? (
-                <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
-                  No commits or pull requests synced yet. Click "Sync Now" on a connected repository.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {sources
-                    .filter(s => s.type === 'commit' || s.type === 'pull_request')
-                    .map(s => (
-                      <div
-                        key={s.id}
-                        style={{
-                          background: '#121316',
-                          border: '1px solid var(--line)',
-                          borderRadius: 6,
-                          padding: 12,
-                          fontSize: '0.85rem',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span className={`ws-badge ${s.type === 'pull_request' ? 'ws-badge-verified' : 'ws-badge-muted'}`}>
-                            {s.type === 'pull_request' ? `PR #${s.metadata?.number || ''}` : 'Commit'}
-                          </span>
-                          <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>
-                            {new Date(s.created_at).toLocaleString()}
-                          </span>
-                        </div>
-                        <div style={{ color: '#fff', fontWeight: 500 }}>{s.content}</div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <GithubTab
+            orgId={selectedOrgId}
+            isDemo={isDemo}
+            isAdmin={isAdmin}
+            health={health}
+            outcome={githubOutcome}
+            repositories={repositories}
+            sources={sources}
+            notify={notify}
+            onRefresh={() => refreshOrgState(selectedOrgId)}
+          />
         )}
 
         {/* TAB 4: TEAM & MCP TOKENS */}
@@ -1091,12 +987,15 @@ export function Workspace({
             {/* Team Members List */}
             <div className="ws-card">
               <div className="ws-card-header">
-                <div className="ws-card-title">Organization Members</div>
-                <button className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => setShowInviteModal(true)}>
-                  + Invite Member
-                </button>
+                <h2 className="ws-card-title">Organization members</h2>
+                {(isAdmin || isDemo) && (
+                  <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => setShowInviteModal(true)}>
+                    + Invite member
+                  </button>
+                )}
               </div>
 
+              {members.length === 0 && <div className="ws-muted">No members to show.</div>}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {members.map(m => (
                   <div
@@ -1140,11 +1039,14 @@ export function Workspace({
                         <span className="ws-badge ws-badge-muted">{m.function_role || 'no function role'}</span>
                       )}
                       <button
+                        type="button"
                         className={`ws-btn ws-btn-sm ${m.offboarding ? 'ws-btn-danger' : ''}`}
+                        disabled={isBusy(`member:${m.id}`)}
+                        aria-pressed={Boolean(m.offboarding)}
                         onClick={() => handleToggleOffboarding(m)}
                         title="Toggle offboarding mode for handover generation"
                       >
-                        {m.offboarding ? 'Offboarding Flagged' : 'Set Offboarding'}
+                        {isBusy(`member:${m.id}`) ? 'Saving…' : m.offboarding ? 'Offboarding flagged' : 'Set offboarding'}
                       </button>
                     </div>
                   </div>
@@ -1155,23 +1057,23 @@ export function Workspace({
             {/* MCP API Tokens & Client Snippet */}
             <div className="ws-card">
               <div className="ws-card-header">
-                <div className="ws-card-title">Baton MCP Server & API Tokens</div>
-                <button className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => setShowTokenModal(true)}>
+                <h2 className="ws-card-title">Baton MCP server and API tokens</h2>
+                <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => setShowTokenModal(true)}>
                   + Generate MCP Token
                 </button>
               </div>
 
               <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 16 }}>
-                Baton MCP integrates directly with Cursor, Claude Desktop, Antigravity, and Codex to capture decisions and blockers locally with client-side secret redaction.
+                Baton MCP captures decisions and blockers from MCP-compatible tools such as Cursor, Claude and Antigravity, with client-side secret redaction.
               </div>
 
               {/* Token List */}
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', marginBottom: 10 }}>
-                  Active API Tokens:
-                </div>
+                <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', margin: '0 0 10px' }}>
+                  Active API tokens
+                </h3>
                 {tokens.length === 0 ? (
-                  <div style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>No tokens created yet.</div>
+                  <div className="ws-muted">No tokens yet. Generate one to connect an MCP client.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {tokens.map(t => (
@@ -1194,10 +1096,13 @@ export function Workspace({
                           </span>
                         </div>
                         <button
+                          type="button"
                           className="ws-btn ws-btn-danger ws-btn-sm"
-                          onClick={() => handleDeleteToken(t.id)}
+                          disabled={isBusy(`token:${t.id}`)}
+                          aria-label={`Revoke token ${t.name}`}
+                          onClick={() => handleDeleteToken(t)}
                         >
-                          Revoke
+                          {isBusy(`token:${t.id}`) ? 'Revoking…' : 'Revoke'}
                         </button>
                       </div>
                     ))}
@@ -1205,82 +1110,7 @@ export function Workspace({
                 )}
               </div>
 
-              {/* Ready-to-copy JSON configuration with Zero-Clone npx options */}
-              <div style={{ marginTop: 24, borderTop: '1px solid var(--line)', paddingTop: 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>Zero-Clone MCP Configuration</span>
-                      <span style={{ fontSize: '0.7rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.1)', border: '1px solid #284435', padding: '2px 8px', borderRadius: 12, fontFamily: 'monospace' }}>
-                        Zero Git Clone Required
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: 2 }}>
-                      Connect Baton's memory daemon over stdio via npx directly from GitHub without cloning or downloading code.
-                    </div>
-                  </div>
-
-                  <button
-                    className="ws-btn ws-btn-primary ws-btn-sm"
-                    disabled={!buildMcpSnippet(mcpClientTab)}
-                    onClick={() => {
-                      const textToCopy = buildMcpSnippet(mcpClientTab);
-                      if (!textToCopy) return;
-                      navigator.clipboard?.writeText(textToCopy);
-                      setCopiedMcpSnippet(true);
-                      setTimeout(() => setCopiedMcpSnippet(false), 2000);
-                    }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  >
-                    <span>{copiedMcpSnippet ? '✓ Copied!' : 'Copy Configuration'}</span>
-                  </button>
-                </div>
-
-                {/* Client Selector Tabs */}
-                <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-                  {[
-                    { id: 'cursor', label: 'Cursor (.cursor/mcp.json)' },
-                    { id: 'claude_desktop', label: 'Claude Desktop' },
-                    { id: 'claude_cli', label: 'Claude Code (1-Click CLI)' },
-                    { id: 'antigravity', label: 'Antigravity / Windsurf' },
-                    { id: 'local_node', label: 'Local Clone (node)' }
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setMcpClientTab(tab.id)}
-                      style={{
-                        background: mcpClientTab === tab.id ? '#1e2430' : '#14161a',
-                        color: mcpClientTab === tab.id ? '#34d399' : '#8f96a3',
-                        border: `1px solid ${mcpClientTab === tab.id ? '#2a4d3d' : 'var(--line)'}`,
-                        borderRadius: 6,
-                        padding: '6px 12px',
-                        fontSize: '0.78rem',
-                        fontWeight: mcpClientTab === tab.id ? 600 : 400,
-                        cursor: 'pointer',
-                        fontFamily: 'monospace'
-                      }}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Configuration Code Box */}
-                <div className="ws-code-snippet" style={{ position: 'relative' }}>
-                  <pre style={{ margin: 0, overflowX: 'auto', fontSize: '0.82rem', lineHeight: 1.6 }}>
-                    {buildMcpSnippet(mcpClientTab) || 'Connect a repository first (GitHub tab) to generate an MCP configuration.'}
-                  </pre>
-                </div>
-
-                {/* Setup Tip */}
-                <div style={{ fontSize: '0.76rem', color: '#7e8594', marginTop: 8, fontFamily: 'monospace' }}>
-                  {mcpClientTab === 'cursor' && '💡 Paste into your project root as .cursor/mcp.json or in Cursor Settings → MCP → Add New Server.'}
-                  {mcpClientTab === 'claude_desktop' && '💡 Paste into claude_desktop_config.json (Claude Settings → Developer → Edit Config).'}
-                  {mcpClientTab === 'claude_cli' && '💡 Paste this single command directly into your terminal. Zero files to edit.'}
-                  {mcpClientTab === 'antigravity' && '💡 Paste into .antigravity/mcp.json in your workspace root.'}
-                  {mcpClientTab === 'local_node' && '💡 For developers working directly inside the cloned BATON repository.'}
-                </div>
-
+              <McpConfig orgId={selectedOrgId} repositories={repositories} tokens={tokens} revealedToken={newestToken} notify={notify}>
                 {isDemo ? (
                 <div style={{
                   marginTop: 24,
@@ -1396,8 +1226,18 @@ export function Workspace({
                   )}
                 </div>
                 )}
-              </div>
+              </McpConfig>
             </div>
+
+            {isAdmin && !isDemo && selectedOrg && (
+              <SettingsCard
+                org={selectedOrg}
+                notify={notify}
+                onRenamed={org => setOrgs(list => list.map(item => (item.id === org.id ? { ...item, name: org.name } : item)))}
+                onCleared={() => refreshOrgState(selectedOrgId)}
+                onDeleted={() => boot()}
+              />
+            )}
           </div>
         )}
 
@@ -1405,18 +1245,18 @@ export function Workspace({
         {activeTab === 'tasks' && (
           <div>
             <div className="ws-filter-bar">
-              <div className="ws-card-title" style={{ margin: 0 }}>
-                Handoff Tasks & Operational Action Items
-              </div>
-              <button className="ws-btn ws-btn-primary" onClick={() => setShowTaskModal(true)}>
+              <h2 className="ws-card-title" style={{ margin: 0 }}>
+                Handoff tasks and action items
+              </h2>
+              <button type="button" className="ws-btn ws-btn-primary" onClick={() => setShowTaskModal(true)}>
                 + New Task
               </button>
             </div>
 
             {tasks.length === 0 ? (
               <div className="ws-card ws-empty-state">
-                <div className="ws-empty-icon">📋</div>
-                <div className="ws-empty-title">No pending handover tasks</div>
+                <div className="ws-empty-icon" aria-hidden="true">📋</div>
+                <div className="ws-empty-title">No tasks yet</div>
                 <div>Create tasks to track outstanding architectural deliverables and follow-ups.</div>
               </div>
             ) : (
@@ -1444,7 +1284,9 @@ export function Workspace({
                       <div style={{ display: 'flex', gap: 6 }}>
                         <select
                           className="ws-org-select"
-                          style={{ fontSize: '0.75rem', padding: '3px 8px' }}
+                          aria-label={`Status for task ${task.title}`}
+                          disabled={isBusy(`task:${task.id}`)}
+                          style={{ fontSize: "0.75rem", padding: "3px 8px" }}
                           value={task.status || 'open'}
                           onChange={e => handleUpdateTaskStatus(task.id, e.target.value)}
                         >
@@ -1467,6 +1309,8 @@ export function Workspace({
                     {/* Comments & Discussion Drawer */}
                     <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
                       <button
+                        type="button"
+                        aria-expanded={activeTaskIdForComments === task.id}
                         className="ws-btn ws-btn-sm"
                         style={{ background: 'transparent', border: 'none', color: 'var(--green)', padding: 0 }}
                         onClick={() =>
@@ -1510,13 +1354,14 @@ export function Workspace({
                             <input
                               type="text"
                               className="ws-input"
+                              aria-label="Write a comment"
                               placeholder="Write a comment..."
                               value={newCommentText}
                               onChange={e => setNewCommentText(e.target.value)}
                               style={{ flex: 1, padding: '6px 10px', fontSize: '0.8rem' }}
                             />
-                            <button type="submit" className="ws-btn ws-btn-primary ws-btn-sm">
-                              Reply
+                            <button type="submit" className="ws-btn ws-btn-primary ws-btn-sm" disabled={isBusy(`comment:${task.id}`) || !newCommentText.trim()}>
+                              {isBusy(`comment:${task.id}`) ? "Sending…" : "Reply"}
                             </button>
                           </form>
                         </div>
@@ -1534,10 +1379,11 @@ export function Workspace({
           <div>
             <div className="ws-card">
               <div className="ws-card-header">
-                <div className="ws-card-title">Engineering Handovers</div>
+                <h2 className="ws-card-title">Engineering handovers</h2>
                 <button
+                  type="button"
                   className="ws-btn ws-btn-primary ws-btn-sm"
-                  onClick={() => setShowStartHandoverModal(true)}
+                  onClick={() => startHandoverFor("")}
                 >
                   + Initiate Handover
                 </button>
@@ -1545,7 +1391,7 @@ export function Workspace({
 
               {handovers.length === 0 ? (
                 <div className="ws-empty-state">
-                  <div className="ws-empty-icon">🤝</div>
+                  <div className="ws-empty-icon" aria-hidden="true">🤝</div>
                   <div className="ws-empty-title">No active handovers</div>
                   <div>Initiate an evidence-based handover to capture and verify knowledge transfer.</div>
                 </div>
@@ -1554,6 +1400,9 @@ export function Workspace({
                   {handovers.map(h => (
                     <button
                       key={h.id}
+                      type="button"
+                      aria-pressed={hv?.id === h.id}
+                      disabled={loadingHandoverId !== null}
                       className={`ws-btn ${hv?.id === h.id ? 'ws-btn-primary' : ''}`}
                       onClick={() => loadHandover(h.id)}
                     >
@@ -1587,14 +1436,15 @@ export function Workspace({
                     </div>
 
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="ws-btn ws-btn-sm" onClick={handleGenerateHandover} disabled={hv?.status !== 'draft'}>
+                      <button type="button" className="ws-btn ws-btn-sm" onClick={handleGenerateHandover} disabled={hv?.status !== "draft" || isBusy("handover")}>
                         ⚡ Compile Claims
                       </button>
                       {isAdmin && (
                         <button
+                          type="button"
                           className="ws-btn ws-btn-primary ws-btn-sm"
                           onClick={handleApproveHandover}
-                          disabled={hv?.status !== 'draft' || openConflicts > 0}
+                          disabled={hv?.status !== "draft" || openConflicts > 0 || isBusy("handover")}
                           title={openConflicts > 0 ? 'Resolve every conflict before approving' : undefined}
                         >
                           ✓ Approve Handover
@@ -1602,9 +1452,10 @@ export function Workspace({
                       )}
                       {myUserId && myUserId === hv?.incoming_id && (
                         <button
+                          type="button"
                           className="ws-btn ws-btn-sm"
                           onClick={handleAcknowledgeHandover}
-                          disabled={hv?.status !== 'approved' || Boolean(hv?.acknowledged_at)}
+                          disabled={hv?.status !== "approved" || Boolean(hv?.acknowledged_at) || isBusy("handover")}
                         >
                           🤝 Acknowledge Transfer
                         </button>
@@ -1612,6 +1463,11 @@ export function Workspace({
                       <button type="button" className="ws-btn ws-btn-sm" onClick={() => setPacketId(hv.id)}>
                         Open packet
                       </button>
+                      {hv?.status === 'approved' && (
+                        <button type="button" className="ws-btn ws-btn-sm" onClick={handleExportHandover} disabled={isBusy('export')}>
+                          {isBusy('export') ? 'Exporting…' : 'Export Markdown'}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1619,7 +1475,7 @@ export function Workspace({
                   {activeHandoverDetail.questions && activeHandoverDetail.questions.length > 0 && (
                     <div style={{ marginTop: 14 }}>
                       <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff', marginBottom: 8 }}>
-                        Exit Interview Questions (Knowledge Gap Detection):
+                        Exit interview questions (knowledge gaps)
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {activeHandoverDetail.questions.filter(q => !q.asked_by).map(q => (
@@ -1661,7 +1517,7 @@ export function Workspace({
                                       style={{ width: '100%', marginBottom: 6 }}
                                     />
                                     <div style={{ display: 'flex', gap: 6 }}>
-                                      <button type="submit" className="ws-btn ws-btn-primary ws-btn-sm">
+                                      <button type="submit" className="ws-btn ws-btn-primary ws-btn-sm" disabled={isBusy("handover") || !answerText.trim()}>
                                         Submit Answer
                                       </button>
                                       <button
@@ -1692,6 +1548,7 @@ export function Workspace({
                                         type="button"
                                         className="ws-btn ws-btn-sm"
                                         aria-label={`Skip question: ${String(q.question_text).slice(0, 60)}`}
+                                        disabled={isBusy("handover")}
                                         onClick={() => handleSkipQuestion(q.id)}
                                       >
                                         Skip
@@ -1711,7 +1568,7 @@ export function Workspace({
                 {/* Grounded Claims List */}
                 <div className="ws-card">
                   <div className="ws-card-header">
-                    <div className="ws-card-title">Evidence-Backed Grounded Claims</div>
+                    <h2 className="ws-card-title">Evidence-backed claims</h2>
                     <span className="ws-badge ws-badge-verified">
                       {activeHandoverDetail.claims?.length || 0} claims
                     </span>
@@ -1735,14 +1592,15 @@ export function Workspace({
                 {/* Newcomer Cited Q&A Tool */}
                 <div className="ws-card">
                   <div className="ws-card-header">
-                    <div className="ws-card-title">Ask Newcomer Question (Cited Q&A)</div>
-                    <span className="ws-badge ws-badge-verified">Verbatim Citations Only</span>
+                    <h2 className="ws-card-title">Ask a question (cited answers)</h2>
+                    <span className="ws-badge ws-badge-verified">Answers cite approved sources only</span>
                   </div>
 
                   <form onSubmit={handleAskQuestion} style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
                     <input
                       type="text"
                       className="ws-input"
+                      aria-label="Ask a question about this handover"
                       placeholder="e.g. Why did we choose this database? What work is still unfinished?"
                       value={qaQuestion}
                       onChange={e => setQaQuestion(e.target.value)}
@@ -1787,7 +1645,7 @@ export function Workspace({
 
                 <div className="ws-card">
                   <div className="ws-card-header">
-                    <div className="ws-card-title">Version History</div>
+                    <h2 className="ws-card-title">Version history</h2>
                   </div>
                   <VersionHistory handoverId={hv.id} notify={notify} refreshKey={hv.version} />
                 </div>
@@ -1795,355 +1653,91 @@ export function Workspace({
             )}
           </div>
         )}
+        </div>
       </main>
       )}
 
       {packetId && (
-        <main className="ws-main">
+        <main id="main" className="ws-main">
           <HandoverPage handoverId={packetId} mode={mode} embedded onBack={() => setPacketId(null)} />
         </main>
       )}
 
-      {/* MODAL 1: CREATE ORG */}
       {showCreateOrgModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowCreateOrgModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Create New Organization</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowCreateOrgModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateOrg}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Organization Name</label>
-                <input
-                  type="text"
-                  className="ws-input"
-                  placeholder="e.g. Acme Corp Engineering"
-                  value={newOrgName}
-                  onChange={e => setNewOrgName(e.target.value)}
-                  required
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowCreateOrgModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Create Organization
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CreateOrgModal
+          onClose={() => setShowCreateOrgModal(false)}
+          onCreated={async res => {
+            setShowCreateOrgModal(false);
+            await boot(res?.organization?.id);
+            notify('Team created.', 'success');
+          }}
+        />
       )}
 
-      {/* MODAL 2: INVITE MEMBER */}
-      {showInviteModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowInviteModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Invite Team Member</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowInviteModal(false)}>✕</button>
-            </div>
-            {generatedInviteToken ? (
-              <div>
-                <div style={{ color: 'var(--green)', fontWeight: 600, marginBottom: 8 }}>
-                  ✓ Invite link generated!
-                </div>
-                <div className="ws-code-snippet" style={{ marginBottom: 14 }}>
-                  {`${window.location.origin}/auth?invite=${generatedInviteToken}`}
-                </div>
-                <button
-                  className="ws-btn ws-btn-primary"
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/auth?invite=${generatedInviteToken}`);
-                    notify('Copied invite link to clipboard!');
-                    setShowInviteModal(false);
-                    setGeneratedInviteToken(null);
-                  }}
-                >
-                  Copy Link & Close
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateInvite}>
-                <div className="ws-form-group">
-                  <label className="ws-form-label">Email Address (Optional)</label>
-                  <input
-                    type="email"
-                    className="ws-input"
-                    placeholder="engineer@company.com"
-                    value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
-                  />
-                </div>
-                <div className="ws-form-group">
-                  <label className="ws-form-label">Role</label>
-                  <select
-                    className="ws-org-select"
-                    value={inviteRole}
-                    onChange={e => setInviteRole(e.target.value)}
-                  >
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                  <button type="button" className="ws-btn" onClick={() => setShowInviteModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="ws-btn ws-btn-primary">
-                    Generate Invite
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
+      {showInviteModal && <InviteModal orgId={selectedOrgId} notify={notify} onClose={() => { setShowInviteModal(false); refreshOrgState(selectedOrgId); }} />}
 
-      {/* MODAL 3: GENERATE MCP TOKEN */}
       {showTokenModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowTokenModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Generate Baton MCP Token</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowTokenModal(false)}>✕</button>
-            </div>
-            {revealedToken ? (
-              <div>
-                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 6, padding: 12, marginBottom: 14, color: '#fca5a5', fontSize: '0.85rem' }}>
-                  ⚠️ <strong>Do Not Share:</strong> Copy this token now. For your security, this secret will never be displayed again.
-                </div>
-                <div className="ws-code-snippet" style={{ marginBottom: 14, color: '#34d399' }}>
-                  {revealedToken}
-                </div>
-                <button
-                  className="ws-btn ws-btn-primary"
-                  onClick={() => {
-                    navigator.clipboard.writeText(revealedToken);
-                    notify('Token copied to clipboard!');
-                    setShowTokenModal(false);
-                    setRevealedToken(null);
-                  }}
-                >
-                  Copy Secret & Close
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateToken}>
-                <div className="ws-form-group">
-                  <label className="ws-form-label">Token Name / Client Description</label>
-                  <input
-                    type="text"
-                    className="ws-input"
-                    placeholder="e.g. Cursor Work Laptop, Claude CLI"
-                    value={newTokenName}
-                    onChange={e => setNewTokenName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                  <button type="button" className="ws-btn" onClick={() => setShowTokenModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="ws-btn ws-btn-primary">
-                    Create Token
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
+        <TokenModal
+          orgId={selectedOrgId}
+          notify={notify}
+          onCreated={token => { setNewestToken(token); refreshOrgState(selectedOrgId); }}
+          onClose={() => setShowTokenModal(false)}
+        />
       )}
 
-      {/* MODAL 4: LOG MEMORY */}
       {showMemoryModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowMemoryModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Log Context & Reasoning</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowMemoryModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateMemory}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Type</label>
-                <select
-                  className="ws-org-select"
-                  value={memoryType}
-                  onChange={e => setMemoryType(e.target.value)}
-                >
-                  <option value="decision">Architectural Decision</option>
-                  <option value="blocker">Blocker / Unfinished Task</option>
-                  <option value="note">Operational Note</option>
-                </select>
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Content / Decision Summary</label>
-                <textarea
-                  className="ws-input"
-                  rows={3}
-                  placeholder="Describe what was decided, why, or what is blocking..."
-                  value={memoryContent}
-                  onChange={e => setMemoryContent(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Metadata (JSON or Notes)</label>
-                <textarea
-                  className="ws-input"
-                  rows={2}
-                  placeholder='{"reason": "Faster builds", "files_affected": ["vite.config.js"]}'
-                  value={memoryMetadata}
-                  onChange={e => setMemoryMetadata(e.target.value)}
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Visibility</label>
-                <select
-                  className="ws-org-select"
-                  value={memoryVisibility}
-                  onChange={e => setMemoryVisibility(e.target.value)}
-                >
-                  <option value="team">Team (Visible to org)</option>
-                  <option value="admin">Admin Only</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowMemoryModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Save Memory
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <MemoryModal
+          orgId={selectedOrgId}
+          onClose={() => setShowMemoryModal(false)}
+          onSaved={async () => { setShowMemoryModal(false); await refreshOrgState(selectedOrgId); notify('Memory saved.', 'success'); }}
+        />
       )}
 
-      {/* MODAL 5: NEW TASK */}
       {showTaskModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowTaskModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Create Handover Task</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowTaskModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateTask}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Task Title</label>
-                <input
-                  type="text"
-                  className="ws-input"
-                  placeholder="e.g. Verify webhook replay protection"
-                  value={taskTitle}
-                  onChange={e => setTaskTitle(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Description</label>
-                <textarea
-                  className="ws-input"
-                  rows={3}
-                  placeholder="Details and expected acceptance criteria..."
-                  value={taskDesc}
-                  onChange={e => setTaskDesc(e.target.value)}
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Assignee</label>
-                <select
-                  className="ws-org-select"
-                  value={taskAssignee}
-                  onChange={e => setTaskAssignee(e.target.value)}
-                >
-                  <option value="">Unassigned</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.user_id}>
-                      {m.name || m.github_login || m.user_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Due Date</label>
-                <input
-                  type="date"
-                  className="ws-input"
-                  value={taskDue}
-                  onChange={e => setTaskDue(e.target.value)}
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowTaskModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Create Task
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <TaskModal
+          orgId={selectedOrgId}
+          members={members}
+          onClose={() => setShowTaskModal(false)}
+          onSaved={async () => { setShowTaskModal(false); await refreshOrgState(selectedOrgId); notify('Task created.', 'success'); }}
+        />
       )}
 
-      {/* MODAL 6: INITIATE HANDOVER */}
       {showStartHandoverModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowStartHandoverModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Initiate Handover Protocol</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowStartHandoverModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleStartHandover}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Departing Engineer (Leaver)</label>
-                <select
-                  className="ws-org-select"
-                  aria-label="Departing engineer"
-                  value={handoverLeaverId}
-                  onChange={e => setHandoverLeaverId(e.target.value)}
-                  required
-                >
-                  <option value="">Select Leaver...</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.user_id}>
-                      {m.name || m.github_login || m.user_id} {m.offboarding ? '(Flagged for offboarding)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Incoming Engineer</label>
-                <select
-                  className="ws-org-select"
-                  aria-label="Incoming engineer"
-                  value={handoverIncomingId}
-                  onChange={e => setHandoverIncomingId(e.target.value)}
-                  required
-                >
-                  <option value="">Select Incoming Engineer...</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.user_id}>
-                      {m.name || m.github_login || m.user_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowStartHandoverModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Start Handover
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <StartHandoverModal
+          orgId={selectedOrgId}
+          members={members}
+          initialLeaverId={handoverLeaverId}
+          onClose={() => setShowStartHandoverModal(false)}
+          onStarted={async res => {
+            setShowStartHandoverModal(false);
+            setActiveTab('handovers');
+            await refreshOrgState(selectedOrgId);
+            if (res?.handover?.id) await loadHandover(res.handover.id);
+          }}
+        />
+      )}
+
+      {confirming && (
+        <ConfirmDialog
+          title={confirming.title}
+          confirmLabel={confirming.confirmLabel}
+          busy={confirmBusy}
+          onCancel={() => setConfirming(null)}
+          onConfirm={async () => {
+            setConfirmBusy(true);
+            try {
+              await confirming.run();
+              setConfirming(null);
+            } catch (err) {
+              setConfirming(null);
+              notify(err.message);
+            } finally {
+              setConfirmBusy(false);
+            }
+          }}
+        >
+          {confirming.body}
+        </ConfirmDialog>
       )}
     </div>
   );
