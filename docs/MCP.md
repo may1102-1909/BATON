@@ -1,6 +1,6 @@
 # Baton MCP server
 
-The MCP stdio server gives agents repository-scoped continuity tools, ten in total: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `get_file_context`, `sync_history`, `github_activity`, `get_exit_interview`, and `answer_exit_question`. It sends data only to the configured Baton API; there is no pretend offline success or local event queue.
+The MCP stdio server gives agents repository-scoped continuity tools, eleven in total: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `get_file_context`, `sync_history`, `github_activity`, `get_exit_interview`, `answer_exit_question`, and `export_handover` (saves the approved handover packet as a Markdown file in the repository). It sends data only to the configured Baton API; there is no pretend offline success or local event queue.
 
 ## Configure and start
 
@@ -53,10 +53,13 @@ The client calls:
 * `GET /api/orgs/:orgId/state?repository_id=…` for tracked repository activity; the client returns only the configured repository and sources explicitly carrying that repository ID.
 * `GET /api/mcp/interviews?org_id=…&repository_id=…` for assigned questions.
 * `POST /api/mcp/interviews/:interviewId/answers` with `{ "questionId": "…", "answer": "…" }` to answer a question.
+* `GET /api/handovers/:handoverId/export.md` (`export_handover`) returns the approved packet as Markdown. Tokens may only export handovers their member is the outgoing or incoming member of, and always get the non-admin view.
 
 The API must validate that the bearer key is authorized for both supplied IDs and scope all reads/writes accordingly. A successful HTTP response is expected to be JSON. Unsupported routes or rejected scope are surfaced as failures; the MCP client cannot implement backend authorization or persistence itself.
 
 ## Client setup
+The quickest path is `node /path/to/BATON/mcp-server/dist/cli.js init --api-url <URL> --org <ORG_ID> --repo <REPOSITORY_ID> --key <TOKEN>` run inside the target repository: it writes all client configs below (git-ignored, mode 600) with absolute paths. The manual steps follow.
+
 
 Build before connecting a client. Replace the sample executable path with the absolute path to `mcp-server/dist/index.js`; point `BATON_REPO_PATH` at the repository root. The server loads `mcp-server/.env`, so leave credentials out of each JSON/TOML config. Client config formats, locations, trust controls, and prompt/rule support differ and can change; verify the entry in the client’s MCP UI/CLI before relying on it.
 
@@ -99,7 +102,15 @@ Alternatively, add the local stdio server with `codex mcp add baton -- node /abs
 
 ### Google Antigravity
 
-This repository includes `.antigravity/mcp.json` as a project entry. Its relative executable and `BATON_REPO_PATH="."` assume the MCP process starts in the repository root; use absolute paths if it does not. Antigravity’s app/CLI MCP manager and config locations vary by client version; if this file is not discovered, add the same local stdio command through **Customizations → Installed → MCP Servers** (or the CLI `/mcp` manager) and set `BATON_REPO_PATH`. Use a workspace instruction/rule containing the bootstrap guidance. Do not assume tool calls are automatic.
+Antigravity (app, IDE and CLI) reads MCP servers from `<workspace>/.agents/mcp_config.json` and, for every project, `~/.gemini/config/mcp_config.json`. Both use the same `mcpServers` format as Claude Code; `baton init` writes the workspace file with absolute paths. Older `.antigravity/mcp.json` files are not read. After editing, open `/mcp` (MCP Manager) and refresh; if a removed server still appears, also delete its cache under `~/.gemini/antigravity*/mcp/`. Antigravity also loads `AGENTS.md`, so the bootstrap guidance below can live there. Do not assume tool calls are automatic.
+
+### Claude Desktop
+
+Add the same `mcpServers` entry to `claude_desktop_config.json` (Settings → Developer → Edit Config) with absolute paths and all four `BATON_*` variables in `env`, then restart Claude Desktop.
+
+### The handover file
+
+After the outgoing member answers the exit interview (`get_exit_interview` / `answer_exit_question`, or the dashboard) and an admin approves the handover, call `export_handover` (or run `baton handover export [id] [--out path.md]`). Without an ID it picks the newest approved handover you take part in and writes `docs/handovers/handover-<id>.md`; `output_path` must stay inside the repository and end in `.md`.
 
 ### Bootstrap guidance for project instructions
 

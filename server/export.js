@@ -51,6 +51,15 @@ export function handoverMarkdown({ detail, organization, members = [] }) {
     lines.push('');
   }
 
+  const answered = questions.filter(question => !question.asked_by && question.status === 'answered' && oneLine(question.answer));
+  if (answered.length) {
+    lines.push('## Exit interview', '');
+    for (const question of answered) {
+      const risk = question.risk_label ?? question.risk;
+      lines.push(`### ${oneLine(question.question_text)}${risk ? ` _(${risk} risk)_` : ''}`, '', `${oneLine(question.answer)} ${cite(question.source_ids)}`.trimEnd(), '');
+    }
+  }
+
   const gaps = questions.filter(question => !question.asked_by && ['skipped', 'open'].includes(question.status));
   if (gaps.length) {
     lines.push('## Known gaps', '');

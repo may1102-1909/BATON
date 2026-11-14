@@ -6,4 +6,4 @@ export declare function syncCommit(ref?: string): Promise<{
 export declare function syncTranscripts(): Promise<{
     messagesSynced: number;
 }>;
-export declare function initProject(): Promise<void>;
+export declare function initProject(args?: string[]): Promise<void>;

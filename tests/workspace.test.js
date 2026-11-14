@@ -183,7 +183,8 @@ test('approved handover exports as Markdown with citations, conflicts and gaps, 
   assert.match(md, /## Resolved conflicts\n\n- \*\*Launch date\*\* — use 15 Nov \[S1\] \[S2\]/);
   assert.match(md, /## Known gaps\n\n- Who owns the cron\? _\(skipped by the outgoing member\)_ \[S1\]\n- What is the rollback plan\? _\(unanswered\)_/);
   assert.match(md, /- \[S1\] pull_request · Billing queue — https:\/\/github\.com\/acme\/one\/pull\/12/);
-  assert.doesNotMatch(md, /Answered already|Rejected idea|Secret vendor|Vendor contract/);
+  assert.match(md, /## Exit interview\n\n### Answered already( _\(\w+ risk\)_)?\n\nyes\n/);
+  assert.doesNotMatch(md, /Rejected idea|Secret vendor|Vendor contract/);
   assert.doesNotMatch(md, /@example\.test|admin@|leaver@|incoming@/);
 });
 

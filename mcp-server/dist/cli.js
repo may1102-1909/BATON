@@ -14,6 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.baton', 'config.env') });
 const SECRET_PATH = /(^|\/)(?:\.env(?:rc|\..*)?|\.npmrc|\.pypirc|\.netrc|secrets?(?:\.[^/]*)?|credentials?(?:\.[^/]*)?|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.[^/]*)?|[^/]*(?:secret|credential|token|private[-_]?key|service[-_]?account)[^/]*)(?:\/|$)/i;
 const SENSITIVE_EXTENSION = /\.(?:env|pem|key|crt|cer|p12|pfx|keystore)$/i;
 const BUILD_PATH = /(^|\/)(?:node_modules|dist|build|target|coverage|\.next|\.turbo|\.baton)(?:\/|$)/i;
@@ -188,85 +189,99 @@ export async function syncTranscripts() {
     catch { }
     return { messagesSynced };
 }
+const PACKAGE_SOURCE = 'github:may1102-1909/BATON';
+const GENERATED_PATHS = ['.baton/', '.mcp.json', '.cursor/mcp.json', '.agents/mcp_config.json'];
+function flagValue(args, name) {
+    const index = args.indexOf(name);
+    return index >= 0 ? args[index + 1]?.trim() : undefined;
+}
+async function readJson(file) {
+    try {
+        return JSON.parse(await fs.readFile(file, 'utf8'));
+    }
+    catch {
+        return {};
+    }
+}
+/** Adds or replaces only the "baton" server so other MCP servers in the file survive. */
+async function writeMcpConfig(file, server) {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const config = await readJson(file);
+    config.mcpServers = { ...(config.mcpServers ?? {}), baton: server };
+    await fs.writeFile(file, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
+}
+// The generated files carry the API token, so they must never be committed.
+async function ignoreGeneratedFiles(root) {
+    const file = path.join(root, '.gitignore');
+    const current = await fs.readFile(file, 'utf8').catch(() => '');
+    const lines = new Set(current.split(/\r?\n/).map(line => line.trim()));
+    const missing = GENERATED_PATHS.filter(entry => !lines.has(entry) && !lines.has(`/${entry}`));
+    if (!missing.length)
+        return;
+    const prefix = current && !current.endsWith('\n') ? '\n' : '';
+    await fs.writeFile(file, `${current}${prefix}\n# Baton MCP (contains API token)\n${missing.join('\n')}\n`);
+}
 // ----------------------------------------------------
 // 3. Baton Init
 // ----------------------------------------------------
-export async function initProject() {
+export async function initProject(args = []) {
     const root = await getRepoRoot();
     console.log(`\n baton init: Initializing persistent repository memory for ${root}\n`);
-    const apiUrl = process.env.BATON_API_URL?.trim() || 'https://baton-nu.vercel.app';
-    const orgId = process.env.BATON_ORG_ID?.trim() || '';
-    const repoId = process.env.BATON_REPOSITORY_ID?.trim() || '';
-    const apiKey = process.env.BATON_API_KEY?.trim() || '';
-    // Write .env in mcp-server with mode 0600
-    const envContent = [
-        `BATON_API_URL=${apiUrl}`,
-        `BATON_ORG_ID=${orgId}`,
-        `BATON_REPOSITORY_ID=${repoId}`,
-        `BATON_API_KEY=${apiKey}`,
-        `BATON_REPO_PATH=${root}`
-    ].join('\n') + '\n';
-    const mcpEnvPath = path.join(root, 'mcp-server', '.env');
-    await fs.writeFile(mcpEnvPath, envContent, { mode: 0o600 });
-    console.log(` Created secure configuration: ${mcpEnvPath}`);
-    // 1. Install git post-commit hook
+    const apiUrl = flagValue(args, '--api-url') || process.env.BATON_API_URL?.trim() || 'https://baton-nu.vercel.app';
+    const orgId = flagValue(args, '--org') || process.env.BATON_ORG_ID?.trim() || '';
+    const repoId = flagValue(args, '--repo') || process.env.BATON_REPOSITORY_ID?.trim() || '';
+    const apiKey = flagValue(args, '--key') || process.env.BATON_API_KEY?.trim() || '';
+    const missing = [['--org / BATON_ORG_ID', orgId], ['--repo / BATON_REPOSITORY_ID', repoId], ['--key / BATON_API_KEY', apiKey]]
+        .filter(([, value]) => !value).map(([name]) => name);
+    const env = { BATON_API_URL: apiUrl, BATON_API_KEY: apiKey, BATON_ORG_ID: orgId, BATON_REPOSITORY_ID: repoId, BATON_REPO_PATH: root };
+    Object.assign(process.env, env); // the backfill below reads its configuration from process.env
+    await fs.mkdir(path.join(root, '.baton'), { recursive: true });
+    const envPath = path.join(root, '.baton', 'config.env');
+    await fs.writeFile(envPath, Object.entries(env).map(([key, value]) => `${key}=${value}`).join('\n') + '\n', { mode: 0o600 });
+    await ignoreGeneratedFiles(root);
+    console.log(` Saved configuration: ${envPath} (git-ignored)`);
+    // A package run through npx lives in a disposable cache, so point clients at npx rather than that path.
+    const fromNpxCache = __dirname.split(path.sep).includes('_npx');
+    const server = fromNpxCache
+        ? { command: 'npx', args: ['-y', PACKAGE_SOURCE, 'baton-mcp'], env }
+        : { command: process.execPath, args: [path.join(__dirname, 'index.js')], env };
+    const cliCommand = fromNpxCache ? `npx -y ${PACKAGE_SOURCE} baton` : `"${process.execPath}" "${path.join(__dirname, 'cli.js')}"`;
+    // 1. Git post-commit hook (runs from the repository root, where .baton/config.env is loaded)
     const hooksDir = path.join(root, '.git', 'hooks');
     await fs.mkdir(hooksDir, { recursive: true });
     const postCommitPath = path.join(hooksDir, 'post-commit');
-    const postCommitScript = `#!/bin/sh\n# Baton background commit capture\n( node "${path.join(root, 'mcp-server/dist/cli.js')}" sync --commit HEAD >/dev/null 2>&1 & )\n`;
-    await fs.writeFile(postCommitPath, postCommitScript, { mode: 0o755 });
+    await fs.writeFile(postCommitPath, `#!/bin/sh\n# Baton background commit capture\n( ${cliCommand} sync --commit HEAD >/dev/null 2>&1 & )\n`, { mode: 0o755 });
     console.log(` Installed Git post-commit hook: ${postCommitPath}`);
-    // 2. Client MCP Configs
-    const nodeBin = process.execPath;
-    const serverScript = path.join(root, 'mcp-server/dist/index.js');
-    const mcpConfig = {
-        mcpServers: {
-            baton: {
-                command: nodeBin,
-                args: [serverScript],
-                env: {
-                    BATON_API_URL: apiUrl,
-                    BATON_API_KEY: apiKey,
-                    BATON_ORG_ID: orgId,
-                    BATON_REPOSITORY_ID: repoId,
-                    BATON_REPO_PATH: root
-                }
-            }
-        }
-    };
-    // Claude Code .mcp.json
-    await fs.writeFile(path.join(root, '.mcp.json'), JSON.stringify(mcpConfig, null, 2));
-    // Cursor .cursor/mcp.json
-    await fs.mkdir(path.join(root, '.cursor'), { recursive: true });
-    await fs.writeFile(path.join(root, '.cursor', 'mcp.json'), JSON.stringify(mcpConfig, null, 2));
-    // Antigravity .antigravity/mcp.json
-    await fs.mkdir(path.join(root, '.antigravity'), { recursive: true });
-    await fs.writeFile(path.join(root, '.antigravity', 'mcp.json'), JSON.stringify(mcpConfig, null, 2));
-    console.log(` Generated MCP client configs (.mcp.json, .cursor/mcp.json, .antigravity/mcp.json)`);
-    // 3. Claude Code Stop hook in .claude/settings.json
+    // 2. Project-scoped MCP client configs
+    await writeMcpConfig(path.join(root, '.mcp.json'), server);
+    await writeMcpConfig(path.join(root, '.cursor', 'mcp.json'), server);
+    await writeMcpConfig(path.join(root, '.agents', 'mcp_config.json'), server);
+    console.log(' Generated MCP client configs:');
+    console.log('   Claude Code  -> .mcp.json');
+    console.log('   Cursor       -> .cursor/mcp.json');
+    console.log('   Antigravity  -> .agents/mcp_config.json');
+    // 3. Claude Code Stop hook: sync transcript turns when a reply finishes
+    const claudeSettingsPath = path.join(root, '.claude', 'settings.json');
     try {
-        const claudeSettingsDir = path.join(root, '.claude');
-        await fs.mkdir(claudeSettingsDir, { recursive: true });
-        const claudeSettingsPath = path.join(claudeSettingsDir, 'settings.json');
-        let settings = {};
-        try {
-            settings = JSON.parse(await fs.readFile(claudeSettingsPath, 'utf8'));
-        }
-        catch { }
-        settings.hooks = settings.hooks || {};
-        settings.hooks.Stop = [
-            { hooks: [{ type: 'command', command: `node "${path.join(root, 'mcp-server/dist/cli.js')}" sync --transcripts` }] }
-        ];
-        await fs.writeFile(claudeSettingsPath, JSON.stringify(settings, null, 2));
+        await fs.mkdir(path.dirname(claudeSettingsPath), { recursive: true });
+        const settings = await readJson(claudeSettingsPath);
+        const command = `${cliCommand} sync --transcripts`;
+        const stop = (settings.hooks?.Stop ?? []).filter((entry) => !JSON.stringify(entry).includes('sync --transcripts'));
+        settings.hooks = { ...(settings.hooks ?? {}), Stop: [...stop, { hooks: [{ type: 'command', command }] }] };
+        await fs.writeFile(claudeSettingsPath, JSON.stringify(settings, null, 2) + '\n');
         console.log(` Configured Claude Code Stop hook: ${claudeSettingsPath}`);
     }
     catch { }
+    if (missing.length) {
+        console.log(`\n Missing ${missing.join(', ')}. Copy them from Baton → Settings → MCP and run baton init again; tools will fail until then.\n`);
+        return;
+    }
     // 4. Run first backfill
     console.log('\n Running initial baseline backfill (baton sync --all)...');
     const commitRes = await syncCommit('HEAD').catch(() => ({ commitSha: 'none', filesSynced: 0 }));
     const transRes = await syncTranscripts().catch(() => ({ messagesSynced: 0 }));
     console.log(` Backfill complete: Commit [${commitRes.commitSha.slice(0, 8)}] (${commitRes.filesSynced} files indexed), ${transRes.messagesSynced} transcript turns synced.`);
-    console.log('\n Baton MCP Memory System is ready for live use!\n');
+    console.log('\n Restart Claude Code / Antigravity / Cursor so they pick up the new MCP server.\n');
 }
 // ----------------------------------------------------
 // CLI Dispatcher
@@ -280,19 +295,35 @@ Baton CLI: Continuous Repository Memory & Context Capture
 
 Usage:
   baton mcp                   Start the Baton Model Context Protocol (MCP) server over stdio
-  baton init                  One-time setup (writes config, installs git hook, generates MCP settings)
+  baton init [--api-url URL] [--org ID] [--repo ID] [--key TOKEN]
+                              One-time setup: saves .baton/config.env, installs the git hook,
+                              writes .mcp.json (Claude Code), .agents/mcp_config.json (Antigravity)
+                              and .cursor/mcp.json
   baton sync --commit [ref]   Push commit metadata and changed-file summaries (default: HEAD)
   baton sync --transcripts    Extract and push new turns from local agent sessions (Claude Code, Antigravity)
   baton sync --all            Perform full synchronization of latest commit, files, and transcripts
+  baton handover export [id] [--out path.md]
+                              Save the approved handover packet as Markdown
+                              (default: docs/handovers/handover-<id>.md, newest approved if no id)
 `);
         return;
     }
     if (command === 'init') {
-        await initProject();
+        await initProject(args.slice(1));
         return;
     }
-    if (command === 'mcp' || command === 'serve' || command === 'start') {
+    // `npx github:… baton-mcp` runs the package's default `baton` bin with "baton-mcp" as its argument.
+    if (command === 'mcp' || command === 'serve' || command === 'start' || command === 'baton-mcp' || command === 'baton-mcp-server') {
         await import('./index.js');
+        return;
+    }
+    if (command === 'handover' && args[1] === 'export') {
+        const { exportHandoverFile } = await import('./handover.js');
+        const id = args[2] && !args[2].startsWith('--') ? args[2] : undefined;
+        const res = await exportHandoverFile(id, flagValue(args, '--out'));
+        console.log(`[Baton] ${res.message}`);
+        if (!res.success)
+            process.exit(1);
         return;
     }
     if (command === 'sync') {
@@ -318,7 +349,12 @@ Usage:
     console.error(`Unknown command: ${args.join(' ')}. Run 'baton --help' for usage.`);
     process.exit(1);
 }
-main().catch((err) => {
-    console.error('[Baton CLI Error]', err?.message || err);
-    process.exit(1);
-});
+// Only dispatch when run as the CLI; the MCP server imports this module for sync_history and
+// printing usage there would corrupt the stdio protocol stream.
+const invokedPath = process.argv[1] ? await fs.realpath(process.argv[1]).catch(() => process.argv[1]) : '';
+if (invokedPath === fileURLToPath(import.meta.url)) {
+    main().catch((err) => {
+        console.error('[Baton CLI Error]', err?.message || err);
+        process.exit(1);
+    });
+}

@@ -31,3 +31,9 @@ bifrost-model-router/
 # Playwright
 playwright-report
 test-results
+
+# Baton MCP client configs written by `baton init` (contain API token)
+.baton/
+.mcp.json
+.cursor/mcp.json
+.agents/mcp_config.json

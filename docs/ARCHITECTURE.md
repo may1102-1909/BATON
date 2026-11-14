@@ -33,7 +33,7 @@ flowchart TD
 
 ### 4. Local Model Context Protocol (`mcp-server/`)
 - Integrates with modern AI agent harnesses (Antigravity, Cursor, Claude Desktop).
-- Implements ten tools: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `get_file_context`, `sync_history`, `github_activity`, `get_exit_interview`, `answer_exit_question`.
+- Implements eleven tools: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `get_file_context`, `sync_history`, `github_activity`, `get_exit_interview`, `answer_exit_question`, `export_handover`.
 - Tracks incremental file snapshots with SHA-256 caching.
 
 ### 5. Product Frontend (`src/components/Workspace.jsx`)

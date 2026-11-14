@@ -28,6 +28,11 @@ export declare function queryContext(query: string): Promise<ApiResponse>;
 export declare function getGithubActivity(): Promise<ApiResponse>;
 export declare function getExitInterviews(): Promise<ApiResponse>;
 export declare function answerExitQuestion(interviewId: string, questionId: string, answer: string): Promise<ApiResponse>;
+/** Fetches the approved handover packet as Markdown; without an id, picks the newest approved interview. */
+export declare function exportHandoverMarkdown(handoverId?: string): Promise<ApiResponse<{
+    handoverId: string;
+    markdown: string;
+}>>;
 export declare function pushCommit(data: {
     sha: string;
     message: string;
