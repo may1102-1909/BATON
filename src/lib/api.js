@@ -165,11 +165,53 @@ export async function getGithubInstallationRepos(orgId, installationId) {
   return request(`/api/orgs/${encodeURIComponent(orgId)}/github/installations/${encodeURIComponent(installationId)}/repositories`);
 }
 
+// installationId is optional: the server can resolve the installation from the repository name.
 export async function connectRepo(orgId, installationId, fullName) {
+  const body = { fullName, full_name: fullName };
+  if (installationId) body.installationId = installationId;
   return request(`/api/orgs/${encodeURIComponent(orgId)}/repositories`, {
     method: 'POST',
-    body: { installationId, fullName },
+    body,
   });
+}
+
+export async function disconnectRepo(orgId, repoId) {
+  return request(`/api/orgs/${encodeURIComponent(orgId)}/repositories/${encodeURIComponent(repoId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function renameOrg(orgId, name) {
+  return request(`/api/orgs/${encodeURIComponent(orgId)}`, {
+    method: 'PATCH',
+    body: { name },
+  });
+}
+
+export async function resetOrg(orgId, confirm, scope) {
+  return request(`/api/orgs/${encodeURIComponent(orgId)}/reset`, {
+    method: 'POST',
+    body: { confirm, scope },
+  });
+}
+
+export async function deleteOrg(orgId, confirm) {
+  return request(`/api/orgs/${encodeURIComponent(orgId)}`, {
+    method: 'DELETE',
+    body: { confirm },
+  });
+}
+
+export async function exportHandoverMarkdown(handoverId) {
+  return request(`/api/handovers/${encodeURIComponent(handoverId)}/export.md`);
+}
+
+// The server reports a missing GitHub App installation with a URL in the payload or inside the message.
+export function installUrlFromError(err) {
+  const fromPayload = err?.payload && typeof err.payload === 'object' ? err.payload.install_url : null;
+  if (fromPayload) return fromPayload;
+  const match = /https:\/\/github\.com\/[^\s)'"]+/.exec(err?.message || '');
+  return match ? match[0] : null;
 }
 
 export async function syncRepo(orgId, repoId) {

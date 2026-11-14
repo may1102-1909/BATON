@@ -3,6 +3,7 @@ import { Brand } from './Brand'
 import { Icon } from './Icon'
 import { Button } from './Button'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { acceptPendingInvite } from '../lib/invite'
 
 const C = {
   bg: '#0c0d0e',
@@ -13,7 +14,7 @@ const C = {
   green: '#34d399'
 }
 
-export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back, onAuthSuccess }) {
+export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back, onAuthSuccess, hasInvite = false }) {
   const [internalMode, setInternalMode] = useState(propMode || 'login')
   const mode = internalMode
 
@@ -49,6 +50,7 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
   const [touched, setTouched] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [pending, setPending] = useState(false)
+  const [inviteError, setInviteError] = useState('')
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState(isSupabaseConfigured ? '' : 'Baton is not configured: set SUPABASE_URL and SUPABASE_ANON_KEY, then rebuild.')
 
@@ -58,38 +60,33 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
   // 1. Sign Up Handler via Supabase
   const handleSignUp = async (emailToSubmit, passwordToSubmit) => {
     try {
-      const redirectUrl =
-        typeof window !== 'undefined' && window.location.hostname === 'localhost'
-          ? `${window.location.origin}/usage`
-          : 'https://baton-nu.vercel.app/usage'
-
       const { data, error } = await supabase.auth.signUp({
         email: emailToSubmit,
         password: passwordToSubmit,
-        options: { emailRedirectTo: redirectUrl }
+        options: { emailRedirectTo: `${window.location.origin}/dashboard` }
       })
 
       if (error) {
-        console.error('Error signing up:', error.message)
         setErrorMessage(error.message)
+      } else if (data?.session) {
+        await finishSignIn(data.user || { email: emailToSubmit })
       } else {
-        console.log('User created:', data)
-        setMessage('Account created successfully! Redirecting to usage...')
-        if (onAuthSuccess) {
-          onAuthSuccess(data?.user || { email: emailToSubmit })
-        }
-        if (typeof window !== 'undefined') {
-          setTimeout(() => {
-            if (window.location.pathname.toLowerCase() !== '/usage') {
-              window.location.href = '/usage'
-            }
-          }, 100)
-        }
+        setMessage('Account created. Check your email to confirm it, then sign in. Your invite link is saved for after you confirm.')
       }
     } catch (err) {
-      console.error('Sign up failed:', err)
       setErrorMessage(err.message || 'Failed to create account.')
     }
+  }
+
+  // Accept a pending invite right after authentication, before the dashboard loads the user's teams.
+  const finishSignIn = async (user) => {
+    const result = await acceptPendingInvite()
+    if (result.status === 'error') {
+      setInviteError(result.message)
+      return
+    }
+    setMessage(result.status === 'accepted' ? 'Invite accepted. Opening your team…' : 'Signed in. Opening your dashboard…')
+    onAuthSuccess?.(user)
   }
 
   // 2. Sign In Handler via Supabase
@@ -101,24 +98,11 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
       })
 
       if (error) {
-        console.error('Error signing in:', error.message)
         setErrorMessage(error.message)
       } else {
-        console.log('Signed in successfully:', data.user)
-        setMessage(`Signed in successfully as ${data.user.email}! Redirecting...`)
-        if (onAuthSuccess) {
-          onAuthSuccess(data?.user || { email: emailToSubmit })
-        }
-        if (typeof window !== 'undefined') {
-          setTimeout(() => {
-            if (window.location.pathname.toLowerCase() !== '/usage') {
-              window.location.href = '/usage'
-            }
-          }, 100)
-        }
+        await finishSignIn(data?.user || { email: emailToSubmit })
       }
     } catch (err) {
-      console.error('Sign in failed:', err)
       setErrorMessage(err.message || 'Failed to sign in.')
     }
   }
@@ -126,25 +110,17 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
   // 3. Magic Link Handler via Supabase
   const handleMagicLink = async (emailToSubmit) => {
     try {
-      const redirectUrl =
-        typeof window !== 'undefined' && window.location.hostname === 'localhost'
-          ? `${window.location.origin}/usage`
-          : 'https://baton-nu.vercel.app/usage'
-
-      const { data, error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithOtp({
         email: emailToSubmit,
-        options: { emailRedirectTo: redirectUrl }
+        options: { emailRedirectTo: `${window.location.origin}/dashboard` }
       })
 
       if (error) {
-        console.error('Error sending magic link:', error.message)
         setErrorMessage(error.message)
       } else {
-        console.log('Magic link sent:', data)
-        setMessage(`Magic link sent to ${emailToSubmit}. Please check your inbox.`)
+        setMessage(`Magic link sent to ${emailToSubmit}. Please check your inbox.${hasInvite ? ' Your invite link is saved for after you sign in.' : ''}`)
       }
     } catch (err) {
-      console.error('Magic link failed:', err)
       setErrorMessage(err.message || 'Failed to send magic link.')
     }
   }
@@ -188,6 +164,7 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
     >
       <div className="bt-shell">
         <button
+          type="button"
           className="bt-text"
           onClick={back}
           style={{
@@ -237,6 +214,23 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
         >
           Keep the context. Move your team forward.
         </p>
+
+        {hasInvite && (
+          <p
+            role="status"
+            style={{ fontSize: 13, color: C.green, background: '#10b98112', border: '1px solid #245541', borderRadius: 8, padding: '10px 14px', margin: '0 0 20px', lineHeight: 1.6 }}
+          >
+            You have been invited to a team. Sign in or create an account to join it.
+          </p>
+        )}
+        {inviteError && (
+          <div role="alert" style={{ fontSize: 13, color: '#ef8585', background: '#ef858514', border: '1px solid #5a2828', borderRadius: 8, padding: '10px 14px', margin: '0 0 20px', lineHeight: 1.6 }}>
+            {inviteError}{' '}
+            <button type="button" className="bt-text" onClick={() => onAuthSuccess?.()} style={{ background: 'none', border: 0, color: C.text, textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 }}>
+              Continue to dashboard
+            </button>
+          </div>
+        )}
 
         <div
           style={{
@@ -289,22 +283,15 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
           <Button
             style={{ width: '100%' }}
             onClick={async () => {
+              setErrorMessage('')
               try {
-                const redirectUrl =
-                  typeof window !== 'undefined' && window.location.hostname === 'localhost'
-                    ? `${window.location.origin}/usage`
-                    : 'https://baton-nu.vercel.app/usage'
-
-                // Trigger Supabase GitHub OAuth
                 const { error } = await supabase.auth.signInWithOAuth({
                   provider: 'github',
-                  options: { redirectTo: redirectUrl }
+                  options: { redirectTo: `${window.location.origin}/dashboard` }
                 })
-                if (error) {
-                  setMessage('GitHub authorization simulated. No account was connected.')
-                }
-              } catch {
-                setMessage('GitHub authorization simulated. No account was connected.')
+                if (error) setErrorMessage(`GitHub sign-in failed: ${error.message}`)
+              } catch (err) {
+                setErrorMessage(`GitHub sign-in failed: ${err.message || 'unknown error'}`)
               }
             }}
           >
@@ -318,7 +305,7 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
               gap: 12,
               alignItems: 'center',
               fontSize: 10,
-              color: '#757984',
+              color: C.muted,
               margin: '24px 0'
             }}
           >
@@ -571,7 +558,7 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
         <p
           style={{
             fontSize: 10,
-            color: '#71747d',
+            color: C.muted,
             lineHeight: 1.9,
             margin: '22px 18px'
           }}
@@ -583,12 +570,12 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
         <span
           style={{
             fontSize: 10,
-            color: '#565c65',
+            color: C.muted,
             letterSpacing: 0.8,
             fontFamily: 'monospace'
           }}
         >
-          CONNECTED TO SUPABASE AUTH
+          {isSupabaseConfigured ? 'SIGN-IN POWERED BY SUPABASE AUTH' : 'SIGN-IN IS NOT CONFIGURED'}
         </span>
       </div>
     </main>
