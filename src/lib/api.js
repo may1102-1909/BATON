@@ -235,3 +235,26 @@ export async function askHandover(handoverId, question) {
   });
 }
 
+export async function skipQuestion(handoverId, questionId) {
+  return request(`/api/handovers/${encodeURIComponent(handoverId)}/questions/${encodeURIComponent(questionId)}/skip`, {
+    method: 'POST',
+    body: {},
+  });
+}
+
+export async function resolveConflict(handoverId, claimId, { resolution, chosenSourceId }) {
+  return request(`/api/handovers/${encodeURIComponent(handoverId)}/conflicts/${encodeURIComponent(claimId)}/resolve`, {
+    method: 'POST',
+    body: { resolution, chosen_source_id: chosenSourceId || null },
+  });
+}
+
+export async function listVersions(handoverId) {
+  return request(`/api/handovers/${encodeURIComponent(handoverId)}/versions`);
+}
+
+export async function diffVersions(handoverId, from, to) {
+  const query = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  return request(`/api/handovers/${encodeURIComponent(handoverId)}/versions/diff?${query}`);
+}
+

@@ -235,6 +235,17 @@ create table if not exists public.handover_questions (
   created_at timestamptz not null default now()
 );
 alter table public.handover_questions add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+-- Round 3 (also in migrations/20261114_round3.sql)
+alter table public.handover_questions add column if not exists risk_score integer;
+alter table public.handover_questions add column if not exists risk_reasons jsonb;
+alter table public.handover_questions add column if not exists confidence text;
+alter table public.handover_questions add column if not exists answer_mode text;
+create index if not exists handover_questions_risk_idx on public.handover_questions (handover_id, risk_score desc);
+
+alter table public.org_memberships add column if not exists function_role text;
+alter table public.org_memberships drop constraint if exists org_memberships_function_role_check;
+alter table public.org_memberships add constraint org_memberships_function_role_check
+  check (function_role is null or function_role in ('backend','frontend','infra','data','design','product'));
 
 create table if not exists public.handover_versions (
   id uuid primary key default gen_random_uuid(),

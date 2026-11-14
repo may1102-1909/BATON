@@ -1,5 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { handleDemoRequest } from './demo.js';
+import { FUNCTION_ROLES, audienceOf, canSee, cleanAudience, audienceFromPaths } from './audience.js';
+import { filesOf } from './risk.js';
+import { requireSourceType } from './sourceTypes.js';
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const roles = new Set(['admin', 'member', 'team']);
@@ -89,6 +92,18 @@ async function readBody(req) {
 
 function cleanUser(user) {
   return { id: user.id, email: user.email ?? null, name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? null };
+}
+
+// Sources carry a canonical type and a role audience (explicit input, else inferred from touched paths).
+function prepareSource(record, explicitAudience) {
+  const metadata = record.metadata && typeof record.metadata === 'object' ? { ...record.metadata } : {};
+  const raw = explicitAudience ?? metadata.audience;
+  if (raw !== undefined && raw !== null) {
+    const list = Array.isArray(raw) ? raw : [raw];
+    if (!list.length || list.some(item => item !== 'all' && !FUNCTION_ROLES.includes(item))) throw new HttpError(400, `audience must be "all" or any of ${FUNCTION_ROLES.join(', ')}`);
+    metadata.audience = cleanAudience(list);
+  } else metadata.audience = audienceFromPaths(filesOf({ metadata }));
+  return { ...record, type: requireSourceType(record.type), metadata };
 }
 
 function hasVerifiedGithub(user) {
@@ -204,7 +219,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       ?? (await store.list('members', { org_id: orgId, user_id: auth.user.id })).find(item => !item.disabled_at);
     if (!membership) throw new HttpError(403, 'Organization membership required');
     if (admin && (membership.role !== 'admin' || auth.apiToken)) throw new HttpError(403, 'Organization admin role required');
-    return { id: auth.user.id, role: membership.role, org_id: orgId, verifiedGithub: auth.verifiedGithub };
+    return { id: auth.user.id, role: membership.role, org_id: orgId, verifiedGithub: auth.verifiedGithub, function_role: membership.function_role ?? null };
   }
 
   const routes = async (req, res, url, auth, body) => {
@@ -241,7 +256,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
         store.list('sources', { org_id: actor.org_id }), store.list('tasks', { org_id: actor.org_id }),
         store.list('handovers', { org_id: actor.org_id }), store.list('tokens', { org_id: actor.org_id }),
       ]);
-      const sources = allSources.filter(source => sourceVisible(source, actor));
+      const sources = allSources.filter(source => sourceVisible(source, actor) && (actor.role === 'admin' || canSee(audienceOf(source), actor.function_role)));
       const visibleHandovers = handoverRows.filter(row => actor.role === 'admin' || row.leaver_id === actor.id || (row.incoming_id === actor.id && row.status === 'approved'));
       const tokens = tokenRows.map(({ token_hash, ...token }) => token);
       return json(res, 200, { organization, members, repositories, sources, tasks, handovers: visibleHandovers, tokens });
@@ -304,6 +319,10 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
         }
         patch.role = body.role;
       }
+      if (body.function_role !== undefined) {
+        if (body.function_role !== null && !FUNCTION_ROLES.includes(body.function_role)) throw new HttpError(400, `function_role must be null or one of ${FUNCTION_ROLES.join(', ')}`);
+        patch.function_role = body.function_role;
+      }
       if (body.offboarding !== undefined) {
         if (typeof body.offboarding !== 'boolean') throw new HttpError(400, 'offboarding must be a boolean');
         if (body.offboarding && target.role === 'admin') {
@@ -321,6 +340,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       }
       if (!Object.keys(patch).length) throw new HttpError(400, 'No supported member fields provided');
       const updated = await store.update('members', target.id, patch);
+      if (patch.function_role !== undefined && (updated?.function_role ?? null) !== patch.function_role) throw new HttpError(503, 'Function roles need the round 3 database migration (supabase/migrations/20261114_round3.sql)');
       const adminCount = (await store.list('members', { org_id: actor.org_id, role: 'admin' })).filter(member => !member.disabled_at).length;
       return json(res, 200, { member: updated, recommendation: adminCount < 2 ? 'Add a second organization admin to reduce lockout risk.' : null });
     }
@@ -338,7 +358,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
         const duplicate = (await store.list('sources', { org_id: actor.org_id, author_id: actor.id, session_id: body.session_id, event_id: body.event_id }))[0];
         if (duplicate) return json(res, 200, { memory: duplicate, deduplicated: true });
       }
-      const memoryRecord = { org_id: actor.org_id, author_id: actor.id, author: auth.user.email ?? actor.id, type: body.type.trim().slice(0, 80), content: (await redact(body.content)).slice(0, 100000), metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? await redact(body.metadata) : {}, repository_id: body.repository_id ?? null, session_id: body.session_id ?? null, event_id: body.event_id ?? null, visibility: body.visibility ?? 'team' };
+      const memoryRecord = prepareSource({ org_id: actor.org_id, author_id: actor.id, author: auth.user.email ?? actor.id, type: body.type.trim().slice(0, 80), content: (await redact(body.content)).slice(0, 100000), metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? await redact(body.metadata) : {}, repository_id: body.repository_id ?? null, session_id: body.session_id ?? null, event_id: body.event_id ?? null, visibility: body.visibility ?? 'team' }, body.audience);
       let memory;
       try { memory = await store.insert('sources', memoryRecord); }
       catch (error) {
@@ -357,6 +377,8 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       const patch = {};
       for (const key of ['type', 'content', 'metadata', 'visibility', 'repository_id']) if (body[key] !== undefined) patch[key] = ['content', 'metadata'].includes(key) ? await redact(body[key]) : body[key];
       if (patch.type !== undefined && (typeof patch.type !== 'string' || !patch.type.trim() || patch.type.length > 80)) throw new HttpError(400, 'type must be 1–80 characters');
+      if (patch.type !== undefined) patch.type = requireSourceType(patch.type);
+      if (body.audience !== undefined) patch.metadata = prepareSource({ type: 'memory', metadata: { ...memory.metadata, ...(patch.metadata ?? {}) } }, body.audience).metadata;
       if (patch.content !== undefined && (typeof patch.content !== 'string' || !patch.content.trim() || patch.content.length > 100000)) throw new HttpError(400, 'content must be 1–100,000 characters');
       if (patch.repository_id) {
         const repository = await store.get('repositories', patch.repository_id);
@@ -383,7 +405,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
         const existing = (await store.list('sources', { org_id: orgId, author_id: actor.id, session_id: event.session_id, event_id: event.event_id }))[0];
         if (existing) return json(res, 200, { ok: true, memory: existing, deduplicated: true });
       }
-      const record = { org_id: orgId, author_id: actor.id, author: auth.user.email ?? actor.id, type, content: content.slice(0, 100000), metadata: event.metadata && typeof event.metadata === 'object' ? await redact(event.metadata) : {}, repository_id: event.repository_id ?? null, session_id: event.session_id ?? null, event_id: event.event_id ?? null, visibility: event.visibility === 'admin' && actor.role === 'admin' ? 'admin' : 'team' };
+      const record = prepareSource({ org_id: orgId, author_id: actor.id, author: auth.user.email ?? actor.id, type, content: content.slice(0, 100000), metadata: event.metadata && typeof event.metadata === 'object' ? await redact(event.metadata) : {}, repository_id: event.repository_id ?? null, session_id: event.session_id ?? null, event_id: event.event_id ?? null, visibility: event.visibility === 'admin' && actor.role === 'admin' ? 'admin' : 'team' }, event.audience);
       let memory;
       try { memory = await store.insert('sources', record); }
       catch (error) {
@@ -704,6 +726,28 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
         const module = handovers ?? await maybeIntegration('handover', store, configuration, fetchImpl);
       return json(res, 200, await module.reviewClaim({ handoverId: handover.id, actor, claimId: match[2], status: body.status, text: body.text }));
     }
+    if ((match = /^\/api\/handovers\/([^/]+)\/questions\/([^/]+)\/skip$/.exec(url.pathname)) && method === 'POST') {
+      const handover = await store.get('handovers', match[1]);
+      if (!handover) throw new HttpError(404, 'Handover not found');
+      const actor = await requireOrg(auth, handover.org_id);
+      const module = handovers ?? await maybeIntegration('handover', store, configuration, fetchImpl);
+      return json(res, 200, await module.skip({ handoverId: handover.id, actor, questionId: match[2] }));
+    }
+    if ((match = /^\/api\/handovers\/([^/]+)\/conflicts\/([^/]+)\/resolve$/.exec(url.pathname)) && method === 'POST') {
+      const handover = await store.get('handovers', match[1]);
+      if (!handover) throw new HttpError(404, 'Handover not found');
+      const actor = await requireOrg(auth, handover.org_id, true);
+      const module = handovers ?? await maybeIntegration('handover', store, configuration, fetchImpl);
+      return json(res, 200, await module.resolveConflict({ handoverId: handover.id, actor, claimId: match[2], resolution: body.resolution, chosenSourceId: body.chosen_source_id }));
+    }
+    if ((match = /^\/api\/handovers\/([^/]+)\/versions(\/diff)?$/.exec(url.pathname)) && method === 'GET') {
+      const handover = await store.get('handovers', match[1]);
+      if (!handover) throw new HttpError(404, 'Handover not found');
+      const actor = await requireOrg(auth, handover.org_id);
+      const module = handovers ?? await maybeIntegration('handover', store, configuration, fetchImpl);
+      if (!match[2]) return json(res, 200, await module.versions({ handoverId: handover.id, actor }));
+      return json(res, 200, await module.diff({ handoverId: handover.id, actor, from: url.searchParams.get('from'), to: url.searchParams.get('to') }));
+    }
     if ((match = /^\/api\/mcp\/interviews(?:\/([^/]+)\/answers)?$/.exec(url.pathname)) && (method === 'GET' || method === 'POST')) {
       if (method === 'GET') {
         const orgId = auth.tokenOrg ?? url.searchParams.get('org_id');
@@ -718,7 +762,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       const handover = await store.get('handovers', match[1]);
       if (!handover) throw new HttpError(404, 'Interview not found');
       const actor = await requireOrg(auth, handover.org_id);
-      const module = handovers ?? await maybeIntegration('handover', configuration, fetchImpl);
+      const module = handovers ?? await maybeIntegration('handover', store, configuration, fetchImpl);
       return json(res, 200, await module.answer({ handoverId: handover.id, actor, questionId: body.questionId, answer: body.answer }));
     }
 
