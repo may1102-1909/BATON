@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as api from '../lib/api.js';
+import { downloadText, slugify } from '../lib/download.js';
 import { Citations, ClaimsView, ConflictsPanel, VersionHistory, sourceMap } from '../components/HandoverParts.jsx';
 import '../components/workspace.css';
 
@@ -22,6 +23,7 @@ export function HandoverPage({ handoverId, onBack, mode = 'production', embedded
   const [asking, setAsking] = useState(false);
   const [lastAnswer, setLastAnswer] = useState(null);
   const [acking, setAcking] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const notify = (message, kind = 'error') => setNotice({ message: String(message), kind });
 
@@ -79,6 +81,19 @@ export function HandoverPage({ handoverId, onBack, mode = 'production', embedded
     }
   }
 
+  async function exportMarkdown() {
+    setExporting(true);
+    try {
+      const markdown = await api.getHandoverMarkdown(handoverId);
+      downloadText(`handover-${slugify(nameOf(hv.leaver_id), 'leaver')}-to-${slugify(nameOf(hv.incoming_id), 'incoming')}.md`, markdown);
+      notify('Markdown exported.', 'success');
+    } catch (err) {
+      notify(`Export failed: ${err.message}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function ask(e) {
     e.preventDefault();
     if (!question.trim()) return;
@@ -111,25 +126,33 @@ export function HandoverPage({ handoverId, onBack, mode = 'production', embedded
     );
   } else if (detail) {
     const claims = detail.claims || [];
+    const Title = embedded ? 'h2' : 'h1';
     body = (
       <>
         <div className="ws-card">
           <div className="ws-card-header">
             <div>
-              <h1 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', margin: 0 }}>
+              <Title style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', margin: 0 }}>
                 Handover packet: {nameOf(hv.leaver_id)} → {nameOf(hv.incoming_id)}
-              </h1>
+              </Title>
               <div className="ws-muted" style={{ marginTop: 4 }}>
                 Status: <span className="ws-badge ws-badge-verified">{hv.acknowledged_at ? 'acknowledged' : hv.status}</span>
                 {hv.approved_at && <> · approved {dateOnly(hv.approved_at)}</>}
                 {hv.acknowledged_at && <> · acknowledged {dateOnly(hv.acknowledged_at)}</>}
               </div>
             </div>
-            {canAck && (
-              <button type="button" className="ws-btn ws-btn-primary" onClick={acknowledge} disabled={acking}>
-                {acking ? 'Acknowledging…' : 'Acknowledge handover'}
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {hv.status === 'approved' && (
+                <button type="button" className="ws-btn" onClick={exportMarkdown} disabled={exporting}>
+                  {exporting ? 'Exporting…' : 'Export Markdown'}
+                </button>
+              )}
+              {canAck && (
+                <button type="button" className="ws-btn ws-btn-primary" onClick={acknowledge} disabled={acking}>
+                  {acking ? 'Acknowledging…' : 'Acknowledge handover'}
+                </button>
+              )}
+            </div>
           </div>
           {hidden > 0 && <div className="ws-muted" role="note">{hidden} item{hidden === 1 ? '' : 's'} hidden for your role.</div>}
         </div>
