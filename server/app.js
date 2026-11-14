@@ -143,6 +143,11 @@ async function githubCall(run) {
     if (/not accessible|not found or|owner\/name format|are required/.test(message)) throw new HttpError(400, message);
     if (/^GitHub App is not installed|^GitHub could not find/.test(message)) throw new HttpError(409, message);
     if (/^GitHub rate limit/.test(message)) throw new HttpError(429, message);
+    // Admin-only routes: show the real cause instead of a bare "Internal server error". Secrets never appear in these messages.
+    if (/^GitHub API |^GitHub App credentials|^Could not save any synced records|^Supabase /.test(message)) {
+      console.error('[github]', message);
+      throw new HttpError(502, message.replace(/^Supabase (\w+) (\w+) failed: /, 'Database rejected the $1 on $2: ').slice(0, 500));
+    }
     throw error;
   }
 }

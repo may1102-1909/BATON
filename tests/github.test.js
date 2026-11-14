@@ -449,3 +449,36 @@ test('the install page address comes from GITHUB_APP_SLUG, or from GitHub when t
   const offline = createGithub({ store: makeStore(), env: environment(), fetchImpl: async () => json({ message: 'Bad credentials' }, 401) });
   assert.equal(await offline.installUrl(), null);
 });
+
+test('a record the database rejects is skipped and reported instead of failing the whole sync', async () => {
+  const repository = { id: 'repo-1', org_id: 'org-1', full_name: 'acme/project', installation_id: '41' };
+  const store = makeStore({ repositories: [repository], members: [] });
+  const insert = store.insert;
+  let rejectAll = false;
+  store.insert = async (table, record) => {
+    if (table === 'sources' && (rejectAll || record.content.includes('bad'))) throw new Error('Supabase insert sources failed: null value in column "x" violates not-null constraint');
+    return insert(table, record);
+  };
+  const github = createGithub({ store, env: environment(), fetchImpl: async (url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/app/installations/41/access_tokens') return json({ token: 't' });
+    if (parsed.pathname.endsWith('/commits')) return json([
+      { sha: 'a1', commit: { message: 'good commit' } },
+      { sha: 'b2', commit: { message: 'bad commit' } },
+    ]);
+    if (parsed.pathname.match(/\/commits\/\w+$/)) return json({ files: [] });
+    if (parsed.pathname.endsWith('/pulls') || parsed.pathname.endsWith('/issues') || parsed.pathname.endsWith('/branches')) return json([]);
+    if (parsed.pathname === '/repos/acme/project') return json({ default_branch: 'main' });
+    throw new Error(`Unexpected URL ${url}`);
+  } });
+  const result = await github.sync({ repository, actorId: 'actor' });
+  assert.equal(result.commits, 2);
+  assert.equal(result.skipped, 1);
+  assert.match(result.skippedReason, /not-null constraint/);
+  assert.equal(store.rows('sources').length, 1);
+  assert.ok(store.rows('repositories')[0].last_synced_at);
+
+  rejectAll = true;
+  store.update = async (table) => { if (table === 'sources') throw new Error('Supabase update sources failed: null value in column "x"'); };
+  await assert.rejects(github.sync({ repository, actorId: 'actor' }), /^Error: Could not save any synced records: Supabase \w+ sources failed: null value/);
+});
