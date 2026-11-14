@@ -79,7 +79,7 @@ test('Gemini output only keeps allowed citations and cannot elevate unsupported 
   const { handovers } = setup({ sources: [source()] }, { env: { GEMINI_API_KEY: 'test-key' }, fetchImpl });
   const started = await handovers.start({ orgId: ORG, actor: admin, leaverId: leaver.id, incomingId: incoming.id });
   const result = await handovers.generate({ handoverId: started.handover.id, actor: admin });
-  assert.match(request.url, /models\/gemini-3\.5-flash:generateContent$/);
+  assert.match(request.url, /models\/gemini-2\.5-flash:generateContent$/);
   assert.equal(new URL(request.url).searchParams.has('key'), false);
   assert.equal(request.headers['x-goog-api-key'], 'test-key');
   assert.equal(request.body.generationConfig.responseMimeType, 'application/json');

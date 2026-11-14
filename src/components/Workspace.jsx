@@ -696,10 +696,14 @@ export function Workspace({
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div>
+            {!isDemo && (
+              <OnboardingChecklist orgId={selectedOrgId} items={checklistItems} onGo={setActiveTab} />
+            )}
+
             {riskAlerts.length > 0 && (
               <section className="ws-alert-list" aria-label="Bus factor alerts">
                 {(showAllAlerts ? riskAlerts : riskAlerts.slice(0, 3)).map(alert => (
-                  <div key={alert.module} className="ws-alert" role="alert">
+                  <div key={alert.module} className="ws-alert">
                     <span>
                       <strong>Bus factor alert · {alert.module}:</strong> {alert.message}
                     </span>
@@ -726,10 +730,9 @@ export function Workspace({
             {!hasGithubData && (
               <div className="ws-card ws-empty-state">
                 <div className="ws-empty-title">No GitHub data yet</div>
-                <div style={{ marginBottom: 14 }}>Connect GitHub to see who owns which modules, or explore the demo with sample data.</div>
+                <div style={{ marginBottom: 14 }}>Connect a GitHub repository to see who owns which modules and where the bus-factor risks are.</div>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                   <button type="button" className="ws-btn ws-btn-primary" onClick={() => setActiveTab('github')}>Connect GitHub</button>
-                  {!isDemo && <a className="ws-btn" href="/demo-page">Open the demo</a>}
                 </div>
               </div>
             )}
@@ -757,10 +760,13 @@ export function Workspace({
             {/* Risk Assessment Cards */}
             <div className="ws-card">
               <div className="ws-card-header">
-                <div className="ws-card-title">
-                  <span>Continuous Architectural Risk Assessment</span>
-                </div>
-                <span className="ws-badge ws-badge-verified">Grounded Evidence Engine</span>
+                <h2 className="ws-card-title">Architectural risk assessment</h2>
+                {repositories.length > 1 && (
+                  <select className="ws-org-select" aria-label="Repository for risk details" value={riskRepoId} onChange={e => setRiskRepoId(e.target.value)}>
+                    <option value="all">All repositories</option>
+                    {repositories.map(repo => <option key={repo.id} value={repo.id}>{repo.full_name}</option>)}
+                  </select>
+                )}
               </div>
 
               {risks ? (
@@ -780,13 +786,13 @@ export function Workspace({
                     </span>
                   </div>
 
-                  {riskItems.length > 0 ? (
+                  {visibleRiskItems.length > 0 ? (
                     <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: 14 }}>
                       <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: 8, fontSize: '0.9rem' }}>
                         Source-backed risks:
                       </div>
                       <ul style={{ margin: 0, paddingLeft: 20, fontSize: '0.85rem', color: '#fca5a5', lineHeight: 1.6 }}>
-                        {riskItems.map((r, i) => (
+                        {visibleRiskItems.map((r, i) => (
                           <li key={r.source_ids?.[0] || i}>{r.summary || r.kind}</li>
                         ))}
                       </ul>
@@ -797,7 +803,7 @@ export function Workspace({
                     </div>
                   )}
 
-                  {busFactor.map((b, i) => (
+                  {visibleBusFactor.map((b, i) => (
                     <div key={b.repository_id || i} style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
                       {b.available === false ? (
                         <span>Bus factor: {b.reason}</span>
@@ -819,7 +825,7 @@ export function Workspace({
 
             <div className="ws-card">
               <div className="ws-card-header">
-                <div className="ws-card-title">Who knows what: contribution matrix</div>
+                <h2 className="ws-card-title">Who knows what: contribution matrix</h2>
               </div>
               {!risks ? (
                 <div className="ws-muted">Loading contribution data…</div>
@@ -835,32 +841,7 @@ export function Workspace({
               )}
             </div>
 
-            {/* System Status Overview */}
-            <div className="ws-card">
-              <div className="ws-card-header">
-                <div className="ws-card-title">System Infrastructure & Sync Health</div>
-              </div>
-              <div className="ws-grid-3">
-                <div style={{ background: '#131417', padding: 14, borderRadius: 6, border: '1px solid var(--line)' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 4 }}>Storage Engine</div>
-                  <div style={{ fontWeight: 600, color: '#fff' }}>
-                    {health?.configured?.supabase ? 'Supabase Postgres (RLS enabled)' : 'In-Memory Synthetic Store'}
-                  </div>
-                </div>
-                <div style={{ background: '#131417', padding: 14, borderRadius: 6, border: '1px solid var(--line)' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 4 }}>GitHub App Integration</div>
-                  <div style={{ fontWeight: 600, color: health?.configured?.github ? 'var(--green)' : '#f59e0b' }}>
-                    {health?.configured?.github ? 'Configured & Active' : 'Not configured'}
-                  </div>
-                </div>
-                <div style={{ background: '#131417', padding: 14, borderRadius: 6, border: '1px solid var(--line)' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 4 }}>Local MCP Server</div>
-                  <div style={{ fontWeight: 600, color: 'var(--green)' }}>
-                    StdioServerTransport v0.1.0 Ready
-                  </div>
-                </div>
-              </div>
-            </div>
+            <SystemStatus health={health} isDemo={isDemo} repositories={repositories} tokens={tokens} />
           </div>
         )}
 
@@ -872,6 +853,8 @@ export function Workspace({
                 {['all', 'decision', 'blocker', 'commit', 'pull_request'].map(f => (
                   <button
                     key={f}
+                    type="button"
+                    aria-pressed={memoryFilter === f}
                     className={`ws-filter-pill ${memoryFilter === f ? 'active' : ''}`}
                     onClick={() => setMemoryFilter(f)}
                   >
@@ -882,14 +865,15 @@ export function Workspace({
 
               <div style={{ display: 'flex', gap: 10 }}>
                 <input
-                  type="text"
+                  type="search"
+                  aria-label="Search memories"
                   className="ws-input"
                   placeholder="Search decisions, files, rationale..."
                   value={memorySearch}
                   onChange={e => setMemorySearch(e.target.value)}
                   style={{ width: 260 }}
                 />
-                <button className="ws-btn ws-btn-primary" onClick={() => setShowMemoryModal(true)}>
+                <button type="button" className="ws-btn ws-btn-primary" onClick={() => setShowMemoryModal(true)}>
                   + Log Memory
                 </button>
               </div>
@@ -897,9 +881,13 @@ export function Workspace({
 
             {filteredSources.length === 0 ? (
               <div className="ws-card ws-empty-state">
-                <div className="ws-empty-icon">🧠</div>
-                <div className="ws-empty-title">No memory records found</div>
-                <div>Use the "+ Log Memory" button or the Baton Local MCP Server to capture context.</div>
+                <div className="ws-empty-icon" aria-hidden="true">🧠</div>
+                <div className="ws-empty-title">{sources.length === 0 ? 'No memory records yet' : 'No records match this filter'}</div>
+                <div>
+                  {sources.length === 0
+                    ? 'Use the “+ Log Memory” button, connect a repository, or capture context with the Baton MCP server.'
+                    : 'Try another filter or clear the search.'}
+                </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -925,11 +913,14 @@ export function Workspace({
                         </div>
 
                         <button
+                          type="button"
                           className="ws-btn ws-btn-danger ws-btn-sm"
+                          disabled={isBusy(`memory:${s.id}`)}
                           onClick={() => handleDeleteMemory(s.id)}
                           title="Delete memory"
+                          aria-label={`Delete ${s.type} record`}
                         >
-                          ✕
+                          {isBusy(`memory:${s.id}`) ? '…' : '✕'}
                         </button>
                       </div>
 
@@ -986,103 +977,17 @@ export function Workspace({
 
         {/* TAB 3: GITHUB INTEGRATION */}
         {activeTab === 'github' && (
-          <div>
-            <div className="ws-card">
-              <div className="ws-card-header">
-                <div className="ws-card-title">Connected GitHub Repositories</div>
-              </div>
-
-              <GithubConnect
-                orgId={selectedOrgId}
-                installUrl={health?.githubInstallUrl}
-                outcome={githubOutcome}
-                onConnected={() => refreshOrgState(selectedOrgId)}
-              />
-
-              {repositories.length === 0 ? (
-                <div className="ws-empty-state">
-                  <div className="ws-empty-icon">🐙</div>
-                  <div className="ws-empty-title">No repositories linked yet</div>
-                  <div>Connect your organization's GitHub App to sync pull requests and commits.</div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {repositories.map(repo => (
-                    <div
-                      key={repo.id}
-                      style={{
-                        background: '#131417',
-                        border: '1px solid var(--line)',
-                        borderRadius: 6,
-                        padding: 16,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '1rem', fontWeight: 600, color: '#fff' }}>
-                          {repo.full_name}
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 4 }}>
-                          Installation ID: #{repo.installation_id} · Last Synced:{' '}
-                          {repo.last_synced_at ? new Date(repo.last_synced_at).toLocaleString() : 'Never'}
-                        </div>
-                      </div>
-
-                      <button
-                        className="ws-btn ws-btn-sm"
-                        onClick={() => handleSyncRepo(repo.id)}
-                      >
-                        ↻ Sync Now
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Imported Commits & Pull Requests Feed */}
-            <div className="ws-card">
-              <div className="ws-card-header">
-                <div className="ws-card-title">Live Git & PR Evidence Activity</div>
-                <span className="ws-badge ws-badge-verified">Idempotent Sync</span>
-              </div>
-
-              {sources.filter(s => s.type === 'commit' || s.type === 'pull_request').length === 0 ? (
-                <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
-                  No commits or pull requests synced yet. Click "Sync Now" on a connected repository.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {sources
-                    .filter(s => s.type === 'commit' || s.type === 'pull_request')
-                    .map(s => (
-                      <div
-                        key={s.id}
-                        style={{
-                          background: '#121316',
-                          border: '1px solid var(--line)',
-                          borderRadius: 6,
-                          padding: 12,
-                          fontSize: '0.85rem',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span className={`ws-badge ${s.type === 'pull_request' ? 'ws-badge-verified' : 'ws-badge-muted'}`}>
-                            {s.type === 'pull_request' ? `PR #${s.metadata?.number || ''}` : 'Commit'}
-                          </span>
-                          <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>
-                            {new Date(s.created_at).toLocaleString()}
-                          </span>
-                        </div>
-                        <div style={{ color: '#fff', fontWeight: 500 }}>{s.content}</div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <GithubTab
+            orgId={selectedOrgId}
+            isDemo={isDemo}
+            isAdmin={isAdmin}
+            health={health}
+            outcome={githubOutcome}
+            repositories={repositories}
+            sources={sources}
+            notify={notify}
+            onRefresh={() => refreshOrgState(selectedOrgId)}
+          />
         )}
 
         {/* TAB 4: TEAM & MCP TOKENS */}
@@ -1091,12 +996,15 @@ export function Workspace({
             {/* Team Members List */}
             <div className="ws-card">
               <div className="ws-card-header">
-                <div className="ws-card-title">Organization Members</div>
-                <button className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => setShowInviteModal(true)}>
-                  + Invite Member
-                </button>
+                <h2 className="ws-card-title">Organization members</h2>
+                {(isAdmin || isDemo) && (
+                  <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => setShowInviteModal(true)}>
+                    + Invite member
+                  </button>
+                )}
               </div>
 
+              {members.length === 0 && <div className="ws-muted">No members to show.</div>}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {members.map(m => (
                   <div
@@ -1140,11 +1048,14 @@ export function Workspace({
                         <span className="ws-badge ws-badge-muted">{m.function_role || 'no function role'}</span>
                       )}
                       <button
+                        type="button"
                         className={`ws-btn ws-btn-sm ${m.offboarding ? 'ws-btn-danger' : ''}`}
+                        disabled={isBusy(`member:${m.id}`)}
+                        aria-pressed={Boolean(m.offboarding)}
                         onClick={() => handleToggleOffboarding(m)}
                         title="Toggle offboarding mode for handover generation"
                       >
-                        {m.offboarding ? 'Offboarding Flagged' : 'Set Offboarding'}
+                        {isBusy(`member:${m.id}`) ? 'Saving…' : m.offboarding ? 'Offboarding flagged' : 'Set offboarding'}
                       </button>
                     </div>
                   </div>
@@ -1155,23 +1066,23 @@ export function Workspace({
             {/* MCP API Tokens & Client Snippet */}
             <div className="ws-card">
               <div className="ws-card-header">
-                <div className="ws-card-title">Baton MCP Server & API Tokens</div>
-                <button className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => setShowTokenModal(true)}>
+                <h2 className="ws-card-title">Baton MCP server and API tokens</h2>
+                <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => setShowTokenModal(true)}>
                   + Generate MCP Token
                 </button>
               </div>
 
               <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 16 }}>
-                Baton MCP integrates directly with Cursor, Claude Desktop, Antigravity, and Codex to capture decisions and blockers locally with client-side secret redaction.
+                Baton MCP captures decisions and blockers from MCP-compatible tools such as Cursor, Claude and Antigravity, with client-side secret redaction.
               </div>
 
               {/* Token List */}
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', marginBottom: 10 }}>
-                  Active API Tokens:
-                </div>
+                <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', margin: '0 0 10px' }}>
+                  Active API tokens
+                </h3>
                 {tokens.length === 0 ? (
-                  <div style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>No tokens created yet.</div>
+                  <div className="ws-muted">No tokens yet. Generate one to connect an MCP client.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {tokens.map(t => (
@@ -1194,10 +1105,13 @@ export function Workspace({
                           </span>
                         </div>
                         <button
+                          type="button"
                           className="ws-btn ws-btn-danger ws-btn-sm"
-                          onClick={() => handleDeleteToken(t.id)}
+                          disabled={isBusy(`token:${t.id}`)}
+                          aria-label={`Revoke token ${t.name}`}
+                          onClick={() => handleDeleteToken(t)}
                         >
-                          Revoke
+                          {isBusy(`token:${t.id}`) ? 'Revoking…' : 'Revoke'}
                         </button>
                       </div>
                     ))}
@@ -1205,82 +1119,7 @@ export function Workspace({
                 )}
               </div>
 
-              {/* Ready-to-copy JSON configuration with Zero-Clone npx options */}
-              <div style={{ marginTop: 24, borderTop: '1px solid var(--line)', paddingTop: 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>Zero-Clone MCP Configuration</span>
-                      <span style={{ fontSize: '0.7rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.1)', border: '1px solid #284435', padding: '2px 8px', borderRadius: 12, fontFamily: 'monospace' }}>
-                        Zero Git Clone Required
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: 2 }}>
-                      Connect Baton's memory daemon over stdio via npx directly from GitHub without cloning or downloading code.
-                    </div>
-                  </div>
-
-                  <button
-                    className="ws-btn ws-btn-primary ws-btn-sm"
-                    disabled={!buildMcpSnippet(mcpClientTab)}
-                    onClick={() => {
-                      const textToCopy = buildMcpSnippet(mcpClientTab);
-                      if (!textToCopy) return;
-                      navigator.clipboard?.writeText(textToCopy);
-                      setCopiedMcpSnippet(true);
-                      setTimeout(() => setCopiedMcpSnippet(false), 2000);
-                    }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  >
-                    <span>{copiedMcpSnippet ? '✓ Copied!' : 'Copy Configuration'}</span>
-                  </button>
-                </div>
-
-                {/* Client Selector Tabs */}
-                <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-                  {[
-                    { id: 'cursor', label: 'Cursor (.cursor/mcp.json)' },
-                    { id: 'claude_desktop', label: 'Claude Desktop' },
-                    { id: 'claude_cli', label: 'Claude Code (1-Click CLI)' },
-                    { id: 'antigravity', label: 'Antigravity / Windsurf' },
-                    { id: 'local_node', label: 'Local Clone (node)' }
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setMcpClientTab(tab.id)}
-                      style={{
-                        background: mcpClientTab === tab.id ? '#1e2430' : '#14161a',
-                        color: mcpClientTab === tab.id ? '#34d399' : '#8f96a3',
-                        border: `1px solid ${mcpClientTab === tab.id ? '#2a4d3d' : 'var(--line)'}`,
-                        borderRadius: 6,
-                        padding: '6px 12px',
-                        fontSize: '0.78rem',
-                        fontWeight: mcpClientTab === tab.id ? 600 : 400,
-                        cursor: 'pointer',
-                        fontFamily: 'monospace'
-                      }}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Configuration Code Box */}
-                <div className="ws-code-snippet" style={{ position: 'relative' }}>
-                  <pre style={{ margin: 0, overflowX: 'auto', fontSize: '0.82rem', lineHeight: 1.6 }}>
-                    {buildMcpSnippet(mcpClientTab) || 'Connect a repository first (GitHub tab) to generate an MCP configuration.'}
-                  </pre>
-                </div>
-
-                {/* Setup Tip */}
-                <div style={{ fontSize: '0.76rem', color: '#7e8594', marginTop: 8, fontFamily: 'monospace' }}>
-                  {mcpClientTab === 'cursor' && '💡 Paste into your project root as .cursor/mcp.json or in Cursor Settings → MCP → Add New Server.'}
-                  {mcpClientTab === 'claude_desktop' && '💡 Paste into claude_desktop_config.json (Claude Settings → Developer → Edit Config).'}
-                  {mcpClientTab === 'claude_cli' && '💡 Paste this single command directly into your terminal. Zero files to edit.'}
-                  {mcpClientTab === 'antigravity' && '💡 Paste into .antigravity/mcp.json in your workspace root.'}
-                  {mcpClientTab === 'local_node' && '💡 For developers working directly inside the cloned BATON repository.'}
-                </div>
-
+              <McpConfig orgId={selectedOrgId} repositories={repositories} tokens={tokens} revealedToken={newestToken} notify={notify}>
                 {isDemo ? (
                 <div style={{
                   marginTop: 24,
@@ -1396,8 +1235,18 @@ export function Workspace({
                   )}
                 </div>
                 )}
-              </div>
+              </McpConfig>
             </div>
+
+            {isAdmin && !isDemo && selectedOrg && (
+              <SettingsCard
+                org={selectedOrg}
+                notify={notify}
+                onRenamed={org => setOrgs(list => list.map(item => (item.id === org.id ? { ...item, name: org.name } : item)))}
+                onCleared={() => refreshOrgState(selectedOrgId)}
+                onDeleted={() => boot()}
+              />
+            )}
           </div>
         )}
 
@@ -1799,351 +1648,86 @@ export function Workspace({
       )}
 
       {packetId && (
-        <main className="ws-main">
+        <main id="main" className="ws-main">
           <HandoverPage handoverId={packetId} mode={mode} embedded onBack={() => setPacketId(null)} />
         </main>
       )}
 
-      {/* MODAL 1: CREATE ORG */}
       {showCreateOrgModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowCreateOrgModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Create New Organization</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowCreateOrgModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateOrg}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Organization Name</label>
-                <input
-                  type="text"
-                  className="ws-input"
-                  placeholder="e.g. Acme Corp Engineering"
-                  value={newOrgName}
-                  onChange={e => setNewOrgName(e.target.value)}
-                  required
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowCreateOrgModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Create Organization
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CreateOrgModal
+          onClose={() => setShowCreateOrgModal(false)}
+          onCreated={async res => {
+            setShowCreateOrgModal(false);
+            await boot(res?.organization?.id);
+            notify('Team created.', 'success');
+          }}
+        />
       )}
 
-      {/* MODAL 2: INVITE MEMBER */}
-      {showInviteModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowInviteModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Invite Team Member</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowInviteModal(false)}>✕</button>
-            </div>
-            {generatedInviteToken ? (
-              <div>
-                <div style={{ color: 'var(--green)', fontWeight: 600, marginBottom: 8 }}>
-                  ✓ Invite link generated!
-                </div>
-                <div className="ws-code-snippet" style={{ marginBottom: 14 }}>
-                  {`${window.location.origin}/auth?invite=${generatedInviteToken}`}
-                </div>
-                <button
-                  className="ws-btn ws-btn-primary"
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/auth?invite=${generatedInviteToken}`);
-                    notify('Copied invite link to clipboard!');
-                    setShowInviteModal(false);
-                    setGeneratedInviteToken(null);
-                  }}
-                >
-                  Copy Link & Close
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateInvite}>
-                <div className="ws-form-group">
-                  <label className="ws-form-label">Email Address (Optional)</label>
-                  <input
-                    type="email"
-                    className="ws-input"
-                    placeholder="engineer@company.com"
-                    value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
-                  />
-                </div>
-                <div className="ws-form-group">
-                  <label className="ws-form-label">Role</label>
-                  <select
-                    className="ws-org-select"
-                    value={inviteRole}
-                    onChange={e => setInviteRole(e.target.value)}
-                  >
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                  <button type="button" className="ws-btn" onClick={() => setShowInviteModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="ws-btn ws-btn-primary">
-                    Generate Invite
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
+      {showInviteModal && <InviteModal orgId={selectedOrgId} notify={notify} onClose={() => { setShowInviteModal(false); refreshOrgState(selectedOrgId); }} />}
 
-      {/* MODAL 3: GENERATE MCP TOKEN */}
       {showTokenModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowTokenModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Generate Baton MCP Token</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowTokenModal(false)}>✕</button>
-            </div>
-            {revealedToken ? (
-              <div>
-                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 6, padding: 12, marginBottom: 14, color: '#fca5a5', fontSize: '0.85rem' }}>
-                  ⚠️ <strong>Do Not Share:</strong> Copy this token now. For your security, this secret will never be displayed again.
-                </div>
-                <div className="ws-code-snippet" style={{ marginBottom: 14, color: '#34d399' }}>
-                  {revealedToken}
-                </div>
-                <button
-                  className="ws-btn ws-btn-primary"
-                  onClick={() => {
-                    navigator.clipboard.writeText(revealedToken);
-                    notify('Token copied to clipboard!');
-                    setShowTokenModal(false);
-                    setRevealedToken(null);
-                  }}
-                >
-                  Copy Secret & Close
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateToken}>
-                <div className="ws-form-group">
-                  <label className="ws-form-label">Token Name / Client Description</label>
-                  <input
-                    type="text"
-                    className="ws-input"
-                    placeholder="e.g. Cursor Work Laptop, Claude CLI"
-                    value={newTokenName}
-                    onChange={e => setNewTokenName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                  <button type="button" className="ws-btn" onClick={() => setShowTokenModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="ws-btn ws-btn-primary">
-                    Create Token
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
+        <TokenModal
+          orgId={selectedOrgId}
+          notify={notify}
+          onCreated={token => { setNewestToken(token); refreshOrgState(selectedOrgId); }}
+          onClose={() => setShowTokenModal(false)}
+        />
       )}
 
-      {/* MODAL 4: LOG MEMORY */}
       {showMemoryModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowMemoryModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Log Context & Reasoning</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowMemoryModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateMemory}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Type</label>
-                <select
-                  className="ws-org-select"
-                  value={memoryType}
-                  onChange={e => setMemoryType(e.target.value)}
-                >
-                  <option value="decision">Architectural Decision</option>
-                  <option value="blocker">Blocker / Unfinished Task</option>
-                  <option value="note">Operational Note</option>
-                </select>
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Content / Decision Summary</label>
-                <textarea
-                  className="ws-input"
-                  rows={3}
-                  placeholder="Describe what was decided, why, or what is blocking..."
-                  value={memoryContent}
-                  onChange={e => setMemoryContent(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Metadata (JSON or Notes)</label>
-                <textarea
-                  className="ws-input"
-                  rows={2}
-                  placeholder='{"reason": "Faster builds", "files_affected": ["vite.config.js"]}'
-                  value={memoryMetadata}
-                  onChange={e => setMemoryMetadata(e.target.value)}
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Visibility</label>
-                <select
-                  className="ws-org-select"
-                  value={memoryVisibility}
-                  onChange={e => setMemoryVisibility(e.target.value)}
-                >
-                  <option value="team">Team (Visible to org)</option>
-                  <option value="admin">Admin Only</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowMemoryModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Save Memory
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <MemoryModal
+          orgId={selectedOrgId}
+          onClose={() => setShowMemoryModal(false)}
+          onSaved={async () => { setShowMemoryModal(false); await refreshOrgState(selectedOrgId); notify('Memory saved.', 'success'); }}
+        />
       )}
 
-      {/* MODAL 5: NEW TASK */}
       {showTaskModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowTaskModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Create Handover Task</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowTaskModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateTask}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Task Title</label>
-                <input
-                  type="text"
-                  className="ws-input"
-                  placeholder="e.g. Verify webhook replay protection"
-                  value={taskTitle}
-                  onChange={e => setTaskTitle(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Description</label>
-                <textarea
-                  className="ws-input"
-                  rows={3}
-                  placeholder="Details and expected acceptance criteria..."
-                  value={taskDesc}
-                  onChange={e => setTaskDesc(e.target.value)}
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Assignee</label>
-                <select
-                  className="ws-org-select"
-                  value={taskAssignee}
-                  onChange={e => setTaskAssignee(e.target.value)}
-                >
-                  <option value="">Unassigned</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.user_id}>
-                      {m.name || m.github_login || m.user_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Due Date</label>
-                <input
-                  type="date"
-                  className="ws-input"
-                  value={taskDue}
-                  onChange={e => setTaskDue(e.target.value)}
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowTaskModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Create Task
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <TaskModal
+          orgId={selectedOrgId}
+          members={members}
+          onClose={() => setShowTaskModal(false)}
+          onSaved={async () => { setShowTaskModal(false); await refreshOrgState(selectedOrgId); notify('Task created.', 'success'); }}
+        />
       )}
 
-      {/* MODAL 6: INITIATE HANDOVER */}
       {showStartHandoverModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowStartHandoverModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Initiate Handover Protocol</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowStartHandoverModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleStartHandover}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Departing Engineer (Leaver)</label>
-                <select
-                  className="ws-org-select"
-                  aria-label="Departing engineer"
-                  value={handoverLeaverId}
-                  onChange={e => setHandoverLeaverId(e.target.value)}
-                  required
-                >
-                  <option value="">Select Leaver...</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.user_id}>
-                      {m.name || m.github_login || m.user_id} {m.offboarding ? '(Flagged for offboarding)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Incoming Engineer</label>
-                <select
-                  className="ws-org-select"
-                  aria-label="Incoming engineer"
-                  value={handoverIncomingId}
-                  onChange={e => setHandoverIncomingId(e.target.value)}
-                  required
-                >
-                  <option value="">Select Incoming Engineer...</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.user_id}>
-                      {m.name || m.github_login || m.user_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowStartHandoverModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Start Handover
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <StartHandoverModal
+          orgId={selectedOrgId}
+          members={members}
+          initialLeaverId={handoverLeaverId}
+          onClose={() => setShowStartHandoverModal(false)}
+          onStarted={async res => {
+            setShowStartHandoverModal(false);
+            setActiveTab('handovers');
+            await refreshOrgState(selectedOrgId);
+            if (res?.handover?.id) await loadHandover(res.handover.id);
+          }}
+        />
+      )}
+
+      {confirming && (
+        <ConfirmDialog
+          title={confirming.title}
+          confirmLabel={confirming.confirmLabel}
+          busy={confirmBusy}
+          onCancel={() => setConfirming(null)}
+          onConfirm={async () => {
+            setConfirmBusy(true);
+            try {
+              await confirming.run();
+              setConfirming(null);
+            } catch (err) {
+              setConfirming(null);
+              notify(err.message);
+            } finally {
+              setConfirmBusy(false);
+            }
+          }}
+        >
+          {confirming.body}
+        </ConfirmDialog>
       )}
     </div>
   );
