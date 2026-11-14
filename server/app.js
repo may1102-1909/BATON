@@ -3,6 +3,8 @@ import { handleDemoRequest } from './demo.js';
 import { FUNCTION_ROLES, audienceOf, canSee, cleanAudience, audienceFromPaths } from './audience.js';
 import { filesOf } from './risk.js';
 import { requireSourceType } from './sourceTypes.js';
+import { EMBEDDING_MODEL, geminiGenerateUrl } from './gemini.js';
+import { handoverMarkdown } from './export.js';
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const roles = new Set(['admin', 'member', 'team']);
@@ -32,11 +34,11 @@ class HttpError extends Error {
 async function embedText(text, key, fetchImpl = fetch) {
   if (!key || !text) return null;
   try {
-    const res = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent', {
+    const res = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
-        model: 'models/text-embedding-004',
+        model: `models/${EMBEDDING_MODEL}`,
         content: { parts: [{ text: String(text).slice(0, 4000) }] }
       })
     });
@@ -48,12 +50,12 @@ async function embedText(text, key, fetchImpl = fetch) {
   }
 }
 
-async function extractDecisionsFromMessages(messages, key, fetchImpl = fetch) {
+async function extractDecisionsFromMessages(messages, key, fetchImpl = fetch, env = process.env) {
   if (!key || !messages || !messages.length) return [];
   try {
     const transcript = messages.map(m => `[${m.role.toUpperCase()} #${m.message_index}]: ${m.content}`).join('\n');
     const prompt = `Analyze this AI-developer conversation transcript. Extract any architectural decisions, library adoptions, or operational blockers.\nReturn ONLY valid JSON array with objects matching:\n[{ "type": "decision"|"blocker", "content": "concise statement", "reason": "why", "files_affected": ["path/to/file"] }]\nIf no clear decisions or blockers were made, return [].\n\nTranscript:\n${transcript.slice(0, 8000)}`;
-    const res = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+    const res = await fetchImpl(geminiGenerateUrl(env), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
@@ -222,6 +224,46 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     return { id: auth.user.id, role: membership.role, org_id: orgId, verifiedGithub: auth.verifiedGithub, function_role: membership.function_role ?? null };
   }
 
+  // Explicit deletes (never DB cascades); removeWhere is used when the store offers it.
+  const purge = async (name, filters) => {
+    if (typeof store.removeWhere === 'function') return store.removeWhere(name, filters);
+    const rows = await store.list(name, filters);
+    for (const row of rows) await store.remove(name, row.id);
+    return rows.length;
+  };
+  const purgeOptional = async (name, filters) => {
+    try { return await purge(name, filters); }
+    catch (error) {
+      if (/does not exist|schema cache|could not find/i.test(String(error?.message))) return 0;
+      throw error;
+    }
+  };
+  const purgeHandovers = async orgId => {
+    const rows = await store.list('handovers', { org_id: orgId });
+    for (const row of rows) {
+      for (const name of ['handover_claims', 'handover_questions', 'handover_versions', 'handover_events']) await purgeOptional(name, { handover_id: row.id });
+      await store.remove('handovers', row.id);
+    }
+    return rows.length;
+  };
+  const purgeTasks = async orgId => {
+    const rows = await store.list('tasks', { org_id: orgId });
+    await purgeOptional('task_comments', { org_id: orgId });
+    for (const row of rows) { await purgeOptional('task_comments', { task_id: row.id }); await store.remove('tasks', row.id); }
+    return rows.length;
+  };
+  const purgeSources = async orgId => {
+    const removed = await purge('sources', { org_id: orgId });
+    for (const name of ['agent_messages', 'file_summaries']) await purgeOptional(name, { org_id: orgId });
+    return removed;
+  };
+  const confirmedOrg = async (actor, body) => {
+    const organization = await store.get('organizations', actor.org_id);
+    if (!organization) throw new HttpError(404, 'Organization not found');
+    if (typeof body.confirm !== 'string' || body.confirm.trim() !== organization.name) throw new HttpError(400, 'confirm must exactly match the organization name');
+    return organization;
+  };
+
   const routes = async (req, res, url, auth, body) => {
     const method = req.method ?? 'GET';
     let match;
@@ -247,6 +289,46 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       const organization = await store.insert('organizations', { name, created_by: auth.user.id });
       await store.insert('members', { org_id: organization.id, user_id: auth.user.id, role: 'admin', email: auth.user.email ?? null });
       return json(res, 201, { organization, role: 'admin' });
+    }
+    if ((match = /^\/api\/orgs\/([^/]+)$/.exec(url.pathname)) && method === 'PATCH') {
+      const actor = await requireOrg(auth, match[1], true);
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!name || name.length > 80) throw new HttpError(400, 'Organization name must be 1–80 characters');
+      const organization = await store.update('organizations', actor.org_id, { name });
+      if (!organization) throw new HttpError(404, 'Organization not found');
+      return json(res, 200, { organization });
+    }
+    if ((match = /^\/api\/orgs\/([^/]+)$/.exec(url.pathname)) && method === 'DELETE') {
+      const actor = await requireOrg(auth, match[1], true);
+      await confirmedOrg(actor, body);
+      const repositories = await store.list('repositories', { org_id: actor.org_id });
+      await purgeHandovers(actor.org_id);
+      await purgeTasks(actor.org_id);
+      await purgeSources(actor.org_id);
+      for (const repository of repositories) await purgeOptional('github_deliveries', { repository_id: repository.id });
+      for (const name of ['invites', 'tokens', 'github_states', 'github_link_states', 'github_accounts', 'github_installations', 'decisions', 'blockers']) await purgeOptional(name, { org_id: actor.org_id });
+      await purge('repositories', { org_id: actor.org_id });
+      await purge('members', { org_id: actor.org_id });
+      await store.remove('organizations', actor.org_id);
+      return json(res, 200, { deleted: true });
+    }
+    if ((match = /^\/api\/orgs\/([^/]+)\/reset$/.exec(url.pathname)) && method === 'POST') {
+      const actor = await requireOrg(auth, match[1], true);
+      if (!['sources', 'all'].includes(body.scope)) throw new HttpError(400, 'scope must be "sources" or "all"');
+      await confirmedOrg(actor, body);
+      const removed = { sources: 0, tasks: 0, handovers: 0 };
+      if (body.scope === 'all') { removed.handovers = await purgeHandovers(actor.org_id); removed.tasks = await purgeTasks(actor.org_id); }
+      removed.sources = await purgeSources(actor.org_id);
+      return json(res, 200, { removed });
+    }
+    if ((match = /^\/api\/orgs\/([^/]+)\/repositories\/([^/]+)$/.exec(url.pathname)) && method === 'DELETE') {
+      const actor = await requireOrg(auth, match[1], true);
+      const repository = await store.get('repositories', match[2]);
+      if (!repository || repository.org_id !== actor.org_id) throw new HttpError(404, 'Repository not found');
+      const removedSources = await purge('sources', { org_id: actor.org_id, repository_id: repository.id });
+      for (const name of ['file_summaries', 'github_deliveries']) await purgeOptional(name, { repository_id: repository.id });
+      await store.remove('repositories', repository.id);
+      return json(res, 200, { deleted: true, removed_sources: removedSources });
     }
 
     if ((match = /^\/api\/orgs\/([^/]+)\/state$/.exec(url.pathname)) && method === 'GET') {
@@ -459,7 +541,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       const geminiKey = configuration.GEMINI_API_KEY;
       if (geminiKey && processedMessages.length > 0) {
         try {
-          const extracted = await extractDecisionsFromMessages(processedMessages, geminiKey, fetchImpl);
+          const extracted = await extractDecisionsFromMessages(processedMessages, geminiKey, fetchImpl, configuration);
           for (const item of extracted) {
             const memContent = item.content || item.decision || item.problem;
             if (!memContent) continue;
@@ -544,7 +626,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       if (!summary && geminiKey && redactedChunks) {
         try {
           const sumPrompt = `Provide a 2-3 sentence technical summary of this code file (${filePath}). Describe its core responsibility, exported interfaces, and dependencies.\n\nCode:\n${redactedChunks.slice(0, 4000)}`;
-          const sRes = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+          const sRes = await fetchImpl(geminiGenerateUrl(configuration), {
             method: 'POST',
             headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey },
             body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: sumPrompt }] }] })
