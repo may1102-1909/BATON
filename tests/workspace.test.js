@@ -112,8 +112,9 @@ test('DELETE organization removes everything in it and leaves other organization
   assert.equal((await call(member, 'DELETE', `/api/orgs/${ORG}`, { confirm: 'Acme Team' })).status, 403);
   assert.equal((await call(admin, 'DELETE', `/api/orgs/${ORG}`, { confirm: 'Wrong' })).status, 400);
   assert.equal((await call(admin, 'DELETE', `/api/orgs/${ORG}`)).status, 400);
+  assert.equal((await call(admin, 'DELETE', `/api/orgs/${ORG}?confirm=Wrong`)).status, 400);
   assert.ok(await store.get('organizations', ORG));
-  const deleted = await call(admin, 'DELETE', `/api/orgs/${ORG}`, { confirm: 'Acme Team' });
+  const deleted = await call(admin, 'DELETE', `/api/orgs/${ORG}?confirm=Acme%20Team`);
   assert.deepEqual(deleted.body, { deleted: true });
   assert.equal(await store.get('organizations', ORG), null);
   for (const name of ['members', 'repositories', 'sources', 'tasks', 'task_comments', 'handovers', 'handover_claims', 'tokens', 'invites', 'github_accounts']) {
