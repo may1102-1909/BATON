@@ -805,7 +805,12 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     if ((match = /^\/api\/handovers\/([^/]+)\/export\.md$/.exec(url.pathname)) && method === 'GET') {
       const handover = await store.get('handovers', match[1]);
       if (!handover) throw new HttpError(404, 'Handover not found');
-      const actor = await requireOrg(auth, handover.org_id);
+      let actor = await requireOrg(auth, handover.org_id);
+      if (auth.apiToken) {
+        // MCP exports land in a repository file, so tokens get the participant view without admin-only evidence.
+        if (![handover.leaver_id, handover.incoming_id].includes(actor.id)) throw new HttpError(403, 'Only the outgoing or incoming member can export this handover with an API token');
+        if (actor.role === 'admin') actor = { ...actor, role: 'member' };
+      }
       const module = handovers ?? await maybeIntegration('handover', store, configuration, fetchImpl);
       const detail = await module.get({ handoverId: handover.id, actor });
       if (detail.handover?.status !== 'approved') throw new HttpError(409, 'Only approved handovers can be exported');
@@ -958,7 +963,8 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       const body = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) ? await readBody(req) : {};
       const auth = PUBLIC_PATHS.has(url.pathname) ? { user: { id: 'public' }, memberships: [], demo: configuration.BATON_DEMO_MODE === 'true' } : await authenticate(req);
       if (auth.apiToken && !['/api/collector/push', '/api/collector/search', '/api/collector/messages', '/api/collector/commit', '/api/collector/files', '/api/collector/cursor', '/api/mcp/interviews'].includes(url.pathname)
-        && !/^\/api\/mcp\/interviews\/[^/]+\/answers$/.test(url.pathname)) throw new HttpError(403, 'API tokens are limited to collector and MCP interview access');
+        && !/^\/api\/mcp\/interviews\/[^/]+\/answers$/.test(url.pathname)
+        && !(req.method === 'GET' && /^\/api\/handovers\/[^/]+\/export\.md$/.test(url.pathname))) throw new HttpError(403, 'API tokens are limited to collector, MCP interview and handover export access');
       return await routes(req, res, url, auth, body);
     } catch (error) {
       if (res.headersSent) return res.end();

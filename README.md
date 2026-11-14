@@ -12,7 +12,7 @@ Built for the CodersInPune Hackathon 2026 (team MUMBAI_WALE).
 | --- | --- | --- |
 | Frontend | `src/` | React 18 + Vite 6. Routes: `/` landing, `/auth` sign-in and sign-up, `/usage` mode chooser, `/dashboard` production workspace, `/demo-page` demo, `/handover/:id` handover review. |
 | API | `server/` | A Node ESM request handler (`server/app.js`) with a memory store and a Supabase store. Vercel serves it from `api/index.js`; `vite dev` mounts it through `src/server/apiMiddleware.js`; `server/index.js` is a standalone Node server for `dist/`. |
-| MCP server | `mcp-server/` | Ten tools: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `get_file_context`, `sync_history`, `github_activity`, `get_exit_interview`, `answer_exit_question`. Also a `baton` CLI used by the post-commit hook. |
+| MCP server | `mcp-server/` | Eleven tools: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `get_file_context`, `sync_history`, `github_activity`, `get_exit_interview`, `answer_exit_question`, `export_handover`. Also a `baton` CLI (`init`, `sync`, `handover export`) used by the git and Claude Code hooks. |
 | Database | `supabase/schema.sql`, `supabase/migrations/` | Postgres schema; the app also runs without the optional Round 3 migration. |
 | Tests | `tests/` (unit, `node:test`), `e2e/` (Playwright) | See [Testing](#testing). |
 
@@ -21,10 +21,42 @@ Built for the CodersInPune Hackathon 2026 (team MUMBAI_WALE).
 1. **Capture.** MCP tools and the git post-commit hook send decisions, blockers, commits and file summaries to `/api/collector/*`. A GitHub repository can also be synced directly (commits, pull requests with changed files, issues, branches ahead of the default branch) and updated by webhook.
 2. **Redact.** Text is scrubbed with regular expressions and an entropy check for secrets such as JWTs, API keys and private keys, both in the MCP client and on the server. This is pattern-based redaction, not a guarantee that every secret is caught.
 3. **Generate.** An admin starts a handover for a leaver and an incoming member. BATON asks the leaver targeted questions (exit interview), then drafts claims. With `GEMINI_API_KEY` set, Gemini drafts them; without it, or if Gemini fails, a deterministic evidence-only compiler is used and the result is labelled `evidence-only`. Claims are validated against the supplied sources: unknown citations are dropped and a claim only counts as `verified` when its text appears in a cited source.
-4. **Review and approve.** The admin approves, edits or rejects each claim and resolves conflicting evidence. Approved handovers can be exported as Markdown.
-5. **Onboard.** The incoming engineer reads the approved handover and asks cited questions answered only from approved evidence.
+4. **Review and approve.** The admin approves, edits or rejects each claim and resolves conflicting evidence.
+5. **Hand over the file.** The approved handover is the final product: a Markdown file (decisions, risks, resolved conflicts, known gaps, cited sources). Download it with **Export Markdown** on the handover page, or let the agent save it into the repository with the `export_handover` MCP tool / `npm run baton -- handover export` (default `docs/handovers/handover-<id>.md`). Example: [docs/examples/sample-handover.md](docs/examples/sample-handover.md).
+6. **Onboard.** The incoming engineer reads the approved handover and asks cited questions answered only from approved evidence.
 
-Access is enforced in the API: organization membership, `admin` vs `member`/`team` roles, source visibility (`team`, `admin`, `private`) and optional function-role audiences (`backend`, `frontend`, `infra`, `data`, `design`, `product`). API tokens only work on collector and MCP interview routes.
+Access is enforced in the API: organization membership, `admin` vs `member`/`team` roles, source visibility (`team`, `admin`, `private`) and optional function-role audiences (`backend`, `frontend`, `infra`, `data`, `design`, `product`). API tokens only work on collector routes, MCP interview routes and the Markdown export of a handover their member takes part in (exported without admin-only evidence, because the file may be committed).
+
+## Connect an AI agent (MCP)
+
+The MCP server runs locally over stdio and talks to the Baton API with a per-member API token. Tested on 14 Nov 2026: Claude Code 2.1 discovers the project config and connects (`claude mcp list` → `✔ Connected`); the Antigravity config follows its documented format but was not run inside Antigravity.
+
+1. In the dashboard (production `/dashboard`), open **Team & Tokens**, click **Generate MCP Token**, and copy the organization ID and repository ID from **MCP client configuration** (the "baton init" tab prints the whole command).
+2. In a clone of this repository: `npm install && npm run build:mcp`.
+3. In the repository you want Baton to remember (this one or any other), run:
+
+   ```bash
+   node /path/to/BATON/mcp-server/dist/cli.js init --api-url https://baton-nu.vercel.app --org <ORG_ID> --repo <REPOSITORY_ID> --key <API_TOKEN>
+   ```
+
+   It writes `.baton/config.env`, `.mcp.json` (Claude Code), `.agents/mcp_config.json` (Antigravity) and `.cursor/mcp.json`, adds them to `.gitignore` (they contain the token), installs a git post-commit hook and a Claude Code Stop hook, and backfills the latest commit.
+4. **Claude Code:** open the repository with `claude`, approve the `baton` project server, and check with `claude mcp list`. To use it in every project instead: `claude mcp add baton -s user -e BATON_API_URL=… -e BATON_API_KEY=… -e BATON_ORG_ID=… -e BATON_REPOSITORY_ID=… -e BATON_REPO_PATH=… -- node /path/to/BATON/mcp-server/dist/index.js`.
+5. **Claude Desktop:** paste the "Claude Desktop" snippet from the dashboard into `claude_desktop_config.json` (Settings → Developer → Edit Config) and restart.
+6. **Antigravity:** `.agents/mcp_config.json` is the workspace config Antigravity reads (use `~/.gemini/config/mcp_config.json` for all projects). Open `/mcp` in the agent panel and refresh; `baton` should list its tools.
+7. Put the bootstrap guidance from [docs/MCP.md](docs/MCP.md#bootstrap-guidance-for-project-instructions) in `CLAUDE.md` / `AGENTS.md` so the agent actually calls the tools.
+
+### Where the memory is stored
+
+Nothing is kept by the agent itself. Every tool call goes to the Baton API, which writes to the Supabase Postgres database configured on the server:
+
+| What | Table |
+| --- | --- |
+| Decisions, blockers, context/change notes, commits, PRs, issues, interview answers | `public.sources` (with a 768-dim `embedding` for semantic search) |
+| Conversation turns synced from Claude Code / Antigravity transcripts | `public.agent_messages` (sync cursor per session) |
+| Changed-file contents and summaries | `public.file_summaries` |
+| Handover packet, claims, questions, versions | `public.handovers`, `handover_claims`, `handover_questions`, `handover_versions` |
+
+Every row is scoped by `org_id` and `repository_id`, so one conversation or codebase's memory is retrievable with `get_context` / `get_file_context` by anyone in that organization. Locally, only the configuration (`.baton/config.env`, the client config files) and a snapshot hash cache (`mcp-server/.baton/snapshot.json`, used to send only changed files) live on disk. With `BATON_DEMO_MODE=true` the API uses an in-memory store that is lost on restart.
 
 ## Setup
 
@@ -106,7 +138,7 @@ Unit tests cover the store adapters, the HTTP routes, GitHub connect/sync/webhoo
 - Webhook updates require a GitHub App installation; repositories connected with a user token must be re-synced manually.
 - Generation locking is per server process; two serverless instances generating the same handover at the same moment can still interleave.
 - Supabase outage and offline behaviour are not covered by automated tests.
-- Tested MCP clients: Claude Code, Cursor, Codex and Google Antigravity configurations are documented in [docs/MCP.md](docs/MCP.md); only the stdio protocol round trip is covered by automated tests.
+- MCP clients: Claude Code was checked against a local API (connects, tools listed); Antigravity, Cursor, Codex and Claude Desktop configurations follow their documentation in [docs/MCP.md](docs/MCP.md). The stdio round trip (save, search, interview, Markdown export) is covered by automated tests.
 
 ## Roadmap
 

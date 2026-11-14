@@ -4,15 +4,19 @@ import { copyText } from '../../lib/download.js';
 const MCP_PACKAGE_SOURCE = 'github:may1102-1909/BATON';
 
 const CLIENTS = [
+  { id: 'baton_init', label: 'baton init (recommended)', tip: 'Run inside the repository Baton should remember. Writes git-ignored configs for Claude Code (.mcp.json), Antigravity (.agents/mcp_config.json) and Cursor, plus the git and Claude Code hooks.' },
   { id: 'cursor', label: 'Cursor (.cursor/mcp.json)', tip: 'Paste into your project root as .cursor/mcp.json or in Cursor Settings → MCP → Add New Server.' },
   { id: 'claude_desktop', label: 'Claude Desktop', tip: 'Paste into claude_desktop_config.json (Claude Settings → Developer → Edit Config).' },
   { id: 'claude_cli', label: 'Claude Code (CLI)', tip: 'Paste this single command into your terminal.' },
-  { id: 'antigravity', label: 'Antigravity / Windsurf', tip: 'Paste into .antigravity/mcp.json in your workspace root.' },
+  { id: 'antigravity', label: 'Antigravity', tip: 'Paste into .agents/mcp_config.json in your workspace (or ~/.gemini/config/mcp_config.json for every project), then refresh MCP servers with /mcp.' },
   { id: 'local_node', label: 'Local clone (node)', tip: 'For developers working directly inside a clone of the BATON repository.' },
 ];
 
 function buildSnippet(tab, { orgId, repoId, apiKey }) {
   const env = { BATON_API_URL: window.location.origin, BATON_API_KEY: apiKey, BATON_ORG_ID: orgId, BATON_REPOSITORY_ID: repoId };
+  if (tab === 'baton_init') {
+    return `npx -y ${MCP_PACKAGE_SOURCE} baton init --api-url ${env.BATON_API_URL} --org ${orgId} --repo ${repoId} --key ${apiKey}`;
+  }
   if (tab === 'claude_cli') {
     const flags = Object.entries(env).map(([k, v]) => `-e ${k}="${v}"`).join(' ');
     return `claude mcp add baton -s user ${flags} -- npx -y ${MCP_PACKAGE_SOURCE} baton-mcp`;

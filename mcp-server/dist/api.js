@@ -45,7 +45,7 @@ function canonicalize(value) {
     }
     return value;
 }
-async function request(path, init = {}) {
+async function request(path, init = {}, asText = false) {
     let config;
     try {
         config = configuration();
@@ -94,11 +94,16 @@ async function request(path, init = {}) {
         }
         const text = new TextDecoder().decode(bytes);
         let body;
-        try {
-            body = text ? JSON.parse(text) : {};
+        if (asText && response.ok) {
+            body = text;
         }
-        catch {
-            body = text.slice(0, 1000);
+        else {
+            try {
+                body = text ? JSON.parse(text) : {};
+            }
+            catch {
+                body = text.slice(0, 1000);
+            }
         }
         if (!response.ok) {
             const detail = typeof body === 'object' && body !== null && 'error' in body
@@ -208,6 +213,33 @@ export async function answerExitQuestion(interviewId, questionId, answer) {
         method: 'POST',
         body: JSON.stringify({ questionId: questionId.slice(0, 200), answer: String(safe(answer)).slice(0, 10_000) })
     });
+}
+/** Fetches the approved handover packet as Markdown; without an id, picks the newest approved interview. */
+export async function exportHandoverMarkdown(handoverId) {
+    const scope = getRepositoryScope();
+    if (!scope.success)
+        return { success: false, message: scope.message };
+    let id = handoverId?.trim();
+    if (!id) {
+        const listed = await getExitInterviews();
+        if (!listed.success)
+            return { success: false, message: listed.message };
+        const approved = (listed.data?.interviews ?? [])
+            .map(item => item.handover)
+            .filter((item) => Boolean(item?.id) && item?.status === 'approved')
+            .sort((a, b) => String(b.approved_at ?? b.updated_at ?? '').localeCompare(String(a.approved_at ?? a.updated_at ?? '')));
+        id = approved[0]?.id;
+        if (!id) {
+            return {
+                success: false,
+                message: 'No approved handover is available yet. Answer the exit-interview questions, generate the packet in the Baton dashboard and have an admin approve it, then export again.'
+            };
+        }
+    }
+    const result = await request(`/api/handovers/${encodeURIComponent(id)}/export.md`, { method: 'GET', headers: { Accept: 'text/markdown' } }, true);
+    if (!result.success || typeof result.data !== 'string')
+        return { success: false, message: result.message };
+    return { success: true, message: 'Handover exported.', data: { handoverId: id, markdown: result.data } };
 }
 export async function pushCommit(data) {
     const scope = getRepositoryScope();

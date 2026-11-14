@@ -6,7 +6,7 @@ This project integrates the **Baton Local MCP Server** (`baton`) to capture arch
 
 ## 🛠️ Baton MCP Server Configuration
 
-The MCP server is configured in `.antigravity/mcp.json` and exposes three core tools:
+Run `npm run baton -- init --org <ORG_ID> --repo <REPOSITORY_ID> --key <API_TOKEN>` once; it writes git-ignored client configs (`.mcp.json` for Claude Code, `.agents/mcp_config.json` for Antigravity, `.cursor/mcp.json`). See `docs/MCP.md`. The core tools are:
 1. `baton:log_decision`
 2. `baton:log_blocker`
 3. `baton:get_context`

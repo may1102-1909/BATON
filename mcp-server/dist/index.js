@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { answerExitQuestion, getExitInterviews, getFileContext, getGithubActivity, pushMemory, queryContext } from './api.js';
 import { redactData } from './redact.js';
+import { exportHandoverFile } from './handover.js';
 import { bootstrapProject } from './snapshot.js';
 dotenv.config();
 dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env') });
@@ -67,6 +68,10 @@ server.tool('answer_exit_question', 'Submit an answer to an assigned exit-interv
     question_id: z.string().min(1).max(200),
     answer: z.string().min(1).max(10_000)
 }, async ({ interview_id, question_id, answer }) => toolResult(await answerExitQuestion(interview_id, question_id, answer)));
+server.tool('export_handover', 'After the exit interview is answered and the handover is approved, download the handover packet as Markdown and save it in the repository (default docs/handovers/handover-<id>.md).', {
+    handover_id: z.string().min(1).max(200).optional(),
+    output_path: z.string().min(1).max(500).optional()
+}, async ({ handover_id, output_path }) => toolResult(await exportHandoverFile(handover_id, output_path)));
 server.prompt('baton_bootstrap', 'Bootstrap and maintain Baton project continuity', {}, async () => ({
     description: 'Use Baton tools for concise repository continuity; never store full conversation transcripts or secrets.',
     messages: [{
@@ -76,7 +81,7 @@ server.prompt('baton_bootstrap', 'Bootstrap and maintain Baton project continuit
                 text: [
                     'At the beginning of a new project session, call bootstrap_project first, then get_context with a focused question about the task or current blockers.',
                     'After each substantive turn, save only new decision, blocker, context, or change deltas. Use log_decision and log_blocker when their compatibility-specific fields apply. Never save full transcripts, secrets, or unchanged history.',
-                    'Before ending a session with assigned questions, call get_exit_interview and answer_exit_question for the questions you can answer.',
+                    'Before ending a session with assigned questions, call get_exit_interview and answer_exit_question for the questions you can answer. Once the handover is approved, call export_handover to save the Markdown packet in the repository.',
                     'This prompt is guidance only: MCP clients generally do not guarantee that tools run automatically on every turn. Configure the prompt/rules in the client and verify tool use in the conversation.'
                 ].join('\n\n')
             }
