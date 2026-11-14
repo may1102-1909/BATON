@@ -24,7 +24,7 @@ export function DashboardPage() {
   return (
     <Workspace
       user={user}
-      onBack={() => navigate('/')}
+      onBack={() => navigate('/usage')}
       onSignOut={async () => {
         await supabase.auth.signOut()
         setUser(null)
