@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCipheriv, createHash, createHmac, generateKeyPairSync, randomBytes } from 'node:crypto';
-import { createGithub } from '../server/github.js';
+import { createGithub, readPrivateKey } from '../server/github.js';
 
 function makeStore(seed = {}) {
   const tables = structuredClone(seed);
@@ -481,4 +481,25 @@ test('a record the database rejects is skipped and reported instead of failing t
   rejectAll = true;
   store.update = async (table) => { if (table === 'sources') throw new Error('Supabase update sources failed: null value in column "x"'); };
   await assert.rejects(github.sync({ repository, actorId: 'actor' }), /^Error: Could not save any synced records: Supabase \w+ sources failed: null value/);
+});
+
+test('the GitHub App private key is read however the hosting dashboard mangled it', () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const pkcs1 = privateKey.export({ type: 'pkcs1', format: 'pem' });
+  const pkcs8 = privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const expected = privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
+  const forms = {
+    'GitHub .pem as downloaded (PKCS#1)': pkcs1,
+    'PKCS#8': pkcs8,
+    'literal \\n escapes': pkcs1.replace(/\n/g, '\\n'),
+    'wrapped in double quotes': `"${pkcs1.replace(/\n/g, '\\n')}"`,
+    'newlines turned into spaces': pkcs1.replace(/\n/g, ' '),
+    'Windows line endings': pkcs1.replace(/\n/g, '\r\n'),
+    'whole file base64-encoded': Buffer.from(pkcs1).toString('base64'),
+  };
+  for (const [name, raw] of Object.entries(forms)) {
+    assert.equal(readPrivateKey(raw).export({ type: 'pkcs8', format: 'der' }).toString('base64'), expected, name);
+  }
+  assert.throws(() => readPrivateKey('not a key'), /is not a PEM private key/);
+  assert.throws(() => readPrivateKey('-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----'), /could not be read/);
 });

@@ -11,7 +11,7 @@ Set these in the server runtime (never the browser):
 | `PUBLIC_APP_URL` | Public base URL; the OAuth redirect URI is `<PUBLIC_APP_URL>/api/github/callback` and must match the registered callback |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | OAuth code exchange that links a member's GitHub account |
 | `GITHUB_APP_ID` | App JWT issuer used to mint installation tokens for sync |
-| `GITHUB_APP_PRIVATE_KEY` (or `GITHUB_PRIVATE_KEY`) | App PEM private key; literal `\n` line breaks are accepted |
+| `GITHUB_APP_PRIVATE_KEY` (or `GITHUB_PRIVATE_KEY`) | App PEM private key. Paste the whole `.pem` file; quotes, literal `\n`, spaces instead of line breaks, CRLF and a base64-encoded file are all accepted |
 | `GITHUB_WEBHOOK_SECRET` | HMAC-SHA256 secret for `x-hub-signature-256` |
 | `GITHUB_APP_SLUG` | Optional. Builds `https://github.com/apps/<slug>/installations/new` for error messages and `/api/health` (`githubInstallUrl`); when unset the slug is read once from GitHub's `GET /app` |
 | `TOKEN_ENCRYPTION_KEY` | Base64 of 32 bytes; encrypts stored OAuth tokens (AES-256-GCM) |

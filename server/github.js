@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, sign, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, createPrivateKey, randomBytes, sign, timingSafeEqual } from 'node:crypto';
 import { audienceFromPaths } from './audience.js';
 import { filesOf } from './risk.js';
 import { redactData } from './redact.js';
@@ -44,6 +44,27 @@ async function mapLimit(items, limit, task) {
 function asDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+/**
+ * Hosting dashboards often mangle a pasted PEM: surrounding quotes, literal "\n", newlines turned into spaces,
+ * Windows line endings, or the whole file base64-encoded. Rebuild a valid PEM from any of those.
+ */
+export function readPrivateKey(raw) {
+  let text = String(raw ?? '').trim().replace(/^(['"])([\s\S]*)\1$/, '$2').replace(/\\r/g, '').replace(/\\n/g, '\n').replace(/\r/g, '').trim();
+  if (!text.includes('-----BEGIN')) {
+    const decoded = Buffer.from(text.replace(/\s+/g, ''), 'base64').toString('utf8');
+    if (decoded.includes('-----BEGIN')) text = decoded.trim();
+  }
+  const match = /-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/.exec(text);
+  if (!match) throw new Error('GITHUB_APP_PRIVATE_KEY is not a PEM private key. Paste the whole .pem file from the GitHub App settings, including the BEGIN and END lines.');
+  const body = match[2].replace(/\s+/g, '').match(/.{1,64}/g)?.join('\n') ?? '';
+  const pem = `-----BEGIN ${match[1]}-----\n${body}\n-----END ${match[1]}-----\n`;
+  try {
+    return createPrivateKey(pem);
+  } catch {
+    throw new Error('GITHUB_APP_PRIVATE_KEY could not be read. Generate a new private key in the GitHub App settings and paste the whole .pem file into the environment variable.');
+  }
 }
 
 export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
@@ -101,7 +122,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     const appId = required(env, 'GITHUB_APP_ID');
     const rawKey = env.GITHUB_APP_PRIVATE_KEY || env.GITHUB_PRIVATE_KEY || '';
     if (!rawKey) throw new Error('Missing GITHUB_APP_PRIVATE_KEY');
-    const privateKey = rawKey.replace(/\\n/g, '\n');
+    const privateKey = readPrivateKey(rawKey);
     const now = Math.floor(Date.now() / 1000);
     const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
     const payload = Buffer.from(JSON.stringify({ iat: now - 60, exp: now + 8 * 60, iss: appId })).toString('base64url');
