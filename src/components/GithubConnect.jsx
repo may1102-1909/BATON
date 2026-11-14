@@ -10,18 +10,27 @@ const OUTCOME_MESSAGES = {
   failed: 'GitHub could not be linked. Check the server log for the "[github callback]" line.',
 };
 
+const labelStyle = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8rem', color: 'var(--muted)' };
+
 /**
- * Three-step GitHub connection: link the account, choose an installation, choose a repository.
+ * Connect a GitHub repository: link the account, choose an installation and repository, or enter owner/repo.
+ * Can be used repeatedly to connect more repositories, including from other accounts or organizations.
  * `outcome` is the result of the OAuth redirect: { status: 'linked' | 'error', reason }.
  */
-export function GithubConnect({ orgId, installUrl, outcome, onConnected }) {
+export function GithubConnect({ orgId, installUrl, outcome, connectedNames = [], onConnected }) {
   const [phase, setPhase] = useState('loading'); // loading | unlinked | linked | error
   const [installations, setInstallations] = useState([]);
   const [installationId, setInstallationId] = useState('');
   const [repos, setRepos] = useState([]);
+  const [reposLoading, setReposLoading] = useState(false);
   const [repoName, setRepoName] = useState('');
+  const [manualName, setManualName] = useState('');
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState(null); // { tone: 'ok' | 'error', text }
+  const [message, setMessage] = useState(null); // { tone: 'ok' | 'error', text, installUrl? }
+
+  const hasRepos = connectedNames.length > 0;
+  const connected = new Set(connectedNames.map(name => name.toLowerCase()));
+  const available = repos.filter(repo => !connected.has(String(repo.full_name).toLowerCase()));
 
   async function loadInstallations() {
     if (!orgId) return;
@@ -29,7 +38,7 @@ export function GithubConnect({ orgId, installUrl, outcome, onConnected }) {
     try {
       const list = await api.getGithubInstallations(orgId);
       setInstallations(list);
-      setInstallationId(list.length ? String(list[0].id) : '');
+      setInstallationId(cur => (list.some(item => String(item.id) === cur) ? cur : list.length ? String(list[0].id) : ''));
       setPhase('linked');
     } catch (err) {
       if (err.status === 409) {
@@ -50,13 +59,19 @@ export function GithubConnect({ orgId, installUrl, outcome, onConnected }) {
   }, [outcome]);
 
   useEffect(() => {
-    if (!orgId || !installationId) { setRepos([]); setRepoName(''); return; }
+    if (!orgId || !installationId) { setRepos([]); return undefined; }
     let cancelled = false;
+    setReposLoading(true);
     api.getGithubInstallationRepos(orgId, installationId)
-      .then(list => { if (!cancelled) { setRepos(list); setRepoName(list[0]?.full_name ?? ''); } })
-      .catch(err => { if (!cancelled) { setRepos([]); setRepoName(''); setMessage({ tone: 'error', text: err.message }); } });
+      .then(list => { if (!cancelled) setRepos(list); })
+      .catch(err => { if (!cancelled) { setRepos([]); setMessage({ tone: 'error', text: err.message }); } })
+      .finally(() => { if (!cancelled) setReposLoading(false); });
     return () => { cancelled = true; };
   }, [orgId, installationId]);
+
+  useEffect(() => {
+    setRepoName(cur => (available.some(repo => repo.full_name === cur) ? cur : available[0]?.full_name ?? ''));
+  }, [repos, connectedNames.join('|')]);
 
   async function startLink() {
     setBusy(true);
@@ -71,75 +86,122 @@ export function GithubConnect({ orgId, installUrl, outcome, onConnected }) {
     }
   }
 
-  async function connect() {
-    if (!installationId || !repoName) return;
+  async function connect(fullName, withInstallation) {
+    if (!fullName) return false;
     setBusy(true);
     try {
-      await api.connectRepo(orgId, installationId, repoName);
-      setMessage({ tone: 'ok', text: `${repoName} connected. Click "Sync Now" to import its commits and pull requests.` });
+      await api.connectRepo(orgId, withInstallation ? installationId : null, fullName);
+      setMessage({ tone: 'ok', text: `${fullName} connected. Click "Sync now" on it to import its commits and pull requests.` });
       onConnected?.();
+      return true;
     } catch (err) {
-      setMessage({ tone: 'error', text: err.message });
+      setMessage({ tone: 'error', text: err.message, installUrl: api.installUrlFromError(err) || installUrl });
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+
+  async function connectManual(event) {
+    event.preventDefault();
+    const name = manualName.trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/\/+$/, '');
+    if (!/^[\w.-]+\/[\w.-]+$/.test(name)) {
+      setMessage({ tone: 'error', text: 'Enter the repository as owner/name, for example octocat/hello-world.' });
+      return;
+    }
+    if (await connect(name, false)) setManualName('');
   }
 
   return (
     <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {message && (
         <div
-          role="status"
+          role={message.tone === 'ok' ? 'status' : 'alert'}
           style={{
             border: `1px solid ${message.tone === 'ok' ? 'var(--green)' : '#f59e0b'}`,
             borderRadius: 6, padding: '10px 12px', fontSize: '0.85rem', color: '#fff',
+            display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between',
           }}
         >
-          {message.tone === 'ok' ? 'Done: ' : 'Problem: '}{message.text}
+          <span>{message.tone === 'ok' ? 'Done: ' : 'Problem: '}{message.text}</span>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {message.installUrl && (
+              <a className="ws-btn ws-btn-primary ws-btn-sm" href={message.installUrl} target="_blank" rel="noreferrer">Install the GitHub App</a>
+            )}
+            <button type="button" className="ws-notice-close" aria-label="Dismiss message" onClick={() => setMessage(null)}>✕</button>
+          </span>
         </div>
       )}
 
-      {phase === 'loading' && <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Checking GitHub link…</div>}
+      <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.95rem' }}>
+        {hasRepos ? 'Connect another repository' : 'Connect a repository'}
+      </div>
+
+      {phase === 'loading' && <div role="status" style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Checking GitHub link…</div>}
 
       {phase === 'unlinked' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Step 1 of 2: link your GitHub account.</span>
-          <button className="ws-btn ws-btn-primary ws-btn-sm" disabled={busy} onClick={startLink}>Connect GitHub</button>
+          <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" disabled={busy} onClick={startLink}>{busy ? 'Opening GitHub…' : 'Connect GitHub'}</button>
         </div>
       )}
 
       {phase === 'error' && (
-        <button className="ws-btn ws-btn-sm" onClick={loadInstallations} style={{ alignSelf: 'flex-start' }}>Try again</button>
+        <button type="button" className="ws-btn ws-btn-sm" onClick={loadInstallations} style={{ alignSelf: 'flex-start' }}>Try again</button>
       )}
 
       {phase === 'linked' && installations.length === 0 && (
         <div style={{ fontSize: '0.85rem', color: 'var(--muted)', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span>Your GitHub account is linked, but the BATON GitHub App is not installed on any account or repository you can access.</span>
+          <span>Your GitHub account is linked, but the Baton GitHub App is not installed on any account or repository you can access.</span>
           {installUrl && <a className="ws-btn ws-btn-primary ws-btn-sm" href={installUrl} target="_blank" rel="noreferrer">Install the GitHub App</a>}
-          <button className="ws-btn ws-btn-sm" onClick={loadInstallations}>Refresh</button>
+          <button type="button" className="ws-btn ws-btn-sm" onClick={loadInstallations}>Refresh</button>
         </div>
       )}
 
       {phase === 'linked' && installations.length > 0 && (
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8rem', color: 'var(--muted)' }}>
+          <label style={labelStyle}>
             GitHub account
-            <select className="ws-input" value={installationId} onChange={e => setInstallationId(e.target.value)}>
+            <select className="ws-input" value={installationId} onChange={e => setInstallationId(e.target.value)} disabled={busy}>
               {installations.map(item => (
                 <option key={item.id} value={String(item.id)}>{item.account?.login ?? `Installation ${item.id}`}</option>
               ))}
             </select>
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8rem', color: 'var(--muted)' }}>
+          <label style={labelStyle}>
             Repository
-            <select className="ws-input" value={repoName} onChange={e => setRepoName(e.target.value)} disabled={!repos.length}>
-              {repos.length === 0 && <option value="">No repositories available</option>}
-              {repos.map(repo => <option key={repo.full_name} value={repo.full_name}>{repo.full_name}</option>)}
+            <select className="ws-input" value={repoName} onChange={e => setRepoName(e.target.value)} disabled={busy || reposLoading || !available.length}>
+              {reposLoading && <option value="">Loading repositories…</option>}
+              {!reposLoading && available.length === 0 && <option value="">{repos.length ? 'All repositories here are connected' : 'No repositories available'}</option>}
+              {available.map(repo => <option key={repo.full_name} value={repo.full_name}>{repo.full_name}</option>)}
             </select>
           </label>
-          <button className="ws-btn ws-btn-primary ws-btn-sm" disabled={busy || !repoName} onClick={connect}>Connect repository</button>
-          {installUrl && <a href={installUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Add more repositories</a>}
+          <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" disabled={busy || reposLoading || !repoName} onClick={() => connect(repoName, true)}>
+            {busy ? 'Connecting…' : 'Connect repository'}
+          </button>
         </div>
+      )}
+
+      {(phase === 'linked' || phase === 'unlinked') && (
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--muted)' }}>
+          {installUrl && <a href={installUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>Install the app on more repositories or accounts</a>}
+          {phase === 'linked' && (
+            <button type="button" className="ws-btn ws-btn-sm" onClick={loadInstallations} disabled={busy}>Refresh list</button>
+          )}
+          {phase === 'linked' && (
+            <button type="button" className="ws-btn ws-btn-sm" onClick={startLink} disabled={busy}>Use a different GitHub account</button>
+          )}
+        </div>
+      )}
+
+      {phase === 'linked' && (
+        <form onSubmit={connectManual} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <label style={labelStyle}>
+            Or enter owner/repo (any repository the app is installed on)
+            <input className="ws-input" style={{ minWidth: 280 }} placeholder="owner/repository" value={manualName} onChange={e => setManualName(e.target.value)} disabled={busy} />
+          </label>
+          <button type="submit" className="ws-btn ws-btn-sm" disabled={busy || !manualName.trim()}>{busy ? 'Connecting…' : 'Connect by name'}</button>
+        </form>
       )}
     </div>
   );
