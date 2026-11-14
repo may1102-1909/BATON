@@ -16,6 +16,7 @@
     "test": "node --test tests/backend.test.js tests/github.test.js tests/handover.test.js tests/demo.test.js tests/round3.test.js tests/mcp-integration.test.js tests/workspace.test.js tests/reliability.test.js",
     "test:e2e": "playwright test",
     "build:mcp": "npm --prefix mcp-server run build",
+    "prebuild:mcp": "npm --prefix mcp-server ci",
     "start:mcp": "npm --prefix mcp-server start"
   },
   "dependencies": {
