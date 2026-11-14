@@ -230,7 +230,7 @@ test('GitHub callback works without a bearer token, redirects to the dashboard, 
     assert.equal(linked.headers.get('location'), '/dashboard?github=linked');
     const [account] = await store.list('github_accounts', { user_id: userId, org_id: orgId });
     assert.equal(account.github_login, 'octocat');
-    assert.ok(account.access_token_encrypted.startsWith('v1:'));
+    assert.ok(account.access_token.startsWith('v1:'));
     assert.ok(!JSON.stringify(account).includes('user-token'));
 
     const replayed = await fetch(`${url}/api/github/callback?code=abc&state=${state}`, { redirect: 'manual' });

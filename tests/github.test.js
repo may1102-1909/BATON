@@ -80,12 +80,11 @@ test('OAuth state is hashed, one-use, and linked tokens are never returned', asy
   assert.equal(new URL(url).searchParams.get('redirect_uri'), 'https://baton.example/api/github/callback');
   assert.equal(store.rows('github_states')[0].state_hash, createHash('sha256').update(state).digest('hex'));
   assert.deepEqual(await github.finishLink({ code: 'code-1', state }), { orgId: 'org-1', userId: 'user-1', login: 'octocat' });
-  assert.equal(store.rows('github_accounts')[0].access_token, undefined);
-  assert.match(store.rows('github_accounts')[0].access_token_encrypted, /^v1:/);
-  assert.equal(Buffer.from(store.rows('github_accounts')[0].access_token_encrypted).includes(Buffer.from('private-oauth-token')), false);
+  assert.match(store.rows('github_accounts')[0].access_token, /^v1:/);
+  assert.equal(Buffer.from(store.rows('github_accounts')[0].access_token).includes(Buffer.from('private-oauth-token')), false);
   assert.equal(store.rows('members')[0].github_login, 'octocat');
   assert.deepEqual(await github.installations({ userId: 'user-1', orgId: 'org-1' }), []);
-  assert.equal(Buffer.from(store.rows('github_accounts')[0].access_token_encrypted).includes(Buffer.from('private-oauth-token')), false);
+  assert.equal(Buffer.from(store.rows('github_accounts')[0].access_token).includes(Buffer.from('private-oauth-token')), false);
   await assert.rejects(github.finishLink({ code: 'code-1', state }), /already been used/);
   assert.equal(store.rows('github_states').length, 0);
 });
