@@ -446,6 +446,11 @@ create or replace function public.keep_org_admin()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
+  -- Deleting the organization cascades to its memberships; the parent row is already gone then.
+  if not exists (select 1 from public.organizations where id = old.org_id) then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
   if old.role = 'admin' and old.disabled_at is null
     and (tg_op = 'DELETE' or new.role <> 'admin' or new.disabled_at is not null) then
     perform 1 from public.organizations where id = old.org_id for update;

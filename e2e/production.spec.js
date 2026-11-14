@@ -27,7 +27,7 @@ test.afterAll(async () => {
   await server?.close();
 });
 
-async function stubApi(page, { calls, repositories = repos } = {}) {
+async function stubApi(page, { calls, repositories = repos, installations = [{ id: 5, account: { login: 'octo' } }] } = {}) {
   const log = calls || [];
   await page.route(`${SUPABASE_URL}/**`, route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
   await page.route('**/api/**', async route => {
@@ -54,7 +54,10 @@ async function stubApi(page, { calls, repositories = repos } = {}) {
       });
     }
     if (key === 'GET /api/orgs/org-1/risks') return json({ alerts: [], risks: [], counts: {}, bus_factor: [], matrix: { modules: [] }, modules: [] });
-    if (key === 'GET /api/orgs/org-1/github/installations') return json([{ id: 5, account: { login: 'octo' } }]);
+    if (key === 'GET /api/orgs/org-1/github/installations') return json(installations);
+    if (key === 'GET /api/orgs/org-1/github/account') return json({ account: { login: 'octo' } });
+    if (key === 'DELETE /api/orgs/org-1/github/account') return json({ unlinked: true });
+    if (key === 'GET /api/orgs/org-1/github/connect') return json({ url: `${BASE}/dashboard?github-sign-in=1` });
     if (key === 'GET /api/orgs/org-1/github/installations/5/repositories') return json([{ full_name: 'octo/hello' }, { full_name: 'acme/api' }]);
     if (key === 'POST /api/orgs/org-1/repositories') {
       const name = JSON.parse(request.postData()).fullName;
@@ -106,6 +109,33 @@ test('production overview has a checklist and real system status, no demo conten
 
   await checklist.getByRole('button', { name: 'Dismiss' }).click();
   await expect(checklist).toHaveCount(0);
+});
+
+test('GitHub tab shows who is signed in and can switch to a different GitHub account', async ({ page }) => {
+  const calls = await stubApi(page);
+  await signIn(page);
+  await page.goto(`${BASE}/dashboard`);
+  await page.getByRole('tab', { name: /^GitHub/ }).click();
+
+  await expect(page.getByText('Signed in to GitHub as')).toContainText('@octo');
+  await page.screenshot({ path: 'test-results/github-signed-in.png', fullPage: true });
+  await page.getByRole('button', { name: 'Use a different GitHub account' }).click();
+  await page.waitForURL(/github-sign-in=1/);
+  const unlink = calls.findIndex(call => call.key === 'DELETE /api/orgs/org-1/github/account');
+  const signInLink = calls.findIndex(call => call.key === 'GET /api/orgs/org-1/github/connect');
+  expect(unlink).toBeGreaterThan(-1);
+  expect(signInLink).toBeGreaterThan(unlink);
+});
+
+test('a GitHub account without the app installed is sent to the install step', async ({ page }) => {
+  await stubApi(page, { repositories: [], installations: [] });
+  await signIn(page);
+  await page.goto(`${BASE}/dashboard`);
+  await page.getByRole('tab', { name: /^GitHub/ }).click();
+
+  await expect(page.getByText('Step 2 of 2: install the Baton GitHub App')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Install on GitHub' })).toHaveAttribute('href', 'https://github.com/apps/baton-test/installations/new');
+  await page.screenshot({ path: 'test-results/github-install-step.png', fullPage: true });
 });
 
 test('GitHub tab lists every repository, connects another and disconnects one', async ({ page }) => {

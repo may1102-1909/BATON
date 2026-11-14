@@ -46,7 +46,8 @@ To connect Baton to a live PostgreSQL database:
    ```
    The frontend build reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, and also accepts the `NEXT_PUBLIC_` variants or plain `SUPABASE_URL` / `SUPABASE_ANON_KEY`. Set them before `npm run build`.
 4. Optional: run `supabase/migrations/20261114_round3.sql` to store risk scores and member function roles. The app works without it, except that saving a function role answers 503 until it is applied.
-5. Keep `BATON_DEMO_MODE` unset or `false` in production.
+5. Existing databases: run `supabase/migrations/20261114_org_delete_keep_admin.sql` so **Delete workspace** works (the last-admin guard otherwise blocks it). New databases get it from `schema.sql`.
+6. Keep `BATON_DEMO_MODE` unset or `false` in production.
 
 ---
 

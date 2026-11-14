@@ -270,3 +270,31 @@ test('GitHub callback works without a bearer token, redirects to the dashboard, 
     assert.equal(outsider.status, 403);
   });
 });
+
+test('a first-time GitHub link goes straight to the install page; an existing install returns to the dashboard', async () => {
+  for (const [installs, expected] of [[[], 'https://github.com/apps/baton-m/installations/new'], [[{ id: 1 }], '/dashboard?github=linked']]) {
+    const github = {
+      finishLink: async () => ({ orgId, userId, login: 'new-user' }),
+      installations: async () => installs,
+      installUrl: async () => 'https://github.com/apps/baton-m/installations/new',
+    };
+    const app = createApp({ store: fixture(), env: {}, github });
+    await serve(app, async url => {
+      const response = await fetch(`${url}/api/github/callback?code=c&state=s`, { redirect: 'manual' });
+      assert.equal(response.status, 302);
+      assert.equal(response.headers.get('location'), expected);
+    });
+  }
+});
+
+test('opening an API address in a browser tab redirects to the dashboard instead of a raw error', async () => {
+  const app = createApp({ store: fixture(), env: {} });
+  await serve(app, async url => {
+    const page = await fetch(`${url}/api/orgs/${orgId}`, { redirect: 'manual', headers: { accept: 'text/html,application/xhtml+xml' } });
+    assert.equal(page.status, 302);
+    assert.equal(page.headers.get('location'), '/dashboard');
+    const api = await jsonRequest(url, `/api/orgs/${orgId}/state`);
+    assert.equal(api.status, 401, 'app requests without a session are still refused');
+    assert.match((await api.json()).error, /Sign in to Baton/);
+  });
+});

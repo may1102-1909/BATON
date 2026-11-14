@@ -197,7 +197,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       const memberships = (await store.list('members', { user_id: id })).filter(item => !item.disabled_at);
       return { user: { id, email: id === 'demo-admin' ? 'demo@example.invalid' : null }, memberships, demo: true, tokenOrg: null, verifiedGithub: false };
     }
-    if (!match) throw new HttpError(401, 'Bearer access token required');
+    if (!match) throw new HttpError(401, 'Sign in to Baton first: open /dashboard. API addresses only answer requests sent by the app with your session.');
     const bearer = match[1];
     const tokenHash = hash(bearer);
     const tokenRecords = await store.list('tokens', { token_hash: tokenHash });
@@ -276,7 +276,12 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
 
     if (method === 'GET' && url.pathname === '/api/health') {
       const slug = String(configuration.GITHUB_APP_SLUG ?? '').trim();
-      return json(res, 200, { ok: true, configured: { supabase: Boolean(configuration.SUPABASE_URL && configuration.SUPABASE_SERVICE_ROLE_KEY), github: Boolean(configuration.GITHUB_APP_ID && (configuration.GITHUB_APP_PRIVATE_KEY || configuration.GITHUB_PRIVATE_KEY)), demo: configuration.BATON_DEMO_MODE === 'true' }, githubInstallUrl: /^[a-z0-9-]+$/i.test(slug) ? `https://github.com/apps/${slug}/installations/new` : null });
+      const githubConfigured = Boolean(configuration.GITHUB_APP_ID && (configuration.GITHUB_APP_PRIVATE_KEY || configuration.GITHUB_PRIVATE_KEY));
+      let githubInstallUrl = /^[a-z0-9-]+$/i.test(slug) ? `https://github.com/apps/${slug}/installations/new` : null;
+      if (!githubInstallUrl && githubConfigured && configuration.BATON_DEMO_MODE !== 'true') {
+        try { githubInstallUrl = await (github ?? await maybeIntegration('github', store, configuration, fetchImpl)).installUrl?.() ?? null; } catch {}
+      }
+      return json(res, 200, { ok: true, configured: { supabase: Boolean(configuration.SUPABASE_URL && configuration.SUPABASE_SERVICE_ROLE_KEY), github: githubConfigured, demo: configuration.BATON_DEMO_MODE === 'true' }, githubInstallUrl });
     }
     if (method === 'GET' && url.pathname === '/api/me') {
       const memberships = auth.memberships.filter(item => !item.disabled_at);
@@ -313,8 +318,9 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       for (const repository of repositories) await purgeOptional('github_deliveries', { repository_id: repository.id });
       for (const name of ['invites', 'tokens', 'github_states', 'github_link_states', 'github_accounts', 'github_installations', 'decisions', 'blockers']) await purgeOptional(name, { org_id: actor.org_id });
       await purge('repositories', { org_id: actor.org_id });
-      await purge('members', { org_id: actor.org_id });
+      // The organization goes before its memberships: the database refuses to remove the last admin of a live organization.
       await store.remove('organizations', actor.org_id);
+      await purge('members', { org_id: actor.org_id });
       return json(res, 200, { deleted: true });
     }
     if ((match = /^\/api\/orgs\/([^/]+)\/reset$/.exec(url.pathname)) && method === 'POST') {
@@ -894,7 +900,13 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       let target = '/dashboard?github=linked';
       try {
         const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
-        await module.finishLink({ code: url.searchParams.get('code'), state: url.searchParams.get('state') });
+        const linked = await module.finishLink({ code: url.searchParams.get('code'), state: url.searchParams.get('state') });
+        // A first-time user has nothing to pick from yet: send them straight to GitHub's install page.
+        if (linked?.userId && typeof module.installUrl === 'function') {
+          const installs = await module.installations({ userId: linked.userId, orgId: linked.orgId }).catch(() => null);
+          const install = installs && installs.length === 0 ? await module.installUrl().catch(() => null) : null;
+          if (install && /^https:\/\/github\.com\/apps\/[a-z0-9-]+\/installations\/new$/i.test(install)) target = install;
+        }
       } catch (error) {
         console.error('[github callback]', error?.message ?? error);
         target = `/dashboard?github=error&reason=${githubCallbackReason(error)}`;
@@ -911,6 +923,12 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       const actor = await requireOrg(auth, match[1], true);
       const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
       return json(res, 200, await githubCall(() => module.installations({ userId: actor.id, orgId: actor.org_id })));
+    }
+    if ((match = /^\/api\/orgs\/([^/]+)\/github\/account$/.exec(url.pathname)) && (method === 'GET' || method === 'DELETE')) {
+      const actor = await requireOrg(auth, match[1], true);
+      const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
+      if (method === 'DELETE') return json(res, 200, await githubCall(() => module.unlink({ userId: actor.id, orgId: actor.org_id })));
+      return json(res, 200, { account: await githubCall(() => module.linkedAccount({ userId: actor.id, orgId: actor.org_id })) });
     }
     if ((match = /^\/api\/orgs\/([^/]+)\/repositories$/.exec(url.pathname)) && method === 'POST') {
       const actor = await requireOrg(auth, match[1], true);
@@ -949,6 +967,12 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     if (req.method === 'OPTIONS') return res.writeHead(origin && !allowOrigin ? 403 : 204).end();
     try {
       const url = new URL(req.url ?? '/', 'http://localhost');
+      // Someone opened an API address in the browser tab: show the app instead of a raw JSON error.
+      if (req.method === 'GET' && !req.headers.authorization && /text\/html/.test(String(req.headers.accept ?? ''))
+        && !PUBLIC_PATHS.has(url.pathname) && configuration.BATON_DEMO_MODE !== 'true') {
+        res.writeHead(302, { location: '/dashboard', 'cache-control': 'no-store' });
+        return res.end();
+      }
       if (req.method === 'POST' && url.pathname === '/api/github/webhook') {
         const chunks = [];
         let size = 0;

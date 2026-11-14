@@ -406,3 +406,46 @@ test('webhooks update every organization that connected the repository and keep 
   assert.equal(sources.find((source) => source.org_id === 'org-1').metadata.files[0].filename, 'src/a.js');
   assert.equal(sources.length, 2);
 });
+
+test('GitHub sign-in always shows the account picker; unlinking lets a member link a different account', async () => {
+  const store = makeStore({ members: [{ id: 'member-1', org_id: 'org-1', user_id: 'user-1' }] });
+  let login = 'someone-else';
+  const github = createGithub({ store, env: environment(), fetchImpl: async (url) => {
+    if (url === 'https://github.com/login/oauth/access_token') return json({ access_token: 'oauth-token' });
+    if (url.endsWith('/user')) return json({ id: login === 'someone-else' ? 1 : 2, login });
+    throw new Error(`Unexpected URL ${url}`);
+  } });
+  const first = await github.startLink({ userId: 'user-1', orgId: 'org-1' });
+  assert.equal(new URL(first.url).searchParams.get('prompt'), 'select_account');
+  await github.finishLink({ code: 'c1', state: new URL(first.url).searchParams.get('state') });
+  assert.deepEqual(await github.linkedAccount({ userId: 'user-1', orgId: 'org-1' }), { login: 'someone-else' });
+
+  login = 'my-own-account';
+  const blocked = await github.startLink({ userId: 'user-1', orgId: 'org-1' });
+  await assert.rejects(github.finishLink({ code: 'c2', state: new URL(blocked.url).searchParams.get('state') }), /disconnect it before relinking/);
+
+  assert.deepEqual(await github.unlink({ userId: 'user-1', orgId: 'org-1' }), { unlinked: true });
+  assert.equal(store.rows('github_accounts').length, 0);
+  assert.equal(store.rows('members')[0].github_login, null);
+  const again = await github.startLink({ userId: 'user-1', orgId: 'org-1' });
+  await github.finishLink({ code: 'c3', state: new URL(again.url).searchParams.get('state') });
+  assert.deepEqual(await github.linkedAccount({ userId: 'user-1', orgId: 'org-1' }), { login: 'my-own-account' });
+  assert.equal(store.rows('members')[0].github_login, 'my-own-account');
+});
+
+test('the install page address comes from GITHUB_APP_SLUG, or from GitHub when the slug is not configured', async () => {
+  const configured = createGithub({ store: makeStore(), env: environment({ GITHUB_APP_SLUG: 'baton-m' }), fetchImpl: async () => { throw new Error('no network expected'); } });
+  assert.equal(await configured.installUrl(), 'https://github.com/apps/baton-m/installations/new');
+  let calls = 0;
+  const discovered = createGithub({ store: makeStore(), env: environment(), fetchImpl: async (url, options) => {
+    assert.equal(url, 'https://api.github.test/app');
+    assert.match(options.headers.authorization, /^Bearer [\w-]+\.[\w-]+\.[\w-]+$/);
+    calls += 1;
+    return json({ slug: 'baton-m' });
+  } });
+  assert.equal(await discovered.installUrl(), 'https://github.com/apps/baton-m/installations/new');
+  assert.equal(await discovered.installUrl(), 'https://github.com/apps/baton-m/installations/new');
+  assert.equal(calls, 1, 'the slug is looked up once');
+  const offline = createGithub({ store: makeStore(), env: environment(), fetchImpl: async () => json({ message: 'Bad credentials' }, 401) });
+  assert.equal(await offline.installUrl(), null);
+});
