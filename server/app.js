@@ -313,8 +313,9 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       for (const repository of repositories) await purgeOptional('github_deliveries', { repository_id: repository.id });
       for (const name of ['invites', 'tokens', 'github_states', 'github_link_states', 'github_accounts', 'github_installations', 'decisions', 'blockers']) await purgeOptional(name, { org_id: actor.org_id });
       await purge('repositories', { org_id: actor.org_id });
-      await purge('members', { org_id: actor.org_id });
+      // The organization goes before its memberships: the database refuses to remove the last admin of a live organization.
       await store.remove('organizations', actor.org_id);
+      await purge('members', { org_id: actor.org_id });
       return json(res, 200, { deleted: true });
     }
     if ((match = /^\/api\/orgs\/([^/]+)\/reset$/.exec(url.pathname)) && method === 'POST') {

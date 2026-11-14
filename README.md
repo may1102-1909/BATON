@@ -87,7 +87,7 @@ Copy `.env.example` to `.env.local` and fill it in. Names the code reads:
 | `BATON_ALLOWED_ORIGINS` | Optional comma-separated CORS allow-list. |
 | `BATON_DEMO_MODE` | Test/offline switch that replaces Supabase with a seeded in-memory store. Keep it `false` (unset) in production. |
 
-Database: run `supabase/schema.sql` in the Supabase SQL editor. The optional `supabase/migrations/20261114_round3.sql` adds risk-score columns and `org_memberships.function_role`; without it everything works except saving a member's function role (the API answers 503 with the migration name), and risk scores are recomputed on read.
+Database: run `supabase/schema.sql` in the Supabase SQL editor. The optional `supabase/migrations/20261114_round3.sql` adds risk-score columns and `org_memberships.function_role`; without it everything works except saving a member's function role (the API answers 503 with the migration name), and risk scores are recomputed on read. Existing databases also need `supabase/migrations/20261114_org_delete_keep_admin.sql` (deleting a workspace fails with a server error without it).
 
 ## Production vs demo
 
