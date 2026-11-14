@@ -98,6 +98,33 @@ function sourceVisible(source, actor) {
   return actor.role === 'admin' || source.visibility !== 'admin' && (source.visibility !== 'private' || source.author_id === actor.id);
 }
 
+// GitHub's redirect cannot carry a bearer token; the one-use OAuth state identifies the user instead.
+const PUBLIC_PATHS = new Set(['/api/health', '/api/github/callback']);
+
+function githubCallbackReason(error) {
+  const message = String(error?.message ?? '');
+  if (/state is invalid|code and state/i.test(message)) return 'expired';
+  if (/already linked|different GitHub/i.test(message)) return 'already_linked';
+  if (/membership is required/i.test(message)) return 'not_member';
+  if (/^Missing |TOKEN_ENCRYPTION_KEY|PUBLIC_APP_URL/.test(message)) return 'not_configured';
+  if (/OAuth exchange failed/i.test(message)) return 'exchange_failed';
+  return 'failed';
+}
+
+// Turns expected GitHub integration failures into readable client errors instead of a bare 500.
+async function githubCall(run) {
+  try { return await run(); }
+  catch (error) {
+    if (error instanceof HttpError) throw error;
+    const message = String(error?.message ?? '');
+    if (/^Link a GitHub account/.test(message)) throw new HttpError(409, message);
+    if (/GitHub API .* failed \(401\)/.test(message)) throw new HttpError(409, 'Your GitHub link has expired. Connect GitHub again.');
+    if (/^Missing |TOKEN_ENCRYPTION_KEY|PUBLIC_APP_URL/.test(message)) throw new HttpError(503, 'GitHub integration is not fully configured on the server');
+    if (/not accessible|owner\/name format|are required/.test(message)) throw new HttpError(400, message);
+    throw error;
+  }
+}
+
 async function maybeIntegration(type, store, env, fetchImpl) {
   try {
     const module = await import(type === 'github' ? './github.js' : './handover.js');
@@ -184,7 +211,8 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     let match;
 
     if (method === 'GET' && url.pathname === '/api/health') {
-      return json(res, 200, { ok: true, configured: { supabase: Boolean(configuration.SUPABASE_URL && configuration.SUPABASE_SERVICE_ROLE_KEY), github: Boolean(configuration.GITHUB_APP_ID && configuration.GITHUB_PRIVATE_KEY), demo: configuration.BATON_DEMO_MODE === 'true' } });
+      const slug = String(configuration.GITHUB_APP_SLUG ?? '').trim();
+      return json(res, 200, { ok: true, configured: { supabase: Boolean(configuration.SUPABASE_URL && configuration.SUPABASE_SERVICE_ROLE_KEY), github: Boolean(configuration.GITHUB_APP_ID && (configuration.GITHUB_APP_PRIVATE_KEY || configuration.GITHUB_PRIVATE_KEY)), demo: configuration.BATON_DEMO_MODE === 'true' }, githubInstallUrl: /^[a-z0-9-]+$/i.test(slug) ? `https://github.com/apps/${slug}/installations/new` : null });
     }
     if (method === 'GET' && url.pathname === '/api/me') {
       let memberships = auth.memberships.filter(item => !item.disabled_at);
@@ -704,28 +732,42 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     if ((match = /^\/api\/orgs\/([^/]+)\/github\/connect$/.exec(url.pathname)) && method === 'GET') {
       const actor = await requireOrg(auth, match[1], true);
       const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
-      return json(res, 200, await module.startLink({ userId: actor.id, orgId: actor.org_id }));
+      return json(res, 200, await githubCall(() => module.startLink({ userId: actor.id, orgId: actor.org_id })));
     }
     if (method === 'GET' && url.pathname === '/api/github/callback') {
+      // Always send the browser back to the app; a relative target cannot be turned into an open redirect.
+      let target = '/dashboard?github=linked';
+      try {
+        const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
+        await module.finishLink({ code: url.searchParams.get('code'), state: url.searchParams.get('state') });
+      } catch (error) {
+        console.error('[github callback]', error?.message ?? error);
+        target = `/dashboard?github=error&reason=${githubCallbackReason(error)}`;
+      }
+      res.writeHead(302, { location: target, 'cache-control': 'no-store' });
+      return res.end();
+    }
+    if ((match = /^\/api\/orgs\/([^/]+)\/github\/installations\/([^/]+)\/repositories$/.exec(url.pathname)) && method === 'GET') {
+      const actor = await requireOrg(auth, match[1], true);
       const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
-      return json(res, 200, await module.finishLink({ code: url.searchParams.get('code'), state: url.searchParams.get('state') }));
+      return json(res, 200, await githubCall(() => module.repositories({ userId: actor.id, orgId: actor.org_id, installationId: match[2] })));
     }
     if ((match = /^\/api\/orgs\/([^/]+)\/github\/installations$/.exec(url.pathname)) && method === 'GET') {
       const actor = await requireOrg(auth, match[1], true);
       const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
-      return json(res, 200, await module.installations({ userId: actor.id, orgId: actor.org_id }));
+      return json(res, 200, await githubCall(() => module.installations({ userId: actor.id, orgId: actor.org_id })));
     }
     if ((match = /^\/api\/orgs\/([^/]+)\/repositories$/.exec(url.pathname)) && method === 'POST') {
       const actor = await requireOrg(auth, match[1], true);
       const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
-      return json(res, 201, await module.connect({ userId: actor.id, orgId: actor.org_id, installationId: body.installationId, fullName: body.fullName }));
+      return json(res, 201, await githubCall(() => module.connect({ userId: actor.id, orgId: actor.org_id, installationId: body.installationId, fullName: body.fullName })));
     }
     if ((match = /^\/api\/orgs\/([^/]+)\/repositories\/([^/]+)\/sync$/.exec(url.pathname)) && method === 'POST') {
       const actor = await requireOrg(auth, match[1], true);
       const repository = await store.get('repositories', match[2]);
       if (!repository || repository.org_id !== actor.org_id) throw new HttpError(404, 'Repository not found');
       const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
-      return json(res, 200, await module.sync({ repository, actorId: actor.id }));
+      return json(res, 200, await githubCall(() => module.sync({ repository, actorId: actor.id })));
     }
     if (method === 'POST' && url.pathname === '/api/github/webhook') {
       const module = github ?? await maybeIntegration('github', store, configuration, fetchImpl);
@@ -763,7 +805,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
         return await routes(req, res, url, { user: { id: 'github-webhook' }, memberships: [], demo: false }, {});
       }
       const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : {};
-      const auth = url.pathname === '/api/health' ? { user: { id: 'health' }, memberships: [], demo: configuration.BATON_DEMO_MODE === 'true' } : await authenticate(req);
+      const auth = PUBLIC_PATHS.has(url.pathname) ? { user: { id: 'public' }, memberships: [], demo: configuration.BATON_DEMO_MODE === 'true' } : await authenticate(req);
       if (auth.apiToken && !['/api/collector/push', '/api/collector/search', '/api/collector/messages', '/api/collector/commit', '/api/collector/files', '/api/collector/cursor', '/api/mcp/interviews'].includes(url.pathname)
         && !/^\/api\/mcp\/interviews\/[^/]+\/answers$/.test(url.pathname)) throw new HttpError(403, 'API tokens are limited to collector and MCP interview access');
       return await routes(req, res, url, auth, body);
@@ -771,6 +813,7 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       if (res.headersSent) return res.end();
       const status = error instanceof HttpError ? error.status
         : Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599 ? error.status : 500;
+      if (status === 500) console.error('[api]', req.method, req.url?.split('?')[0], error?.message ?? error);
       return json(res, status, { error: status === 500 ? 'Internal server error' : error.message });
     }
   };

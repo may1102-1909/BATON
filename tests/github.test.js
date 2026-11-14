@@ -184,6 +184,7 @@ test('sync imports commits, closed and merged PRs with file paths, and non-PR is
   const sources = store.rows('sources');
   assert.equal(sources.length, 3);
   const pr = sources.find((source) => source.metadata.kind === 'pull_request');
+  assert.deepEqual(sources.map((source) => source.type).sort(), ['commit', 'issue', 'pull_request']);
   assert.equal(pr.metadata.merged, true);
   assert.equal(pr.metadata.head_sha, 'head123');
   assert.equal(pr.metadata.files[0].filename, 'src/file.js');

@@ -161,6 +161,10 @@ export async function getGithubInstallations(orgId) {
   return request(`/api/orgs/${encodeURIComponent(orgId)}/github/installations`);
 }
 
+export async function getGithubInstallationRepos(orgId, installationId) {
+  return request(`/api/orgs/${encodeURIComponent(orgId)}/github/installations/${encodeURIComponent(installationId)}/repositories`);
+}
+
 export async function connectRepo(orgId, installationId, fullName) {
   return request(`/api/orgs/${encodeURIComponent(orgId)}/repositories`, {
     method: 'POST',

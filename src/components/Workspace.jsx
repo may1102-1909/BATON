@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Brand } from './Brand';
 import * as api from '../lib/api.js';
+import { GithubConnect } from './GithubConnect';
 import './workspace.css';
 
 export function Workspace({ onSignOut, onBack }) {
@@ -11,6 +12,7 @@ export function Workspace({ onSignOut, onBack }) {
   const [orgState, setOrgState] = useState(null);
   const [risks, setRisks] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [githubOutcome, setGithubOutcome] = useState(null);
   const [demoUser, setDemoUser] = useState(api.getDemoUser());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -139,6 +141,16 @@ export function Workspace({ onSignOut, onBack }) {
       setLoading(false);
     }
   }
+
+  // Returning from the GitHub sign-in redirect: open the GitHub tab and show the result.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('github');
+    if (!status) return;
+    setGithubOutcome({ status, reason: params.get('reason') });
+    setActiveTab('github');
+    window.history.replaceState(null, '', window.location.pathname);
+  }, []);
 
   // Load org state when selectedOrgId changes
   useEffect(() => {
@@ -799,20 +811,14 @@ export function Workspace({ onSignOut, onBack }) {
             <div className="ws-card">
               <div className="ws-card-header">
                 <div className="ws-card-title">Connected GitHub Repositories</div>
-                <button
-                  className="ws-btn ws-btn-primary ws-btn-sm"
-                  onClick={async () => {
-                    try {
-                      const res = await api.getGithubConnectUrl(selectedOrgId);
-                      if (res?.url) window.location.href = res.url;
-                    } catch (err) {
-                      alert(err.message);
-                    }
-                  }}
-                >
-                  Connect GitHub App
-                </button>
               </div>
+
+              <GithubConnect
+                orgId={selectedOrgId}
+                installUrl={health?.githubInstallUrl}
+                outcome={githubOutcome}
+                onConnected={() => refreshOrgState(selectedOrgId)}
+              />
 
               {repositories.length === 0 ? (
                 <div className="ws-empty-state">
