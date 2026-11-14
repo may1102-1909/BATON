@@ -3,6 +3,58 @@
 // Aligned with BATON_DEMO_MODE(1).md (Round 3 Demo Specification)
 
 const STORAGE_KEY = 'baton_demo_state'
+const DEMO_REPO = 'may1102-1909/BATON'
+const DEMO_INSTALLATION_ID = 'demo-installation'
+
+// Imports recent commits and pull requests of the public demo repository into the demo state.
+async function importPublicRepo(state, repo) {
+  const base = `https://api.github.com/repos/${DEMO_REPO}`
+  const read = async path => {
+    const response = await originalFetch.call(window, `${base}${path}`, { headers: { accept: 'application/vnd.github+json' } })
+    if (response.status === 403 || response.status === 429) throw new Error('GitHub\'s public request limit was reached. Try "Sync Now" again in a few minutes.')
+    if (!response.ok) throw new Error(`GitHub returned ${response.status} for ${DEMO_REPO}`)
+    return response.json()
+  }
+  const [commits, pulls] = await Promise.all([read('/commits?per_page=30'), read('/pulls?state=all&per_page=30')])
+  const upsert = source => {
+    const index = state.sources.findIndex(item => item.external_id === source.external_id)
+    if (index >= 0) state.sources[index] = { ...state.sources[index], ...source }
+    else state.sources.push(source)
+  }
+  const common = { org_id: 'demo-org', repository_id: repo.id, author_id: null, visibility: 'team' }
+  for (const commit of commits) {
+    const login = commit.author?.login ?? commit.commit?.author?.name ?? 'unknown'
+    upsert({
+      ...common,
+      id: `gh-commit-${commit.sha.slice(0, 12)}`,
+      external_id: `github:${DEMO_REPO}:commit:${commit.sha}`,
+      author_login: login,
+      type: 'commit',
+      content: String(commit.commit?.message ?? '').slice(0, 500),
+      url: commit.html_url,
+      metadata: { kind: 'commit', sha: commit.sha, author_login: login, url: commit.html_url },
+      created_at: commit.commit?.author?.date ?? new Date().toISOString()
+    })
+  }
+  for (const pr of pulls) {
+    const login = pr.user?.login ?? 'unknown'
+    upsert({
+      ...common,
+      id: `gh-pr-${pr.number}`,
+      external_id: `github:${DEMO_REPO}:pull_request:${pr.number}`,
+      author_login: login,
+      type: 'pull_request',
+      content: `PR #${pr.number}: ${pr.title}`,
+      url: pr.html_url,
+      metadata: {
+        kind: 'pull_request', number: pr.number, title: pr.title, state: pr.state, merged: Boolean(pr.merged_at),
+        head: pr.head?.ref ?? null, base_ref: pr.base?.ref ?? null, author_login: login, url: pr.html_url
+      },
+      created_at: pr.created_at
+    })
+  }
+  return { commits: commits.length, pullRequests: pulls.length, issues: 0 }
+}
 
 export function getInitialDemoState() {
   const now = new Date().toISOString()
@@ -600,6 +652,52 @@ export function installDemoInterceptor(initialPersona = 'demo-admin') {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       })
+    }
+
+    // GitHub connection in the demo: the public BATON repository, read through GitHub's public API.
+    // No sign-in, token, or production API call is involved.
+    const demoJson = (data, status = 200) => new Response(JSON.stringify(data), {
+      status,
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    if (pathname.match(/^\/api\/orgs\/[^/]+\/github\/connect$/)) {
+      return demoJson({ url: null, demo: true })
+    }
+
+    if (pathname.match(/^\/api\/orgs\/[^/]+\/github\/installations$/)) {
+      return demoJson([{ id: DEMO_INSTALLATION_ID, account: { login: DEMO_REPO.split('/')[0], type: 'User' }, repository_selection: 'selected' }])
+    }
+
+    if (pathname.match(/^\/api\/orgs\/[^/]+\/github\/installations\/[^/]+\/repositories$/)) {
+      return demoJson([{ full_name: DEMO_REPO, private: false, default_branch: 'main' }])
+    }
+
+    if (pathname.match(/^\/api\/orgs\/[^/]+\/repositories$/) && method === 'POST') {
+      let repo = state.repositories.find(r => r.full_name.toLowerCase() === DEMO_REPO.toLowerCase())
+      if (!repo) {
+        repo = { id: 'repo-baton', org_id: 'demo-org', full_name: DEMO_REPO, installation_id: DEMO_INSTALLATION_ID, last_synced_at: null, demo: true }
+        state.repositories.push(repo)
+        saveDemoState(state)
+      }
+      return demoJson(repo, 201)
+    }
+
+    const syncMatch = pathname.match(/^\/api\/orgs\/[^/]+\/repositories\/([^/]+)\/sync$/)
+    if (syncMatch && method === 'POST') {
+      const repo = state.repositories.find(r => r.id === decodeURIComponent(syncMatch[1]))
+      if (!repo) return demoJson({ error: 'Repository not found' }, 404)
+      let counts = { commits: 0, pullRequests: 0, issues: 0 }
+      if (repo.full_name.toLowerCase() === DEMO_REPO.toLowerCase()) {
+        try {
+          counts = await importPublicRepo(state, repo)
+        } catch (err) {
+          return demoJson({ error: err.message }, 502)
+        }
+      }
+      repo.last_synced_at = new Date().toISOString()
+      saveDemoState(state)
+      return demoJson(counts)
     }
 
     // Pass through any other unexpected calls

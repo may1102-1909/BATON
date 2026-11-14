@@ -6,6 +6,11 @@ const TABLES = {
   invites: 'organization_invites',
 };
 
+// The database stores a few source types under different names than the API uses.
+const DB_SOURCE_TYPES = { decision: 'mcp_decision', blocker: 'mcp_blocker', pull_request: 'pr' };
+const API_SOURCE_TYPES = Object.fromEntries(Object.entries(DB_SOURCE_TYPES).map(([api, db]) => [db, api]));
+const sourceFromDb = record => record && API_SOURCE_TYPES[record.type] ? { ...record, type: API_SOURCE_TYPES[record.type] } : record;
+
 function clone(value) {
   return value == null ? value : structuredClone(value);
 }
@@ -89,6 +94,7 @@ export function createSupabaseStore(client, env = process.env) {
       if (payload.visibility === 'team') payload.visibility = 'all';
       if (payload.type === 'decision') payload.type = 'mcp_decision';
       else if (payload.type === 'blocker') payload.type = 'mcp_blocker';
+      else if (payload.type === 'pull_request') payload.type = 'pr';
       else if (payload.type && !['commit', 'pr', 'issue', 'mcp_decision', 'mcp_blocker'].includes(payload.type)) {
         payload.type = 'mcp_decision';
       }
@@ -104,8 +110,7 @@ export function createSupabaseStore(client, env = process.env) {
       for (const [key, value] of Object.entries(filters)) {
         let val = value;
         if (name === 'sources' && key === 'type') {
-          if (val === 'decision') val = 'mcp_decision';
-          else if (val === 'blocker') val = 'mcp_blocker';
+          val = DB_SOURCE_TYPES[val] ?? val;
         }
         query = query.eq(key, val);
       }
@@ -113,21 +118,13 @@ export function createSupabaseStore(client, env = process.env) {
         if (name === 'tokens') {
           return { ...record, token_hash: record.token_hash };
         }
-        if (name === 'sources' && record) {
-          if (record.type === 'mcp_decision') return { ...record, type: 'decision' };
-          if (record.type === 'mcp_blocker') return { ...record, type: 'blocker' };
-        }
-        return record;
+        return name === 'sources' ? sourceFromDb(record) : record;
       });
     },
     async get(name, id) {
       const db = await clientPromise;
       const record = await run(`get ${name}`, db.from(tableName(name)).select('*').eq('id', id).maybeSingle());
-      if (name === 'sources' && record) {
-        if (record.type === 'mcp_decision') return { ...record, type: 'decision' };
-        if (record.type === 'mcp_blocker') return { ...record, type: 'blocker' };
-      }
-      return record;
+      return name === 'sources' ? sourceFromDb(record) : record;
     },
     async insert(name, record) {
       const db = await clientPromise;

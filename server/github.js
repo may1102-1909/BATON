@@ -143,7 +143,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       author_id: author?.user_id ?? null,
       author: source.author_login ?? 'GitHub',
       author_login: source.author_login ?? null,
-      type: 'github_evidence',
+      type: source.type,
       content: (source.content ?? '').slice(0, 100_000),
       metadata: source.metadata ?? {},
       external_id: source.external_id,
@@ -181,7 +181,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       external_id: `github:${repository.full_name}:pull_request:${pr.number}`,
       author_id: author.id == null ? null : String(author.id),
       author_login: author.login ?? null,
-      type: 'github_evidence',
+      type: 'pull_request',
       content: [pr.title, pr.body].filter(Boolean).join('\n\n'),
       url: pr.html_url,
       created_at: pr.created_at,
@@ -201,7 +201,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       external_id: `github:${repository.full_name}:issue:${issue.number}`,
       author_id: author.id == null ? null : String(author.id),
       author_login: author.login ?? null,
-      type: 'github_evidence',
+      type: 'issue',
       content: [issue.title, issue.body].filter(Boolean).join('\n\n'),
       url: issue.html_url,
       created_at: issue.created_at,
@@ -315,6 +315,15 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       id: item.id, account: item.account ? { login: item.account.login, type: item.account.type } : null,
       repository_selection: item.repository_selection,
     }));
+  }
+
+  async function repositories({ userId, orgId, installationId }) {
+    if (!userId || !orgId || installationId == null) throw new TypeError('userId, orgId, and installationId are required');
+    const account = await accountFor(userId, orgId);
+    if (!account) throw new Error('Link a GitHub account before listing repositories');
+    const repos = await paginate(`/user/installations/${encodeURIComponent(installationId)}/repositories`, account.access_token);
+    return repos.filter((repo) => typeof repo.full_name === 'string')
+      .map((repo) => ({ full_name: repo.full_name, private: Boolean(repo.private), default_branch: repo.default_branch ?? null }));
   }
 
   async function connect({ userId, orgId, installationId, fullName }) {
@@ -436,5 +445,5 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     }
   }
 
-  return { startLink, finishLink, installations, connect, sync, webhook };
+  return { startLink, finishLink, installations, repositories, connect, sync, webhook };
 }

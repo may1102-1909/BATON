@@ -195,3 +195,58 @@ test('last active organization admin cannot be offboarded', async () => {
     assert.equal(response.status, 409);
   });
 });
+test('GitHub callback works without a bearer token, redirects to the dashboard, and the linked user can pick a repository', async () => {
+  const store = fixture();
+  const env = {
+    GITHUB_CLIENT_ID: 'client', GITHUB_CLIENT_SECRET: 'secret', PUBLIC_APP_URL: 'https://baton.example',
+    TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'), GITHUB_API_URL: 'https://api.github.test',
+    GITHUB_APP_SLUG: 'baton-m',
+  };
+  const reply = data => new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } });
+  const fetchImpl = async target => {
+    const address = String(target);
+    if (address === 'https://github.com/login/oauth/access_token') return reply({ access_token: 'user-token', scope: '' });
+    if (address.endsWith('/user')) return reply({ id: 8, login: 'octocat' });
+    if (address.includes('/user/installations/77/repositories')) return reply({ repositories: [{ full_name: 'Acme/Baton', private: true, default_branch: 'main' }] });
+    if (address.includes('/user/installations')) return reply({ installations: [{ id: 77, account: { login: 'Acme', type: 'User' }, repository_selection: 'selected' }] });
+    throw new Error(`Unexpected URL ${address}`);
+  };
+  const supabaseClient = { auth: { getUser: async () => ({ data: { user: { id: userId, email: 'admin@example.com', identities: [] } }, error: null }) } };
+  const app = createApp({ store, env, fetchImpl, supabaseClient });
+  const headers = { authorization: 'Bearer valid-supabase-access-token' };
+  await serve(app, async url => {
+    const health = await (await jsonRequest(url, '/api/health')).json();
+    assert.equal(health.githubInstallUrl, 'https://github.com/apps/baton-m/installations/new');
+
+    const unlinked = await jsonRequest(url, `/api/orgs/${orgId}/github/installations`, { headers });
+    assert.equal(unlinked.status, 409);
+
+    const started = await (await jsonRequest(url, `/api/orgs/${orgId}/github/connect`, { headers })).json();
+    const state = new URL(started.url).searchParams.get('state');
+
+    // The browser redirect from GitHub carries no Authorization header.
+    const linked = await fetch(`${url}/api/github/callback?code=abc&state=${state}`, { redirect: 'manual' });
+    assert.equal(linked.status, 302);
+    assert.equal(linked.headers.get('location'), '/dashboard?github=linked');
+    const [account] = await store.list('github_accounts', { user_id: userId, org_id: orgId });
+    assert.equal(account.github_login, 'octocat');
+    assert.ok(account.access_token_encrypted.startsWith('v1:'));
+    assert.ok(!JSON.stringify(account).includes('user-token'));
+
+    const replayed = await fetch(`${url}/api/github/callback?code=abc&state=${state}`, { redirect: 'manual' });
+    assert.equal(replayed.status, 302);
+    assert.equal(replayed.headers.get('location'), '/dashboard?github=error&reason=expired');
+
+    const installations = await (await jsonRequest(url, `/api/orgs/${orgId}/github/installations`, { headers })).json();
+    assert.deepEqual(installations.map(item => item.id), [77]);
+    const repos = await (await jsonRequest(url, `/api/orgs/${orgId}/github/installations/77/repositories`, { headers })).json();
+    assert.deepEqual(repos, [{ full_name: 'Acme/Baton', private: true, default_branch: 'main' }]);
+
+    const connected = await jsonRequest(url, `/api/orgs/${orgId}/repositories`, { method: 'POST', headers, body: { installationId: 77, fullName: 'Acme/Baton' } });
+    assert.equal(connected.status, 201);
+    assert.equal((await connected.json()).full_name, 'acme/baton');
+
+    const outsider = await jsonRequest(url, `/api/orgs/org-two/github/installations/77/repositories`, { headers });
+    assert.equal(outsider.status, 403);
+  });
+});
