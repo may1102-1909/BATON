@@ -11,7 +11,7 @@ const TABLES = {
 // The database stores a few source types under different names than the API uses.
 const DB_SOURCE_TYPES = { decision: 'mcp_decision', blocker: 'mcp_blocker', pull_request: 'pr' };
 const API_SOURCE_TYPES = Object.fromEntries(Object.entries(DB_SOURCE_TYPES).map(([api, db]) => [db, api]));
-const OPTIONAL_COLUMNS = { handover_questions: ['risk_score', 'risk_reasons'], members: ['function_role'] };
+const OPTIONAL_COLUMNS = { handover_questions: ['risk_score', 'risk_reasons', 'confidence', 'answer_mode'], members: ['function_role'] };
 // Types the production sources.type constraint may not know are stored as mcp_decision; metadata.source_type keeps the real one.
 const LEGACY_ONLY_TYPES = new Set(['branch', 'task_comment', 'memory', 'interview']);
 const sourceFromDb = record => {
