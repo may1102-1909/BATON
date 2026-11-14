@@ -528,25 +528,41 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     }
     const repoPath = repositoryPath(fullName);
     let truncated = false;
+    // One record the database refuses must not throw away the rest of the sync; failures are counted and reported.
+    const skipped = { count: 0, reason: null };
+    const saveEach = (items, save) => mapLimit(items, SYNC_CONCURRENCY, async (item, index) => {
+      try { await save(item, index); }
+      catch (error) {
+        skipped.count += 1;
+        skipped.reason ??= String(error?.message ?? error).slice(0, 300);
+        console.error('[github sync] skipped record', fullName, error?.message ?? error);
+      }
+    });
     try {
       const members = await store.list('members', { org_id: current.org_id });
       const commitList = await listOrEmpty(`/repos/${repoPath}/commits`, token, SYNC_LIMITS.commits, [409]);
       truncated ||= Boolean(commitList.truncated);
-      await mapLimit(commitList, SYNC_CONCURRENCY, async (commit, index) => {
+      await saveEach(commitList, async (commit, index) => {
         const record = commitSource(current, commit);
         if (index < COMMIT_DETAIL_LIMIT) record.metadata.files = await commitFiles(current, record, token, repoPath, commit.sha);
         await upsertSource(current, record, members);
       });
       const prs = await paginate(`/repos/${repoPath}/pulls?state=all&sort=updated&direction=desc`, token, SYNC_LIMITS.pulls);
       truncated ||= Boolean(prs.truncated);
-      await mapLimit(prs, SYNC_CONCURRENCY, (pr, index) => persistPullRequest(current, pr, token, index < PR_DETAIL_LIMIT, members));
+      await saveEach(prs, (pr, index) => persistPullRequest(current, pr, token, index < PR_DETAIL_LIMIT, members));
       const rawIssues = await listOrEmpty(`/repos/${repoPath}/issues?state=all&sort=updated&direction=desc`, token, SYNC_LIMITS.issues, [410]);
       truncated ||= Boolean(rawIssues.truncated);
       const allIssues = rawIssues.filter((issue) => !issue.pull_request);
-      await mapLimit(allIssues, SYNC_CONCURRENCY, (issue) => upsertSource(current, issueSource(current, issue), members));
+      await saveEach(allIssues, (issue) => upsertSource(current, issueSource(current, issue), members));
+      const total = commitList.length + prs.length + allIssues.length;
+      if (total > 0 && skipped.count === total) throw new Error(`Could not save any synced records: ${skipped.reason}`);
       const branches = await syncBranches(current, token, repoPath);
       await store.update('repositories', current.id, { last_synced_at: new Date().toISOString() });
-      return { commits: commitList.length, pullRequests: prs.length, issues: allIssues.length, ...(branches ? { branches } : {}), ...(truncated ? { truncated: true } : {}), actorId: actorId ?? null };
+      return {
+        commits: commitList.length, pullRequests: prs.length, issues: allIssues.length, ...(branches ? { branches } : {}),
+        ...(truncated ? { truncated: true } : {}), ...(skipped.count ? { skipped: skipped.count, skippedReason: skipped.reason } : {}),
+        actorId: actorId ?? null,
+      };
     } catch (error) {
       throw syncFailure(error, fullName);
     }

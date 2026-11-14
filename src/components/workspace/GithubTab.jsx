@@ -20,7 +20,10 @@ export function GithubTab({ orgId, isDemo, isAdmin, health, outcome, repositorie
     setSyncingId(repo.id);
     try {
       const res = await api.syncRepo(orgId, repo.id);
-      notify(`${repo.full_name} synced.${res?.truncated ? " Only the most recent history was imported because the repository is large." : ""}`, "success");
+      const counts = `${res?.commits ?? 0} commits, ${res?.pullRequests ?? 0} pull requests, ${res?.issues ?? 0} issues`;
+      const large = res?.truncated ? " Only the most recent history was imported because the repository is large." : "";
+      if (res?.skipped) notify(`${repo.full_name} synced (${counts}), but ${res.skipped} record${res.skipped === 1 ? " was" : "s were"} skipped: ${res.skippedReason}${large}`);
+      else notify(`${repo.full_name} synced: ${counts}.${large}`, "success");
       await onRefresh();
     } catch (err) {
       notify(`Sync failed for ${repo.full_name}: ${err.message}`);
