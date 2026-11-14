@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 
+// Auth callbacks put tokens in the hash (#access_token=...); those are not routes.
+function hashRoute() {
+  const h = window.location.hash.replace(/^#\/?/, '').toLowerCase()
+  return h.includes('=') ? '' : h
+}
+
 const RouterContext = createContext({
   path: '/',
   navigate: () => {}
@@ -9,7 +15,7 @@ export function RouterProvider({ children }) {
   const [path, setPath] = useState(() => {
     if (typeof window !== 'undefined') {
       const p = window.location.pathname.toLowerCase()
-      const h = window.location.hash.replace(/^#\/?/, '').toLowerCase()
+      const h = hashRoute()
       if (h) return '/' + h
       return p || '/'
     }
@@ -19,7 +25,7 @@ export function RouterProvider({ children }) {
   useEffect(() => {
     function onPopState() {
       const p = window.location.pathname.toLowerCase()
-      const h = window.location.hash.replace(/^#\/?/, '').toLowerCase()
+      const h = hashRoute()
       if (h) {
         setPath('/' + h)
       } else {
@@ -35,13 +41,13 @@ export function RouterProvider({ children }) {
     }
   }, [])
 
-  function navigate(to) {
+  function navigate(to, { replace = false } = {}) {
     if (typeof window === 'undefined') return
     const normalized = to.startsWith('/') ? to : '/' + to
     if (window.location.pathname !== normalized) {
-      window.history.pushState({}, '', normalized)
+      window.history[replace ? 'replaceState' : 'pushState']({}, '', normalized)
       setPath(normalized)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0 })
     }
   }
 
