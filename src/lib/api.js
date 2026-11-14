@@ -196,7 +196,7 @@ export async function resetOrg(orgId, confirm, scope) {
 }
 
 export async function deleteOrg(orgId, confirm) {
-  return request(`/api/orgs/${encodeURIComponent(orgId)}`, {
+  return request(`/api/orgs/${encodeURIComponent(orgId)}?confirm=${encodeURIComponent(confirm ?? "")}`, {
     method: 'DELETE',
     body: { confirm },
   });

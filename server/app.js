@@ -304,7 +304,8 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     }
     if ((match = /^\/api\/orgs\/([^/]+)$/.exec(url.pathname)) && method === 'DELETE') {
       const actor = await requireOrg(auth, match[1], true);
-      await confirmedOrg(actor, body);
+      // Some hosts drop DELETE request bodies, so the confirmation is also accepted as a query parameter.
+      await confirmedOrg(actor, { confirm: body.confirm ?? url.searchParams.get('confirm') });
       const repositories = await store.list('repositories', { org_id: actor.org_id });
       await purgeHandovers(actor.org_id);
       await purgeTasks(actor.org_id);
