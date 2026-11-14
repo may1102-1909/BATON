@@ -7,6 +7,9 @@ const API_URL = 'https://api.github.com';
 const API_VERSION = '2022-11-28';
 const STATE_TTL_MS = 10 * 60 * 1000;
 const COMMIT_DETAIL_LIMIT = 30;
+const PR_DETAIL_LIMIT = 50;
+const SYNC_LIMITS = { commits: 300, pulls: 200, issues: 200, branches: 50 };
+const SYNC_CONCURRENCY = 6;
 
 function required(env, name) {
   const value = env[name];
@@ -29,6 +32,13 @@ function responseHeader(headers, name) {
   if (typeof headers?.get === 'function') return headers.get(name);
   const key = Object.keys(headers ?? {}).find((item) => item.toLowerCase() === name.toLowerCase());
   return key ? headers[key] : undefined;
+}
+
+async function mapLimit(items, limit, task) {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const index = next++; await task(items[index], index); }
+  }));
 }
 
 function asDate(value) {
@@ -64,7 +74,8 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     return data;
   }
 
-  async function paginate(path, token) {
+  // max caps the result; `truncated` is set when GitHub may hold more items than were read.
+  async function paginate(path, token, max = 5000) {
     const results = [];
     for (let page = 1; ; page += 1) {
       const separator = path.includes('?') ? '&' : '?';
@@ -77,6 +88,11 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       const pageItems = Array.isArray(response) ? response : response?.[collectionKey];
       if (!Array.isArray(pageItems)) throw new Error(`Expected a list from GitHub API ${path}`);
       results.push(...pageItems);
+      if (results.length >= max) {
+        results.truncated = results.length > max || pageItems.length === 100;
+        results.length = Math.min(results.length, max);
+        return results;
+      }
       if (pageItems.length < 100) return results;
     }
   }
@@ -93,10 +109,24 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     return `${unsigned}.${sign('RSA-SHA256', Buffer.from(unsigned), privateKey).toString('base64url')}`;
   }
 
+  function installHint() {
+    const slug = String(env.GITHUB_APP_SLUG ?? '').trim();
+    return /^[a-z0-9-]+$/i.test(slug)
+      ? ` Install the GitHub App on it (https://github.com/apps/${slug}/installations/new) or choose another repository.`
+      : ' Install the GitHub App on that repository or choose another repository.';
+  }
+
   async function installationToken(installationId) {
-    const result = await request(`/app/installations/${encodeURIComponent(installationId)}/access_tokens`, {
-      token: appJwt(), method: 'POST', body: {},
-    });
+    let result;
+    try {
+      result = await request(`/app/installations/${encodeURIComponent(installationId)}/access_tokens`, {
+        token: appJwt(), method: 'POST', body: {},
+      });
+    } catch (error) {
+      if (/failed \((404|403)\)/.test(error.message)) throw new Error(`GitHub App is not installed or is suspended for installation ${installationId}.${installHint()}`);
+      if (/failed \(401\)/.test(error.message)) throw new Error('GitHub App credentials were rejected; check GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY');
+      throw error;
+    }
     if (!result?.token) throw new Error('GitHub did not return an installation token');
     return result.token;
   }
@@ -136,9 +166,9 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     return Buffer.concat([decipher.update(Buffer.from(ciphertext64, 'base64')), decipher.final()]).toString('utf8');
   }
 
-  async function upsertSource(repository, source) {
+  async function upsertSource(repository, source, knownMembers) {
     const members = source.author_login
-      ? await store.list('members', { org_id: repository.org_id })
+      ? knownMembers ?? await store.list('members', { org_id: repository.org_id })
       : [];
     const author = members.find((member) => !member.disabled_at &&
       typeof member.github_login === 'string' && member.github_login.toLowerCase() === source.author_login.toLowerCase());
@@ -218,15 +248,26 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     };
   }
 
-  async function persistPullRequest(repository, pr, token, withFiles = true) {
-    const files = withFiles
-      ? await paginate(`/repos/${repositoryPath(repository.full_name)}/pulls/${pr.number}/files`, token)
-      : [];
-    await upsertSource(repository, pullRequestSource(repository, pr, files.map((file) => ({
-      filename: file.filename, status: file.status, additions: file.additions, deletions: file.deletions,
-      changes: file.changes, previous_filename: file.previous_filename ?? null,
-      blob_url: file.blob_url ?? null,
-    }))));
+  async function knownFiles(repository, externalId) {
+    const [known] = await store.list('sources', { org_id: repository.org_id, repository_id: repository.id, external_id: externalId });
+    return Array.isArray(known?.metadata?.files) ? known.metadata.files : [];
+  }
+
+  // File lists feed module ownership; when details are skipped or unavailable, the stored list is kept rather than erased.
+  async function persistPullRequest(repository, pr, token, withFiles = true, members) {
+    const source = pullRequestSource(repository, pr, []);
+    let files = null;
+    if (withFiles) {
+      try {
+        files = (await paginate(`/repos/${repositoryPath(repository.full_name)}/pulls/${pr.number}/files`, token, 300)).map((file) => ({
+          filename: file.filename, status: file.status, additions: file.additions, deletions: file.deletions,
+          changes: file.changes, previous_filename: file.previous_filename ?? null,
+          blob_url: file.blob_url ?? null,
+        }));
+      } catch { files = null; }
+    }
+    source.metadata.files = files ?? await knownFiles(repository, source.external_id);
+    await upsertSource(repository, source, members);
   }
 
   async function startLink({ userId, orgId }) {
@@ -331,22 +372,43 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       .map((repo) => ({ full_name: repo.full_name, private: Boolean(repo.private), default_branch: repo.default_branch ?? null }));
   }
 
+  // With an installation id the repository must be covered by it. Without one, any installation the user can see is searched,
+  // then the linked user's own token is tried (public repositories and repositories that user can read).
   async function connect({ userId, orgId, installationId, fullName }) {
-    if (!userId || !orgId || installationId == null) throw new TypeError('userId, orgId, and installationId are required');
+    if (!userId || !orgId) throw new TypeError('userId and orgId are required');
     const account = await accountFor(userId, orgId);
     if (!account) throw new Error('Link a GitHub account before connecting a repository');
     const name = normalizeFullName(fullName);
+    const listed = (id) => paginate(`/user/installations/${encodeURIComponent(id)}/repositories`, account.access_token);
+    const covers = (repos) => repos.some((repo) => typeof repo.full_name === 'string' && repo.full_name.toLowerCase() === name);
     const authorizedInstallations = await paginate('/user/installations', account.access_token);
-    const installation = authorizedInstallations.find((item) => String(item.id) === String(installationId));
-    if (!installation) throw new Error('GitHub installation is not accessible to the linked user');
-    const repos = await paginate(`/user/installations/${encodeURIComponent(installationId)}/repositories`, account.access_token);
-    if (!repos.some((repo) => typeof repo.full_name === 'string' && repo.full_name.toLowerCase() === name)) {
-      throw new Error('Repository is not accessible through the authorized GitHub installation');
+    let chosen = null;
+    if (installationId != null && installationId !== '') {
+      const installation = authorizedInstallations.find((item) => String(item.id) === String(installationId));
+      if (!installation) throw new Error(`GitHub installation is not accessible to the linked user.${installHint()}`);
+      if (!covers(await listed(installationId))) throw new Error(`Repository is not accessible through the authorized GitHub installation.${installHint()}`);
+      chosen = String(installationId);
+    } else {
+      const owner = name.split('/')[0];
+      const ownerFirst = [...authorizedInstallations].sort((left, right) =>
+        Number(String(right.account?.login).toLowerCase() === owner) - Number(String(left.account?.login).toLowerCase() === owner));
+      for (const installation of ownerFirst) {
+        try { if (covers(await listed(installation.id))) { chosen = String(installation.id); break; } } catch { /* an unreadable installation must not hide the others */ }
+      }
     }
-    const rows = await store.list('repositories', { org_id: orgId, full_name: name });
-    const data = { org_id: orgId, full_name: name, installation_id: String(installationId) };
-    if (rows.length) return store.update('repositories', rows[0].id, data);
-    return store.insert('repositories', { ...data, last_synced_at: null });
+    let access = 'installation';
+    if (!chosen) {
+      try { await request(`/repos/${repositoryPath(name)}`, { token: account.access_token }); }
+      catch (error) {
+        if (!/failed \((403|404)\)/.test(error.message)) throw error;
+        throw new Error(`Repository ${name} was not found or the linked GitHub account cannot read it, and the GitHub App is not installed on it.${installHint()}`);
+      }
+      access = 'user';
+    }
+    const rows = (await store.list('repositories', { org_id: orgId })).filter((row) => String(row.full_name).toLowerCase() === name);
+    const data = { org_id: orgId, full_name: name, installation_id: chosen };
+    const saved = rows.length ? await store.update('repositories', rows[0].id, data) : await store.insert('repositories', { ...data, last_synced_at: null });
+    return { ...saved, access };
   }
 
   // File lists feed module ownership; reuse stored ones and never fail a sync because details are unavailable.
@@ -388,17 +450,34 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       const base = (await request(`/repos/${repoPath}`, { token }))?.default_branch;
       if (!base) return 0;
       let ahead = 0;
-      for (const branch of (await paginate(`/repos/${repoPath}/branches`, token)).filter((item) => item.name !== base)) {
+      const branches = (await paginate(`/repos/${repoPath}/branches`, token, SYNC_LIMITS.branches)).filter((item) => item.name !== base);
+      await mapLimit(branches, 4, async (branch) => {
         try { if (await syncBranch(repository, token, repoPath, base, branch)) ahead += 1; } catch { /* one unreadable branch must not stop the rest */ }
-      }
+      });
       return ahead;
     } catch {
       return 0;
     }
   }
 
+  // Some listings fail in ways that just mean "nothing here": an empty repository (409) or disabled issues (410).
+  async function listOrEmpty(path, token, max, tolerated) {
+    try { return await paginate(path, token, max); }
+    catch (error) {
+      if (tolerated.some((code) => error.message.includes(`failed (${code})`))) return [];
+      throw error;
+    }
+  }
+
+  function syncFailure(error, fullName) {
+    const message = String(error?.message ?? '');
+    if (/failed \(404\)/.test(message)) return new Error(`GitHub could not find ${fullName}. It may have been renamed, deleted or transferred, or access was revoked.${installHint()}`);
+    if (/failed \((403|429)\)/.test(message) && /rate limit/i.test(message)) return new Error('GitHub rate limit reached; try syncing again in a few minutes');
+    return error;
+  }
+
   async function sync({ repository, actorId }) {
-    if (!repository?.id || !repository.org_id || !repository.full_name || !repository.installation_id) {
+    if (!repository?.id || !repository.org_id || !repository.full_name) {
       throw new TypeError('A connected repository record is required');
     }
     const fullName = normalizeFullName(repository.full_name);
@@ -406,30 +485,37 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     if (!current || current.org_id !== repository.org_id || current.full_name !== repository.full_name) {
       throw new Error('Repository is not connected in the store');
     }
-    const token = await installationToken(repository.installation_id);
-    let commits = 0, pullRequests = 0, issues = 0;
+    let token;
+    if (current.installation_id) token = await installationToken(current.installation_id);
+    else {
+      const account = actorId ? await accountFor(actorId, current.org_id) : null;
+      if (!account) throw new Error('Link a GitHub account before syncing this repository; it is connected through a GitHub login, not the GitHub App');
+      token = account.access_token;
+    }
     const repoPath = repositoryPath(fullName);
-    const commitList = await paginate(`/repos/${repoPath}/commits`, token);
-    for (const [index, commit] of commitList.entries()) {
-      const record = commitSource(current, commit);
-      if (index < COMMIT_DETAIL_LIMIT) record.metadata.files = await commitFiles(current, record, token, repoPath, commit.sha);
-      await upsertSource(current, record);
-      commits += 1;
+    let truncated = false;
+    try {
+      const members = await store.list('members', { org_id: current.org_id });
+      const commitList = await listOrEmpty(`/repos/${repoPath}/commits`, token, SYNC_LIMITS.commits, [409]);
+      truncated ||= Boolean(commitList.truncated);
+      await mapLimit(commitList, SYNC_CONCURRENCY, async (commit, index) => {
+        const record = commitSource(current, commit);
+        if (index < COMMIT_DETAIL_LIMIT) record.metadata.files = await commitFiles(current, record, token, repoPath, commit.sha);
+        await upsertSource(current, record, members);
+      });
+      const prs = await paginate(`/repos/${repoPath}/pulls?state=all&sort=updated&direction=desc`, token, SYNC_LIMITS.pulls);
+      truncated ||= Boolean(prs.truncated);
+      await mapLimit(prs, SYNC_CONCURRENCY, (pr, index) => persistPullRequest(current, pr, token, index < PR_DETAIL_LIMIT, members));
+      const rawIssues = await listOrEmpty(`/repos/${repoPath}/issues?state=all&sort=updated&direction=desc`, token, SYNC_LIMITS.issues, [410]);
+      truncated ||= Boolean(rawIssues.truncated);
+      const allIssues = rawIssues.filter((issue) => !issue.pull_request);
+      await mapLimit(allIssues, SYNC_CONCURRENCY, (issue) => upsertSource(current, issueSource(current, issue), members));
+      const branches = await syncBranches(current, token, repoPath);
+      await store.update('repositories', current.id, { last_synced_at: new Date().toISOString() });
+      return { commits: commitList.length, pullRequests: prs.length, issues: allIssues.length, ...(branches ? { branches } : {}), ...(truncated ? { truncated: true } : {}), actorId: actorId ?? null };
+    } catch (error) {
+      throw syncFailure(error, fullName);
     }
-    const prs = await paginate(`/repos/${repoPath}/pulls?state=all&sort=updated&direction=desc`, token);
-    for (const pr of prs) {
-      await persistPullRequest(current, pr, token);
-      pullRequests += 1;
-    }
-    const allIssues = await paginate(`/repos/${repoPath}/issues?state=all&sort=updated&direction=desc`, token);
-    for (const issue of allIssues) {
-      if (issue.pull_request) continue;
-      await upsertSource(current, issueSource(current, issue));
-      issues += 1;
-    }
-    const branches = await syncBranches(current, token, repoPath);
-    await store.update('repositories', current.id, { last_synced_at: new Date().toISOString() });
-    return { commits, pullRequests, issues, ...(branches ? { branches } : {}), actorId: actorId ?? null };
   }
 
   function verifyWebhook(rawBody, headers) {
@@ -465,13 +551,15 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
       return { processed: false, reason: 'unsupported_event' };
     }
     const repos = await store.list('repositories', { full_name: name.toLowerCase() });
-    const repo = repos.find((item) => String(item.installation_id) === String(payload.installation?.id));
-    if (!repo) {
+    // The same repository can be connected in several organizations; each connected copy receives the event.
+    const connected = repos.filter((item) => item.installation_id && String(item.installation_id) === String(payload.installation?.id));
+    if (!connected.length) {
       await store.update('github_deliveries', delivery.id, { status: 'ignored', result: 'repository_not_connected', processed_at: new Date().toISOString() });
       return { processed: false, reason: 'repository_not_connected' };
     }
     let count = 0;
     const actor = payload.sender ?? {};
+    for (const repo of connected) {
     if (event === 'push') {
       for (const commit of payload.commits ?? []) {
         await upsertSource(repo, {
@@ -492,14 +580,17 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
         } catch { /* the branch is refreshed again on the next sync */ }
       }
     } else if (event === 'pull_request' && payload.pull_request) {
-      await upsertSource(repo, pullRequestSource(repo, payload.pull_request, []));
-      count = 1;
+      const source = pullRequestSource(repo, payload.pull_request, []);
+      source.metadata.files = await knownFiles(repo, source.external_id);
+      await upsertSource(repo, source);
+      count += 1;
     } else if (event === 'issues' && payload.issue && !payload.issue.pull_request) {
       await upsertSource(repo, issueSource(repo, payload.issue));
-      count = 1;
+      count += 1;
+    }
     }
     await store.update('github_deliveries', delivery.id, {
-      repository_id: repo.id, status: 'processed', processed_at: new Date().toISOString(), result: { count },
+      repository_id: connected[0].id, status: 'processed', processed_at: new Date().toISOString(), result: { count },
     });
     return { processed: true, count };
     } catch (error) {

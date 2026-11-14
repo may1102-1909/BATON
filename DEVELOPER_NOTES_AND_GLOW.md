@@ -93,7 +93,7 @@ The previous table rows were replaced with an organic WhatsApp-style dialogue st
    > *"Bro that MCP integration is clutch. And because the MCP daemon runs quietly on localhost, our Shannon entropy engine scrubs Stripe keys, AWS tokens, and secrets client-side before any handover note is compiled."*
 
 4. **Dev 2 (Message 4 - Conclusion)**:
-   > *"Exactly. Zero cloud leakage, live agent telemetry, and verified AST-grounded handovers ready in 30 seconds. Pass the knowledge, not just the code. 🤝"*
+   > *"Exactly. Zero cloud leakage, live agent telemetry, and cited, source-checked handovers ready in 30 seconds. Pass the knowledge, not just the code. 🤝"*
 
 ---
 
