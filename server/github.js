@@ -101,7 +101,9 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
   async function accountFor(userId, orgId) {
     const rows = await store.list('github_accounts', { user_id: userId, org_id: orgId });
     const account = rows[0] ?? null;
-    return account ? { ...account, access_token: decryptToken(account.access_token_encrypted) } : null;
+    // New rows store the encrypted value in access_token; older rows may only have access_token_encrypted.
+    const stored = String(account?.access_token ?? '').startsWith('v1:') ? account.access_token : account?.access_token_encrypted;
+    return account ? { ...account, access_token: decryptToken(stored) } : null;
   }
 
   function encryptionKey() {
@@ -298,7 +300,7 @@ export function createGithub({ store, env = process.env, fetchImpl = fetch }) {
     const now = new Date().toISOString();
     const account = {
       user_id: pending.user_id, org_id: pending.org_id, github_user_id: String(user.id),
-      github_login: user.login, access_token_encrypted: encryptToken(tokenData.access_token),
+      github_login: user.login, access_token: encryptToken(tokenData.access_token),
       token_type: tokenData.token_type ?? 'bearer', scope: tokenData.scope ?? '', updated_at: now,
       ...(current ? {} : { created_at: now }),
     };

@@ -8,11 +8,12 @@ import {
   installDemoInterceptor,
   uninstallDemoInterceptor,
   setDemoPersona,
-  resetDemoState
+  resetDemoState,
+  isDemoRoute
 } from './demoSandbox.js'
 
-// Install interceptor synchronously at import time so initial boot calls are captured
-if (typeof window !== 'undefined') {
+// Only when the app is opened directly on /demo-page; otherwise DemoPage installs it while rendering.
+if (isDemoRoute()) {
   installDemoInterceptor(api.getDemoUser() || 'demo-admin')
 }
 
@@ -39,6 +40,10 @@ export function DemoPage() {
   const [tourStep, setTourStep] = useState(1)
   const [showTour, setShowTour] = useState(true)
   const [isInitializing, setIsInitializing] = useState(true)
+
+  // Install before child effects run, so the workspace's first requests are served demo data
+  // even after an in-app navigation from /usage. Idempotent.
+  installDemoInterceptor(activePersona)
 
   // Glowing logo loading transition on page entry
   useEffect(() => {

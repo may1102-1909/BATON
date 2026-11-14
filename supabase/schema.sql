@@ -275,7 +275,6 @@ create table if not exists public.github_accounts (
   updated_at timestamptz not null default now()
 );
 alter table public.github_accounts add column if not exists org_id uuid references public.organizations(id) on delete cascade;
-alter table public.github_accounts add column if not exists access_token_encrypted text;
 
 create table if not exists public.github_states (
   id uuid primary key default gen_random_uuid(),

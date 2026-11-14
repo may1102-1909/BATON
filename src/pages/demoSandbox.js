@@ -402,6 +402,10 @@ export function setDemoPersona(personaId) {
   currentPersona = personaId || 'demo-admin'
 }
 
+export function isDemoRoute() {
+  return typeof window !== 'undefined' && window.location.pathname.toLowerCase().startsWith('/demo-page')
+}
+
 export function installDemoInterceptor(initialPersona = 'demo-admin') {
   if (typeof window === 'undefined') return
   if (originalFetch) return // already installed
@@ -411,7 +415,12 @@ export function installDemoInterceptor(initialPersona = 'demo-admin') {
 
   window.fetch = async function (input, init = {}) {
     const urlStr = typeof input === 'string' ? input : input?.url || ''
-    
+
+    // Demo data must never reach other pages such as /dashboard.
+    if (!isDemoRoute()) {
+      return originalFetch.apply(this, arguments)
+    }
+
     // Only intercept requests directed to /api/ on the current origin
     if (!urlStr.startsWith('/api/') && !urlStr.includes('/api/')) {
       return originalFetch.apply(this, arguments)
