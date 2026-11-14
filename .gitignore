@@ -27,3 +27,7 @@ bifrost-model-router/
 *.sln
 *.sw?
 
+
+# Playwright
+playwright-report
+test-results

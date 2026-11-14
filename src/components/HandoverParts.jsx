@@ -174,6 +174,7 @@ function ClaimItem({ claim, sources, editable, onReview, onEdit }) {
                 type="button"
                 className="ws-btn ws-btn-sm"
                 aria-label={`Approve claim: ${String(claim.text).slice(0, 60)}`}
+                aria-pressed={['approved', 'edited'].includes(claim.status)}
                 style={{ background: claim.status === 'approved' ? 'rgba(52, 211, 153, 0.2)' : 'transparent', color: claim.status === 'approved' ? 'var(--green)' : 'inherit' }}
                 onClick={() => onReview(claim.id, 'approved')}
               >
