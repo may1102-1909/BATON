@@ -140,6 +140,7 @@ async function githubCall(run) {
     if (/^Link a GitHub account/.test(message)) throw new HttpError(409, message);
     if (/GitHub API .* failed \(401\)/.test(message)) throw new HttpError(409, 'Your GitHub link has expired. Connect GitHub again.');
     if (/^Missing |TOKEN_ENCRYPTION_KEY|PUBLIC_APP_URL/.test(message)) throw new HttpError(503, 'GitHub integration is not fully configured on the server');
+    if (/^GITHUB_APP_PRIVATE_KEY /.test(message)) throw new HttpError(503, message);
     if (/not accessible|not found or|owner\/name format|are required/.test(message)) throw new HttpError(400, message);
     if (/^GitHub App is not installed|^GitHub could not find/.test(message)) throw new HttpError(409, message);
     if (/^GitHub rate limit/.test(message)) throw new HttpError(429, message);
