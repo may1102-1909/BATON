@@ -1799,351 +1799,86 @@ export function Workspace({
       )}
 
       {packetId && (
-        <main className="ws-main">
+        <main id="main" className="ws-main">
           <HandoverPage handoverId={packetId} mode={mode} embedded onBack={() => setPacketId(null)} />
         </main>
       )}
 
-      {/* MODAL 1: CREATE ORG */}
       {showCreateOrgModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowCreateOrgModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Create New Organization</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowCreateOrgModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateOrg}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Organization Name</label>
-                <input
-                  type="text"
-                  className="ws-input"
-                  placeholder="e.g. Acme Corp Engineering"
-                  value={newOrgName}
-                  onChange={e => setNewOrgName(e.target.value)}
-                  required
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowCreateOrgModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Create Organization
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CreateOrgModal
+          onClose={() => setShowCreateOrgModal(false)}
+          onCreated={async res => {
+            setShowCreateOrgModal(false);
+            await boot(res?.organization?.id);
+            notify('Team created.', 'success');
+          }}
+        />
       )}
 
-      {/* MODAL 2: INVITE MEMBER */}
-      {showInviteModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowInviteModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Invite Team Member</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowInviteModal(false)}>✕</button>
-            </div>
-            {generatedInviteToken ? (
-              <div>
-                <div style={{ color: 'var(--green)', fontWeight: 600, marginBottom: 8 }}>
-                  ✓ Invite link generated!
-                </div>
-                <div className="ws-code-snippet" style={{ marginBottom: 14 }}>
-                  {`${window.location.origin}/auth?invite=${generatedInviteToken}`}
-                </div>
-                <button
-                  className="ws-btn ws-btn-primary"
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/auth?invite=${generatedInviteToken}`);
-                    notify('Copied invite link to clipboard!');
-                    setShowInviteModal(false);
-                    setGeneratedInviteToken(null);
-                  }}
-                >
-                  Copy Link & Close
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateInvite}>
-                <div className="ws-form-group">
-                  <label className="ws-form-label">Email Address (Optional)</label>
-                  <input
-                    type="email"
-                    className="ws-input"
-                    placeholder="engineer@company.com"
-                    value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
-                  />
-                </div>
-                <div className="ws-form-group">
-                  <label className="ws-form-label">Role</label>
-                  <select
-                    className="ws-org-select"
-                    value={inviteRole}
-                    onChange={e => setInviteRole(e.target.value)}
-                  >
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                  <button type="button" className="ws-btn" onClick={() => setShowInviteModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="ws-btn ws-btn-primary">
-                    Generate Invite
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
+      {showInviteModal && <InviteModal orgId={selectedOrgId} notify={notify} onClose={() => { setShowInviteModal(false); refreshOrgState(selectedOrgId); }} />}
 
-      {/* MODAL 3: GENERATE MCP TOKEN */}
       {showTokenModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowTokenModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Generate Baton MCP Token</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowTokenModal(false)}>✕</button>
-            </div>
-            {revealedToken ? (
-              <div>
-                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 6, padding: 12, marginBottom: 14, color: '#fca5a5', fontSize: '0.85rem' }}>
-                  ⚠️ <strong>Do Not Share:</strong> Copy this token now. For your security, this secret will never be displayed again.
-                </div>
-                <div className="ws-code-snippet" style={{ marginBottom: 14, color: '#34d399' }}>
-                  {revealedToken}
-                </div>
-                <button
-                  className="ws-btn ws-btn-primary"
-                  onClick={() => {
-                    navigator.clipboard.writeText(revealedToken);
-                    notify('Token copied to clipboard!');
-                    setShowTokenModal(false);
-                    setRevealedToken(null);
-                  }}
-                >
-                  Copy Secret & Close
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateToken}>
-                <div className="ws-form-group">
-                  <label className="ws-form-label">Token Name / Client Description</label>
-                  <input
-                    type="text"
-                    className="ws-input"
-                    placeholder="e.g. Cursor Work Laptop, Claude CLI"
-                    value={newTokenName}
-                    onChange={e => setNewTokenName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                  <button type="button" className="ws-btn" onClick={() => setShowTokenModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="ws-btn ws-btn-primary">
-                    Create Token
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
+        <TokenModal
+          orgId={selectedOrgId}
+          notify={notify}
+          onCreated={token => { setNewestToken(token); refreshOrgState(selectedOrgId); }}
+          onClose={() => setShowTokenModal(false)}
+        />
       )}
 
-      {/* MODAL 4: LOG MEMORY */}
       {showMemoryModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowMemoryModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Log Context & Reasoning</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowMemoryModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateMemory}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Type</label>
-                <select
-                  className="ws-org-select"
-                  value={memoryType}
-                  onChange={e => setMemoryType(e.target.value)}
-                >
-                  <option value="decision">Architectural Decision</option>
-                  <option value="blocker">Blocker / Unfinished Task</option>
-                  <option value="note">Operational Note</option>
-                </select>
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Content / Decision Summary</label>
-                <textarea
-                  className="ws-input"
-                  rows={3}
-                  placeholder="Describe what was decided, why, or what is blocking..."
-                  value={memoryContent}
-                  onChange={e => setMemoryContent(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Metadata (JSON or Notes)</label>
-                <textarea
-                  className="ws-input"
-                  rows={2}
-                  placeholder='{"reason": "Faster builds", "files_affected": ["vite.config.js"]}'
-                  value={memoryMetadata}
-                  onChange={e => setMemoryMetadata(e.target.value)}
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Visibility</label>
-                <select
-                  className="ws-org-select"
-                  value={memoryVisibility}
-                  onChange={e => setMemoryVisibility(e.target.value)}
-                >
-                  <option value="team">Team (Visible to org)</option>
-                  <option value="admin">Admin Only</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowMemoryModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Save Memory
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <MemoryModal
+          orgId={selectedOrgId}
+          onClose={() => setShowMemoryModal(false)}
+          onSaved={async () => { setShowMemoryModal(false); await refreshOrgState(selectedOrgId); notify('Memory saved.', 'success'); }}
+        />
       )}
 
-      {/* MODAL 5: NEW TASK */}
       {showTaskModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowTaskModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Create Handover Task</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowTaskModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateTask}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Task Title</label>
-                <input
-                  type="text"
-                  className="ws-input"
-                  placeholder="e.g. Verify webhook replay protection"
-                  value={taskTitle}
-                  onChange={e => setTaskTitle(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Description</label>
-                <textarea
-                  className="ws-input"
-                  rows={3}
-                  placeholder="Details and expected acceptance criteria..."
-                  value={taskDesc}
-                  onChange={e => setTaskDesc(e.target.value)}
-                />
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Assignee</label>
-                <select
-                  className="ws-org-select"
-                  value={taskAssignee}
-                  onChange={e => setTaskAssignee(e.target.value)}
-                >
-                  <option value="">Unassigned</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.user_id}>
-                      {m.name || m.github_login || m.user_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Due Date</label>
-                <input
-                  type="date"
-                  className="ws-input"
-                  value={taskDue}
-                  onChange={e => setTaskDue(e.target.value)}
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowTaskModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Create Task
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <TaskModal
+          orgId={selectedOrgId}
+          members={members}
+          onClose={() => setShowTaskModal(false)}
+          onSaved={async () => { setShowTaskModal(false); await refreshOrgState(selectedOrgId); notify('Task created.', 'success'); }}
+        />
       )}
 
-      {/* MODAL 6: INITIATE HANDOVER */}
       {showStartHandoverModal && (
-        <div className="ws-modal-backdrop" onClick={() => setShowStartHandoverModal(false)}>
-          <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-header">
-              <div className="ws-modal-title">Initiate Handover Protocol</div>
-              <button className="ws-btn ws-btn-sm" onClick={() => setShowStartHandoverModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleStartHandover}>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Departing Engineer (Leaver)</label>
-                <select
-                  className="ws-org-select"
-                  aria-label="Departing engineer"
-                  value={handoverLeaverId}
-                  onChange={e => setHandoverLeaverId(e.target.value)}
-                  required
-                >
-                  <option value="">Select Leaver...</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.user_id}>
-                      {m.name || m.github_login || m.user_id} {m.offboarding ? '(Flagged for offboarding)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ws-form-group">
-                <label className="ws-form-label">Incoming Engineer</label>
-                <select
-                  className="ws-org-select"
-                  aria-label="Incoming engineer"
-                  value={handoverIncomingId}
-                  onChange={e => setHandoverIncomingId(e.target.value)}
-                  required
-                >
-                  <option value="">Select Incoming Engineer...</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.user_id}>
-                      {m.name || m.github_login || m.user_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button type="button" className="ws-btn" onClick={() => setShowStartHandoverModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="ws-btn ws-btn-primary">
-                  Start Handover
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <StartHandoverModal
+          orgId={selectedOrgId}
+          members={members}
+          initialLeaverId={handoverLeaverId}
+          onClose={() => setShowStartHandoverModal(false)}
+          onStarted={async res => {
+            setShowStartHandoverModal(false);
+            setActiveTab('handovers');
+            await refreshOrgState(selectedOrgId);
+            if (res?.handover?.id) await loadHandover(res.handover.id);
+          }}
+        />
+      )}
+
+      {confirming && (
+        <ConfirmDialog
+          title={confirming.title}
+          confirmLabel={confirming.confirmLabel}
+          busy={confirmBusy}
+          onCancel={() => setConfirming(null)}
+          onConfirm={async () => {
+            setConfirmBusy(true);
+            try {
+              await confirming.run();
+              setConfirming(null);
+            } catch (err) {
+              setConfirming(null);
+              notify(err.message);
+            } finally {
+              setConfirmBusy(false);
+            }
+          }}
+        >
+          {confirming.body}
+        </ConfirmDialog>
       )}
     </div>
   );

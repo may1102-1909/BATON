@@ -68,6 +68,12 @@ export function createMemoryStore(seed = {}) {
       if (index < 0) return null;
       return clone(records.splice(index, 1)[0]);
     },
+    async removeWhere(name, filters = {}) {
+      const records = table(name);
+      let removed = 0;
+      for (let index = records.length - 1; index >= 0; index -= 1) if (matches(records[index], filters)) { records.splice(index, 1); removed += 1; }
+      return removed;
+    },
     async rpc() {
       return null;
     },
@@ -173,6 +179,19 @@ export function createSupabaseStore(client, env = process.env) {
     async remove(name, id) {
       const db = await clientPromise;
       return await run(`remove ${name}`, db.from(tableName(name)).delete().eq('id', id).select('*').maybeSingle());
+    },
+    // Deletes every matching row (PostgREST caps response size, so repeat until nothing is left); returns the count.
+    async removeWhere(name, filters = {}) {
+      if (!Object.keys(filters).length) throw new Error('removeWhere requires at least one filter');
+      const db = await clientPromise;
+      let removed = 0;
+      for (;;) {
+        let query = db.from(tableName(name)).delete();
+        for (const [key, value] of Object.entries(filters)) query = query.eq(key, value);
+        const rows = await run(`removeWhere ${name}`, query.select('id'));
+        if (!rows?.length) return removed;
+        removed += rows.length;
+      }
     },
     async rpc(fnName, params = {}) {
       const db = await clientPromise;
