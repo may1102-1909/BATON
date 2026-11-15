@@ -195,6 +195,8 @@ create table if not exists public.handovers (
   updated_at timestamptz not null default now()
 );
 alter table public.handovers add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+-- Cross-instance generation lock (see claimGeneration in server/store.js).
+alter table public.handovers add column if not exists generation_started_at timestamptz;
 
 create table if not exists public.handover_claims (
   id uuid primary key default gen_random_uuid(),

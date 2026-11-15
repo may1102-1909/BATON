@@ -66,6 +66,17 @@ export function createMemoryStore(seed = {}) {
       invite.accepted_by = acceptedBy;
       return clone(invite);
     },
+    async claimGeneration(id, startedAt, staleBefore) {
+      const handover = table('handovers').find(record => record.id === id);
+      if (!handover) return null;
+      if (handover.generation_started_at && Date.parse(handover.generation_started_at) >= Date.parse(staleBefore)) return null;
+      handover.generation_started_at = startedAt;
+      return clone(handover);
+    },
+    async releaseGeneration(id) {
+      const handover = table('handovers').find(record => record.id === id);
+      if (handover) handover.generation_started_at = null;
+    },
     async remove(name, id) {
       const records = table(name);
       const index = records.findIndex(record => record.id === id);
@@ -185,6 +196,16 @@ export function createSupabaseStore(client, env = process.env) {
       const result = await run('claim invite', db.from(tableName('invites')).update({ accepted_at: acceptedAt, accepted_by: acceptedBy })
         .eq('id', id).is('accepted_at', null).gt('expires_at', acceptedAt).select('*').maybeSingle());
       return result;
+    },
+    // Conditional update: only one serverless instance can hold a handover's generation claim at a time.
+    async claimGeneration(id, startedAt, staleBefore) {
+      const db = await clientPromise;
+      return run('claim generation', db.from('handovers').update({ generation_started_at: startedAt })
+        .eq('id', id).or(`generation_started_at.is.null,generation_started_at.lt.${staleBefore}`).select('id').maybeSingle());
+    },
+    async releaseGeneration(id) {
+      const db = await clientPromise;
+      await run('release generation', db.from('handovers').update({ generation_started_at: null }).eq('id', id));
     },
     async remove(name, id) {
       const db = await clientPromise;

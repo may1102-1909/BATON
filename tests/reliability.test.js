@@ -244,6 +244,42 @@ test('generating twice, even concurrently, never duplicates claims', async () =>
   assert.equal((await call(member, 'POST', `/api/handovers/${id}/generate`, {})).status, 403);
 });
 
+test('a generation running on another server instance is refused; a stale claim is taken over and always released', async () => {
+  const { call, store } = handoverFixture();
+  const id = await start(call);
+  const claimOf = async () => (await store.get('handovers', id)).generation_started_at ?? null;
+
+  // Another instance claimed it a moment ago: refuse instead of interleaving claims.
+  await store.update('handovers', id, { generation_started_at: new Date().toISOString() });
+  const busy = await call(admin, 'POST', `/api/handovers/${id}/generate`, {});
+  assert.equal(busy.status, 409);
+  assert.match(busy.body.error, /already being generated/);
+  assert.equal((await store.list('handover_claims', { handover_id: id })).length, 0);
+
+  // A claim older than five minutes belongs to a crashed run.
+  await store.update('handovers', id, { generation_started_at: new Date(Date.now() - 6 * 60 * 1000).toISOString() });
+  const takeover = await call(admin, 'POST', `/api/handovers/${id}/generate`, {});
+  assert.equal(takeover.status, 200);
+  assert.ok(takeover.body.claims.length > 0);
+  assert.equal(await claimOf(), null, 'released after success');
+
+  // A failure part-way through still releases the claim.
+  const insert = store.insert;
+  store.insert = async (name, record) => { if (name === 'handover_claims') throw new Error('disk full'); return insert(name, record); };
+  assert.equal((await call(admin, 'POST', `/api/handovers/${id}/generate`, {})).status, 500);
+  store.insert = insert;
+  assert.equal(await claimOf(), null, 'released after failure');
+});
+
+test('databases without the generation_started_at column still generate (in-process lock only)', async () => {
+  const { call, store } = handoverFixture();
+  const id = await start(call);
+  store.claimGeneration = async () => { throw new Error('Supabase claim generation failed: column handovers.generation_started_at does not exist'); };
+  const generated = await call(admin, 'POST', `/api/handovers/${id}/generate`, {});
+  assert.equal(generated.status, 200);
+  assert.ok(generated.body.claims.length > 0);
+});
+
 test('exit interviews refresh: the leaver sees new state after answering, and others see nothing', async () => {
   const { call } = handoverFixture();
   const id = await start(call);
