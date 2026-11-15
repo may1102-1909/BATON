@@ -87,7 +87,7 @@ Copy `.env.example` to `.env.local` and fill it in. Names the code reads:
 | `BATON_ALLOWED_ORIGINS` | Optional comma-separated CORS allow-list. |
 | `BATON_DEMO_MODE` | Test/offline switch that replaces Supabase with a seeded in-memory store. Keep it `false` (unset) in production. |
 
-Database: run `supabase/schema.sql` in the Supabase SQL editor. The optional `supabase/migrations/20261114_round3.sql` adds risk-score columns and `org_memberships.function_role`; without it everything works except saving a member's function role (the API answers 503 with the migration name), and risk scores are recomputed on read. Existing databases also need `supabase/migrations/20261114_org_delete_keep_admin.sql` (deleting a workspace fails with a server error without it).
+Database: run `supabase/schema.sql` in the Supabase SQL editor (new databases need nothing else). Existing databases also run the migrations listed under [Operations](#operations), in date order.
 
 ## Production vs demo
 
@@ -124,35 +124,56 @@ All routes need `Authorization: Bearer <Supabase access token>` unless noted. Ad
 ## Testing
 
 ```bash
-npm test             # unit and API tests (node --test, no network, no credentials)
+npm test             # unit, API and database tests (node --test, no network, no credentials)
 npm run test:e2e     # Playwright; starts `npm run dev` on port 3000 (run `npx playwright install chromium` once)
 npm run build        # the build must succeed
+npm run build:mcp    # installs mcp-server dependencies and rebuilds mcp-server/dist (commit the result)
 ```
 
-Unit tests cover the store adapters, the HTTP routes, GitHub connect/sync/webhooks with stubbed `fetch`, the handover engine, audiences and conflicts, the demo engine, and a real stdio MCP round trip. Reliability cases (invalid, expired and used invites; revoked API tokens; bad webhook signatures; duplicate generation; cross-organization access; interview refresh; Gemini failure fallback) are in `tests/reliability.test.js`.
+Unit tests cover the store adapters, the HTTP routes, GitHub connect/sync/webhooks with stubbed `fetch`, the handover engine, audiences and conflicts, the demo engine, and a real stdio MCP round trip. Reliability cases (invalid, expired and used invites; revoked API tokens; bad webhook signatures; duplicate and cross-instance generation; cross-organization access; interview refresh; Gemini failure fallback; database outages) are in `tests/reliability.test.js`. `tests/schema.test.js` applies `supabase/schema.sql` to an in-process Postgres with pgvector (PGlite) and checks row-level security, the handover workflow on real tables, and the visibility rules inside `match_memory`.
+
+CI (`.github/workflows/ci.yml`) runs the build, rebuilds the MCP server and fails if the committed `mcp-server/dist` differs, then runs `npm test` and Playwright.
+
+## Operations
+
+**Migrations.** New databases only need `supabase/schema.sql`. Existing databases run these once, in order, in the Supabase SQL editor; each is safe to re-run:
+
+| Migration | What breaks without it |
+| --- | --- |
+| `20261114_round3.sql` | Saving a member's function role answers 503 naming this migration; risk scores are recomputed on every read |
+| `20261114_org_delete_keep_admin.sql` | Deleting a workspace fails (the last-admin trigger blocks the cascade) |
+| `20261115_match_memory_visibility.sql` | Nothing visible: vector search falls back to the old function and the API filters every hit itself |
+| `20261115_handover_generation_lock.sql` | Nothing visible: generation falls back to the per-process lock, so two instances generating the same handover at once can interleave claims |
+
+**Vercel environment.** See the variable table under [Setup](#setup). `GITHUB_APP_PRIVATE_KEY` can be pasted in any form: the raw `.pem`, quoted, with literal `\n`, with spaces instead of line breaks, or base64-encoded. An unreadable key makes sync answer 503 "GITHUB_APP_PRIVATE_KEY could not be read". `GITHUB_APP_SLUG` is optional; without it the install page is looked up from GitHub.
+
+**GitHub App settings.** The app must be **public** (Advanced → Make public); a private app shows every other account a GitHub 404 page. Set **Setup URL** to `<PUBLIC_APP_URL>/dashboard` and tick **Redirect on update**.
+
+**Reading failures.** Vercel → project → Logs, filter by Error. Server lines start with `[api]`, `[api] database unavailable`, `[github]`, `[github sync] skipped record` or `[github callback]`. A database outage answers 503 "Database unavailable, try again shortly." (database calls time out after 15 s); anything still answering "Internal server error" is a real bug, and the log line names it.
 
 ## Known limits
 
 - Redaction is pattern and entropy based; review what you capture.
 - Handover claims are checked against cited source text, not against code structure.
 - Webhook updates require a GitHub App installation; repositories connected with a user token must be re-synced manually.
-- Generation locking is per server process; two serverless instances generating the same handover at the same moment can still interleave.
-- Supabase outage and offline behaviour are not covered by automated tests.
-- MCP clients: Claude Code was checked against a local API (connects, tools listed); Antigravity, Cursor, Codex and Claude Desktop configurations follow their documentation in [docs/MCP.md](docs/MCP.md). The stdio round trip (save, search, interview, Markdown export) is covered by automated tests.
+- File summaries carry no visibility flag; their audience is derived from the file path and applied by the API rather than inside `match_memory`.
+- A sync runs inside one request (about 20 s for ~80 commits; the Vercel limit is 5 minutes). Very large repositories are capped at the limits above rather than paged.
+- The Supabase store's `claimGeneration` and `getMany` use PostgREST filters that are covered by the in-memory store and code review, not by a test against a live Supabase instance.
+- MCP clients: Claude Code was checked against a local API (connects, tools listed); Antigravity, Cursor, Codex and Claude Desktop configurations follow their documentation in [docs/MCP.md](docs/MCP.md). The stdio round trip (save, search, interview, Markdown export, outage message) is covered by automated tests.
 
 ## Roadmap
 
-Sequenced by dependency; effort and risk are rough estimates.
+Everything in the Round 3 completion and improvement plans is built. What remains, sequenced by dependency; effort and risk are rough estimates.
 
 | # | Step | Depends on | Effort | Risk |
 | --- | --- | --- | --- | --- |
-| 1 | Verify production: environment variables, applied schema, revoke any token that was ever committed | none | 1 h | Low |
-| 2 | Production onboarding and first-run checklist (connect GitHub, create a token, receive a capture, generate a handover) | 1 | 3 h | Low |
-| 3 | Accessible status messages, loading, empty and error states in the workspace | 2 | 4 h | Low |
-| 4 | Split the workspace into tabs behind a shared organization hook; re-run Playwright | 3 | 3 h | Medium (large refactor) |
-| 5 | Optional Round 3 migration in production (function roles, stored risk scores) | 1 | 0.5 h | Low |
-| 6 | Vector-search visibility enforced inside `match_memory` (today the API re-checks every hit) | 5 | 1 h | Medium (SQL change) |
-| 7 | Shared-state locking for handover generation across serverless instances | none | 2 h | Medium |
-| 8 | Supabase-outage and offline tests | 3 | 2 h | Low |
+| 1 | Run the two `20261115_*` migrations in production and confirm the earlier two are applied | none | 0.25 h | Low |
+| 2 | Try the Antigravity config in the app (`/mcp` lists `baton`'s tools) | none | 0.25 h | Low |
+| 3 | Page large syncs (for example 100 commits per request, the dashboard loops until done) if a repository ever approaches the time limit | none | 3 h | Medium |
+| 4 | Remote MCP over HTTP so agents need no local install | none | 1–2 d | Medium |
+| 5 | Per-tool transcript parsers beyond Claude Code and Antigravity | 4 | 1 d | Low |
+| 6 | Slack and Jira connectors as additional evidence sources | none | 2–3 d each | Medium |
+| 7 | Living handover: regenerate automatically when cited sources change | none | 2 d | Medium |
+| 8 | Self-hosting guide (Docker image, Postgres with pgvector) | none | 1 d | Low |
 
 Out of scope for now: desktop or mobile packages, further landing-page variants and additional MCP tools.
