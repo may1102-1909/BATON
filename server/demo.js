@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream';
 import { createMemoryStore } from './store.js';
 import { createHandovers } from './handover.js';
+import { analyzeWorkspace, composeInterviewAnswer } from './demoInsights.js';
 
 // Synthetic fixture only; demo mode never reads or writes a live project.
 export function demoSeed() {
@@ -29,11 +30,13 @@ export function demoSeed() {
 export const PRODUCTION_ONLY = 'Available in Production mode';
 const MAX_STATE_BYTES = 900_000;
 const METHODS = new Set(['GET', 'POST', 'PATCH', 'DELETE']);
+// Tokens, invite links and the MCP collector's push/search run against the caller's demo state only.
 const PRODUCTION_PATHS = [
-  /^\/api\/orgs\/[^/]+\/tokens(\/|$)/, /^\/api\/orgs\/[^/]+\/invites$/, /^\/api\/invites\//,
-  /^\/api\/github\//, /^\/api\/orgs\/[^/]+\/github\//, /^\/api\/orgs\/[^/]+\/repositories(\/|$)/,
-  /^\/api\/collector\//, /^\/api\/mcp\//, /^\/api\/demo$/, /^\/api\/orgs$/,
+  /^\/api\/invites\//, /^\/api\/github\//, /^\/api\/orgs\/[^/]+\/github\//, /^\/api\/orgs\/[^/]+\/repositories(\/|$)/,
+  /^\/api\/collector\/(?!(push|search)$)/, /^\/api\/mcp\//, /^\/api\/demo$/, /^\/api\/orgs$/,
 ];
+export const PREPARE_PATH = '/api/demo/prepare-handover';
+const DEMO_BEARER = /^Bearer baton_[A-Za-z0-9_-]{20,200}$/;
 
 const stripEmails = value => {
   if (Array.isArray(value)) return value.map(stripEmails);
@@ -63,20 +66,55 @@ export async function handleDemoRequest(payload, { createApp } = {}) {
   const blocked = async () => { throw new Error(PRODUCTION_ONLY); };
   const app = createApp({ store, env, fetchImpl: blocked, handovers: createHandovers({ store, env, fetchImpl: blocked }), github: {} });
 
-  const member = state.members?.find(item => item.user_id === persona && !item.disabled_at) ?? state.members?.find(item => item.role === 'admin');
-  const text = request.body && method !== 'GET' ? JSON.stringify(request.body) : '';
-  const req = Object.assign(Readable.from(text ? [Buffer.from(text)] : []), {
-    method, url: path, headers: { 'x-baton-demo-user': member?.user_id ?? 'demo-admin', 'content-type': 'application/json' },
-  });
-  const result = await new Promise(resolve => {
-    const res = { headersSent: false, statusCode: 200, setHeader() {}, writeHead(status) { this.statusCode = status; }, end(data) { this.headersSent = true; resolve({ status: this.statusCode, data }); } };
-    void app(req, res);
-  });
+  async function dispatch(personaId, verb, target, body, authorization) {
+    const members = await memory.list('members');
+    const member = members.find(item => item.user_id === personaId && !item.disabled_at) ?? members.find(item => item.role === 'admin');
+    const text = body && verb !== 'GET' ? JSON.stringify(body) : '';
+    const headers = { 'x-baton-demo-user': member?.user_id ?? 'demo-admin', 'content-type': 'application/json' };
+    if (typeof authorization === 'string' && DEMO_BEARER.test(authorization)) headers.authorization = authorization;
+    const req = Object.assign(Readable.from(text ? [Buffer.from(text)] : []), { method: verb, url: target, headers });
+    const result = await new Promise(resolve => {
+      const res = { headersSent: false, statusCode: 200, setHeader() {}, writeHead(status) { this.statusCode = status; }, end(data) { this.headersSent = true; resolve({ status: this.statusCode, data }); } };
+      void app(req, res);
+    });
+    let parsed = {};
+    try { parsed = result.data ? JSON.parse(result.data) : {}; } catch { parsed = { text: String(result.data) }; }
+    if (target === '/api/me' && parsed.user) parsed.user.name = member?.name ?? null;
+    return { status: result.status, body: parsed };
+  }
 
-  let body = {};
-  try { body = result.data ? JSON.parse(result.data) : {}; } catch { body = {}; }
-  if (pathname === '/api/me' && body.user) body.user.name = member?.name ?? null;
+  const result = method === 'POST' && pathname === PREPARE_PATH
+    ? await prepareHandover(dispatch, memory, request.body ?? {})
+    : await dispatch(persona, method, path, request.body, request.authorization);
+
   const nextState = {};
   for (const table of touched) nextState[table] = await memory.list(table);
-  return { status: result.status, body: stripEmails(body), state: stripEmails(nextState) };
+  return { status: result.status, body: stripEmails(result.body), state: stripEmails(nextState) };
+}
+
+// Opens the demo with a handover that is ready except for the conflict: the real engine starts it, the leaver answers
+// every exit-interview question from the workspace records, claims are compiled and every non-conflicting claim approved.
+async function prepareHandover(dispatch, memory, { orgId = 'demo-org', leaverId = 'demo-leaver', incomingId = 'demo-incoming' }) {
+  if ((await memory.list('handovers')).length) return { status: 200, body: { prepared: false } };
+  const started = await dispatch('demo-admin', 'POST', `/api/orgs/${orgId}/handovers`, { leaverId, incomingId });
+  const id = started.body?.handover?.id;
+  if (!id) return started;
+
+  const [sources, members, tasks] = await Promise.all(['sources', 'members', 'tasks'].map(table => memory.list(table)));
+  const analysis = analyzeWorkspace({ sources, members, tasks });
+  const nameOf = userId => members.find(member => member.user_id === userId)?.name ?? userId;
+  const detail = await dispatch('demo-admin', 'GET', `/api/handovers/${id}`);
+  const sourcesById = new Map([...sources, ...(detail.body?.sources ?? [])].map(source => [source.id, source]));
+  for (const question of detail.body?.questions ?? []) {
+    if (question.status !== 'open') continue;
+    const answer = composeInterviewAnswer(question, analysis, { sourcesById, leaverName: nameOf(leaverId), incomingName: nameOf(incomingId) });
+    await dispatch(leaverId, 'POST', `/api/handovers/${id}/answers`, { questionId: question.id, answer });
+  }
+  await dispatch('demo-admin', 'POST', `/api/handovers/${id}/generate`);
+  const compiled = await dispatch('demo-admin', 'GET', `/api/handovers/${id}`);
+  for (const claim of compiled.body?.claims ?? []) {
+    if (claim.status !== 'pending' || (claim.conflict && !claim.conflict.resolved)) continue;
+    await dispatch('demo-admin', 'PATCH', `/api/handovers/${id}/claims/${claim.id}`, { status: 'approved' });
+  }
+  return { status: 200, body: { prepared: true, handover_id: id } };
 }

@@ -28,25 +28,27 @@ const C = {
   green: '#34d399'
 }
 
-// Persona and step per tour stop; the last stop returns to the admin for the MCP simulator.
-const TOUR = [
-  { persona: 'demo-admin', text: 'May (Admin): open Overview for bus-factor alerts and the contribution matrix built from BATON\'s real commits, then start a handover from an alert.' },
-  { persona: 'demo-leaver', text: 'Leaving engineer: open "Handovers" to answer or skip the risk-ranked exit-interview questions.' },
-  { persona: 'demo-incoming', text: 'Incoming engineer: after approval, open the packet from Handovers, ask a question and acknowledge it.' },
-  { persona: 'demo-admin', text: 'May (Admin): try the Live MCP simulator; the sample key is redacted before anything is stored.' }
-]
 
 export function DemoPage() {
   const { navigate } = useRouter()
   const [activePersona, setActivePersona] = useState(DEMO_PERSONAS.some((p) => p.id === api.getDemoUser()) ? api.getDemoUser() : 'demo-admin')
   const [resetNotice, setResetNotice] = useState(false)
-  const [tourStep, setTourStep] = useState(1)
-  const [showTour, setShowTour] = useState(true)
   const [isInitializing, setIsInitializing] = useState(true)
+  const [inviteResult, setInviteResult] = useState(null)
 
   // Install before child effects run, so the workspace's first requests are served demo data
   // even after an in-app navigation from /usage. Idempotent.
   installDemoInterceptor(activePersona)
+
+  // Invite links made in the demo point back here; accepting adds the teammate to this demo team.
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('join')
+    if (!token) return
+    window.history.replaceState(null, '', window.location.pathname)
+    api.acceptInvite(token)
+      .then(res => setInviteResult({ status: 'accepted', organizationId: res?.organization_id, message: `Invite accepted: ${res?.membership?.name ?? 'a new teammate'} joined the team. See Team & Tokens.` }))
+      .catch(err => setInviteResult({ status: 'error', message: err.message }))
+  }, [])
 
   // Glowing logo loading transition on page entry
   useEffect(() => {
@@ -312,6 +314,7 @@ export function DemoPage() {
         <Workspace
           key={activePersona}
           mode="demo"
+          inviteResult={inviteResult}
           demoPersonas={DEMO_PERSONAS}
           demoPersona={activePersona}
           onDemoPersonaChange={handleSwitchPersona}
@@ -321,109 +324,6 @@ export function DemoPage() {
         />
       </main>
 
-      {/* Floating 1-Click Tour Guide Widget (Docked at bottom-right, never squashes UI) */}
-      {showTour && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 24,
-            right: 24,
-            zIndex: 99999,
-            background: 'rgba(17, 19, 23, 0.95)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid #282c35',
-            borderRadius: 12,
-            padding: '12px 16px',
-            boxShadow: '0 12px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(52, 211, 153, 0.12)',
-            maxWidth: 380,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: C.green,
-                  display: 'inline-block',
-                  boxShadow: '0 0 6px #34d399'
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 10,
-                  fontFamily: 'monospace',
-                  color: C.green,
-                  fontWeight: 700,
-                  letterSpacing: 0.5
-                }}
-              >
-                DEMO GUIDE · STEP {tourStep}/4
-              </span>
-            </div>
-            <button
-              onClick={() => setShowTour(false)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#6b7280',
-                cursor: 'pointer',
-                fontSize: 13,
-                lineHeight: 1
-              }}
-              title="Hide guide"
-            >
-              ✕
-            </button>
-          </div>
-          <div style={{ fontSize: 12, color: '#e5e7eb', lineHeight: 1.5 }}>
-            {TOUR[tourStep - 1].text}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <button
-              onClick={() => {
-                const nextStep = tourStep > 1 ? tourStep - 1 : TOUR.length
-                setTourStep(nextStep)
-                handleSwitchPersona(TOUR[nextStep - 1].persona)
-              }}
-              style={{
-                background: 'transparent',
-                border: '1px solid #2e333d',
-                color: '#9ca3af',
-                padding: '3px 8px',
-                borderRadius: 4,
-                cursor: 'pointer',
-                fontSize: 10.5
-              }}
-            >
-              ← Prev
-            </button>
-            <button
-              onClick={() => {
-                const nextStep = tourStep < TOUR.length ? tourStep + 1 : 1
-                setTourStep(nextStep)
-                handleSwitchPersona(TOUR[nextStep - 1].persona)
-              }}
-              style={{
-                background: 'rgba(52, 211, 153, 0.14)',
-                border: '1px solid rgba(52, 211, 153, 0.4)',
-                color: C.green,
-                padding: '3px 10px',
-                borderRadius: 4,
-                cursor: 'pointer',
-                fontSize: 10.5,
-                fontWeight: 600
-              }}
-            >
-              Next Step →
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

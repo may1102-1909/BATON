@@ -119,9 +119,9 @@ export function Workspace({
   }, [notice]);
 
   useEffect(() => {
-    if (inviteResult?.status === 'accepted') notify('Invite accepted. You joined the team.', 'success');
+    if (inviteResult?.status === 'accepted') notify(inviteResult.message || 'Invite accepted. You joined the team.', 'success');
     if (inviteResult?.status === 'error') notify(inviteResult.message);
-  }, []);
+  }, [inviteResult]);
 
   const handleSimulateMcp = async () => {
     if (!selectedOrgId || simRunning || !simDecisionText.trim()) return;
@@ -221,6 +221,13 @@ export function Workspace({
     if (!selectedOrgId) return;
     refreshOrgState(selectedOrgId);
   }, [selectedOrgId, demoPersona]);
+
+  // The demo opens straight into its prepared handover.
+  useEffect(() => {
+    if (!isDemo || activeTab !== 'handovers' || activeHandoverDetail || loadingHandoverId) return;
+    const first = orgState?.handovers?.[0];
+    if (first) loadHandover(first.id);
+  }, [isDemo, activeTab, orgState]);
 
   async function refreshOrgState(orgId) {
     try {
@@ -375,7 +382,46 @@ export function Workspace({
   const handleGenerateHandover = () => runHandoverAction(id => api.generateHandover(id), res => res?.fallback_reason ? 'Claims compiled from evidence only (the AI model was unavailable).' : 'Claims compiled.');
   const handleClaimReview = (claimId, status) => runHandoverAction(id => api.updateClaim(id, claimId, { status }));
   const handleSkipQuestion = questionId => runHandoverAction(id => api.skipQuestion(id, questionId));
-  const handleResolveConflict = (claimId, body) => runHandoverAction(id => api.resolveConflict(id, claimId, body), 'Conflict resolved.');
+
+  // In the demo the conflict is the last open item, so resolving it also approves the handover for export.
+  async function handleResolveConflict(claimId, body) {
+    const ok = await runHandoverAction(id => api.resolveConflict(id, claimId, body), isDemo ? null : 'Conflict resolved.');
+    if (!ok || !isDemo) return;
+    const id = activeHandoverDetail?.handover?.id;
+    const detail = await api.getHandover(id).catch(() => null);
+    const waiting = (detail?.claims || []).some(c => c.status === 'pending') || (detail?.conflicts || []).some(c => !c.resolved);
+    if (waiting) { notify('Conflict resolved. Review the remaining claims, then approve the handover.', 'success'); return; }
+    await runHandoverAction(handoverId => api.approveHandover(handoverId), 'Conflict resolved and handover approved. Export it with the buttons at the top right.');
+  }
+
+  function handleDemoExport(format) {
+    const handover = activeHandoverDetail?.handover;
+    if (!handover) return Promise.resolve();
+    return runBusy(`export:${format}`, async () => {
+      try {
+        const [{ buildHandoverMarkdown }, { markdownToPdf }] = await Promise.all([import('../pages/demoHandoverDoc.js'), import('../pages/demoPdf.js')]);
+        const detail = await api.getHandover(handover.id);
+        const state = await api.fetchOrgState(selectedOrgId);
+        const repositoryName = (state.repositories || []).map(repo => repo.full_name).join(', ') || 'no repository';
+        const markdown = buildHandoverMarkdown({ detail, workspace: state, memberLabel, orgName: selectedOrg?.name || 'Demo team', repositoryName });
+        const name = `handover-${slugify(memberLabel(handover.leaver_id), 'leaver')}-to-${slugify(memberLabel(handover.incoming_id), 'incoming')}`;
+        if (format === 'pdf') {
+          const pdf = markdownToPdf(markdown, { footer: `Baton handover · ${memberLabel(handover.leaver_id)} to ${memberLabel(handover.incoming_id)} · ${repositoryName}` });
+          const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+          const link = Object.assign(document.createElement('a'), { href: url, download: `${name}.pdf` });
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } else {
+          downloadText(`${name}.md`, markdown);
+        }
+        notify(`${format === 'pdf' ? 'PDF' : 'Markdown'} handover downloaded, built from the ${(state.sources || []).filter(s => s.type === 'commit').length} commits in this workspace.`, 'success');
+      } catch (err) {
+        notify(`Export failed: ${err.message}`);
+      }
+    });
+  }
 
   async function handleEditClaim(claimId, text) {
     const id = activeHandoverDetail?.handover?.id;
@@ -504,6 +550,13 @@ export function Workspace({
     : riskItems.filter(r => (r.source_ids || []).some(id => sourceRepo.get(id) === riskRepoId));
   const visibleBusFactor = riskRepoId === 'all' ? busFactor : busFactor.filter(b => b.repository_id === riskRepoId);
   const checklistItems = buildChecklist({ members, repositories, tokens, sources, handovers });
+  // Demo: pre-fill each open conflict with the leaver's interview answer and the more recent side.
+  const conflictSuggestions = isDemo ? Object.fromEntries((activeHandoverDetail?.conflicts || []).filter(c => !c.resolved).map(conflict => {
+    const sides = conflict.sides || [];
+    const answer = (activeHandoverDetail.questions || []).find(q => q.answer && /Sources disagree/i.test(q.question_text) && sides.every(side => !side.date || q.question_text.includes(side.date)))?.answer;
+    const latest = [...sides].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')))[0];
+    return [conflict.claim_id, answer ? { resolution: answer, chosenSourceId: latest?.source_id ?? '' } : null];
+  }).filter(([, value]) => value)) : {};
 
   const noticeBar = notice && (
     <div
@@ -798,6 +851,12 @@ export function Workspace({
         {activeTab === 'handovers' && (
           <HandoversTab
             activeHandoverDetail={activeHandoverDetail}
+            conflictSuggestions={conflictSuggestions}
+            handleDemoExport={handleDemoExport}
+            isDemo={isDemo}
+            riskAlerts={riskAlerts}
+            showAllAlerts={showAllAlerts}
+            setShowAllAlerts={setShowAllAlerts}
             answerText={answerText}
             answeringQuestionId={answeringQuestionId}
             handleAcknowledgeHandover={handleAcknowledgeHandover}
@@ -852,7 +911,7 @@ export function Workspace({
         />
       )}
 
-      {showInviteModal && <InviteModal orgId={selectedOrgId} notify={notify} onClose={() => { setShowInviteModal(false); refreshOrgState(selectedOrgId); }} />}
+      {showInviteModal && <InviteModal orgId={selectedOrgId} notify={notify} linkPrefix={isDemo ? '/demo-page?join=' : '/auth?invite='} onClose={() => { setShowInviteModal(false); refreshOrgState(selectedOrgId); }} />}
 
       {showTokenModal && (
         <TokenModal

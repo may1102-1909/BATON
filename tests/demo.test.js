@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createApp } from '../server/app.js';
 import { handleDemoRequest } from '../server/demo.js';
 import { getInitialDemoState } from '../src/pages/demoSandbox.js';
+import { buildHandoverMarkdown } from '../src/pages/demoHandoverDoc.js';
+import { markdownToPdf } from '../src/pages/demoPdf.js';
 
 const call = (state, persona, method, path, body) => handleDemoRequest({ persona, state, request: { method, path, body } }, { createApp });
 const hasEmail = value => /"email"|[^\s"]+@[^\s"]+\.[a-z]/i.test(JSON.stringify(value));
@@ -40,18 +42,71 @@ test('a handover is generated and read back through the real engine', async () =
   assert.equal(hasEmail([detail, risks]), false);
 });
 
-test('tokens, invites and GitHub OAuth are production only', async () => {
+test('GitHub OAuth, invite acceptance and other collector routes stay production only', async () => {
   const seed = getInitialDemoState();
   for (const [method, path, body] of [
-    ['POST', '/api/orgs/demo-org/tokens', { name: 'ci' }],
-    ['POST', '/api/orgs/demo-org/invites', { role: 'member' }],
     ['GET', '/api/orgs/demo-org/github/connect'],
+    ['POST', '/api/invites/accept', { token: 'x'.repeat(40) }],
+    ['POST', '/api/collector/commit', {}],
     ['POST', '/api/demo', {}],
   ]) {
     const result = await call(seed, 'demo-admin', method, path, body);
     assert.equal(result.status, 403, path);
     assert.equal(result.body.error, 'Available in Production mode');
   }
+});
+
+test('a demo MCP token authenticates the collector push and search the MCP server uses, and invites can be created', async () => {
+  const seed = getInitialDemoState();
+  const token = await call(seed, 'demo-admin', 'POST', '/api/orgs/demo-org/tokens', { name: 'claude' });
+  assert.equal(token.status, 201);
+  assert.match(token.body.token, /^baton_/);
+  const authorization = `Bearer ${token.body.token}`;
+  const fakeKey = 'sk_' + 'live_SAMPLE00000000000000000000';
+  const event = { type: 'decision', data: { decision: `Rotate ${fakeKey}`, reason: 'leaked' }, org_id: 'demo-org', repository_id: 'demo-repo', session_id: 's', event_id: 'e', source: 'baton-mcp-server' };
+  const pushed = await handleDemoRequest({ persona: 'demo-admin', state: token.state, request: { method: 'POST', path: '/api/collector/push', body: event, authorization } }, { createApp });
+  assert.equal(pushed.status, 201);
+  assert.doesNotMatch(pushed.body.memory.content, /sk_live_SAMPLE/);
+  const searched = await handleDemoRequest({ persona: 'demo-admin', state: pushed.state, request: { method: 'GET', path: '/api/collector/search?q=Rotate&org_id=demo-org', authorization } }, { createApp });
+  assert.equal(searched.status, 200);
+  const unauthenticated = await handleDemoRequest({ persona: 'demo-admin', state: pushed.state, request: { method: 'POST', path: '/api/collector/push', body: event, authorization: 'Bearer baton_not-a-real-token-at-all-xx' } }, { createApp });
+  assert.equal(unauthenticated.status, 401);
+  const invite = await call(seed, 'demo-admin', 'POST', '/api/orgs/demo-org/invites', { role: 'member' });
+  assert.equal(invite.status, 201);
+  assert.ok(invite.body.token.length >= 32);
+});
+
+test('the prepared demo handover is answered and approved except its conflict, and the export follows the workspace commits', async () => {
+  const seed = getInitialDemoState();
+  assert.deepEqual(seed.members.map(member => member.name), ['May (Admin)', 'Krishna Gupta', 'Vikrant']);
+  assert.ok(!JSON.stringify(seed.sources).includes('renoschubert'));
+  const prepared = await call(seed, 'demo-admin', 'POST', '/api/demo/prepare-handover', {});
+  assert.equal(prepared.status, 200);
+  const id = prepared.body.handover_id;
+  const detail = await call(prepared.state, 'demo-admin', 'GET', `/api/handovers/${id}`);
+  assert.ok(detail.body.questions.length > 0 && detail.body.questions.every(question => question.status === 'answered' && question.answer));
+  const pending = detail.body.claims.filter(claim => claim.status === 'pending');
+  assert.equal(pending.length, 1);
+  assert.ok(pending[0].conflict && !pending[0].conflict.resolved);
+  const again = await call(prepared.state, 'demo-admin', 'POST', '/api/demo/prepare-handover', {});
+  assert.equal(again.body.prepared, false);
+
+  const conflict = detail.body.conflicts[0];
+  const resolved = await call(prepared.state, 'demo-admin', 'POST', `/api/handovers/${id}/conflicts/${conflict.claim_id}/resolve`, { resolution: 'Comment is current.', chosen_source_id: conflict.sides[1].source_id });
+  const approved = await call(resolved.state, 'demo-admin', 'POST', `/api/handovers/${id}/approve`);
+  assert.equal(approved.status, 200);
+  const final = await call(approved.state, 'demo-admin', 'GET', `/api/handovers/${id}`);
+  const workspace = (await call(approved.state, 'demo-admin', 'GET', '/api/orgs/demo-org/state')).body;
+  const memberLabel = userId => workspace.members.find(member => member.user_id === userId)?.name ?? userId;
+  const build = sources => buildHandoverMarkdown({ detail: final.body, workspace: { ...workspace, sources }, memberLabel, orgName: 'Demo', repositoryName: 'may1102-1909/BATON' });
+  const markdown = build(workspace.sources);
+  assert.match(markdown, /^# Engineering handover: Krishna Gupta to Vikrant/);
+  assert.match(markdown, new RegExp(`${workspace.sources.filter(source => source.type === 'commit').length} commits`));
+  assert.match(markdown, /Resolved by May \(Admin\)/);
+  const fewer = build(workspace.sources.filter((source, index) => source.type !== 'commit' || index % 2 === 0));
+  assert.notEqual(fewer, markdown);
+  const pdf = Buffer.from(markdownToPdf(markdown)).toString('latin1');
+  assert.ok(pdf.startsWith('%PDF-1.4') && pdf.trimEnd().endsWith('%%EOF'));
 });
 
 test('state round-trips and the caller state is never mutated', async () => {

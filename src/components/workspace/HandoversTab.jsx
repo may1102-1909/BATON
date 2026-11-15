@@ -3,6 +3,12 @@ import { Citations, ClaimsView, ConflictsPanel, RiskBadge, VersionHistory } from
 
 export function HandoversTab({
   activeHandoverDetail,
+  conflictSuggestions = {},
+  handleDemoExport,
+  isDemo = false,
+  riskAlerts = [],
+  showAllAlerts = false,
+  setShowAllAlerts,
   answerText,
   answeringQuestionId,
   handleAcknowledgeHandover,
@@ -35,18 +41,33 @@ export function HandoversTab({
   sources,
   startHandoverFor,
 }) {
+  const demoExportReady = isDemo && hv?.status === 'approved';
   return (
           <div>
             <div className="ws-card">
               <div className="ws-card-header">
                 <h2 className="ws-card-title">Engineering handovers</h2>
-                <button
-                  type="button"
-                  className="ws-btn ws-btn-primary ws-btn-sm"
-                  onClick={() => startHandoverFor("")}
-                >
-                  + Initiate Handover
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {demoExportReady && (
+                    <>
+                      <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => handleDemoExport('pdf')} disabled={isBusy('export:pdf')}>
+                        {isBusy('export:pdf') ? 'Building PDF…' : '⬇ Export PDF'}
+                      </button>
+                      <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => handleDemoExport('md')} disabled={isBusy('export:md')}>
+                        {isBusy('export:md') ? 'Building…' : '⬇ Export Markdown'}
+                      </button>
+                    </>
+                  )}
+                  {(isAdmin || !isDemo) && (
+                    <button
+                      type="button"
+                      className={`ws-btn ws-btn-sm ${demoExportReady ? '' : 'ws-btn-primary'}`}
+                      onClick={() => startHandoverFor("")}
+                    >
+                      + Initiate Handover
+                    </button>
+                  )}
+                </div>
               </div>
 
               {handovers.length === 0 ? (
@@ -81,6 +102,7 @@ export function HandoversTab({
                   canResolve={isAdmin && hv?.status === 'draft'}
                   onResolve={handleResolveConflict}
                   nameOf={memberLabel}
+                  suggestions={conflictSuggestions}
                 />
 
                 {/* Header card with status and actions */}
@@ -123,7 +145,7 @@ export function HandoversTab({
                       <button type="button" className="ws-btn ws-btn-sm" onClick={() => setPacketId(hv.id)}>
                         Open packet
                       </button>
-                      {hv?.status === 'approved' && (
+                      {hv?.status === 'approved' && !isDemo && (
                         <button type="button" className="ws-btn ws-btn-sm" onClick={handleExportHandover} disabled={isBusy('export')}>
                           {isBusy('export') ? 'Exporting…' : 'Export Markdown'}
                         </button>
@@ -310,6 +332,39 @@ export function HandoversTab({
                   <VersionHistory handoverId={hv.id} notify={notify} refreshKey={hv.version} />
                 </div>
               </div>
+            )}
+
+            {isDemo && riskAlerts.length > 0 && (
+              <section className="ws-card" aria-label="Bus factor alerts">
+                <div className="ws-card-header">
+                  <h2 className="ws-card-title">Who to hand over next</h2>
+                  <span className="ws-badge ws-badge-inferred">{riskAlerts.length} bus-factor alerts</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(showAllAlerts ? riskAlerts : riskAlerts.slice(0, 3)).map(alert => (
+                    <div key={alert.module} className="ws-alert" style={{ background: 'rgba(245, 158, 11, 0.06)', borderColor: 'rgba(245, 158, 11, 0.3)', margin: 0 }}>
+                      <span>
+                        <strong style={{ color: '#fbbf24' }}>{alert.module}:</strong> {alert.message}
+                      </span>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          className="ws-btn ws-btn-sm"
+                          aria-label={`Start handover for ${alert.sole_contributor?.name || 'contributor'} (${alert.module})`}
+                          onClick={() => startHandoverFor(alert.sole_contributor?.id)}
+                        >
+                          Start handover
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {riskAlerts.length > 3 && (
+                    <button type="button" className="ws-btn ws-btn-sm" style={{ alignSelf: 'flex-start' }} aria-expanded={showAllAlerts} onClick={() => setShowAllAlerts(value => !value)}>
+                      {showAllAlerts ? 'Show fewer alerts' : `Show all ${riskAlerts.length} alerts`}
+                    </button>
+                  )}
+                </div>
+              </section>
             )}
           </div>
   );

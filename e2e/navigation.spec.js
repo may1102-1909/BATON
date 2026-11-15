@@ -14,7 +14,7 @@ test('dashboard without Supabase settings explains what is missing', async ({ pa
 
 test('demo data never shows an email address', async ({ page }) => {
   await page.goto('/demo-page');
-  await expect(page.getByRole('region', { name: 'Bus factor alerts' })).toBeVisible();
+  await expect(page.getByRole('table')).toContainText('Bus factor');
   for (const tab of ['Team & Tokens', 'Memory & Decisions']) {
     await page.getByRole('tab', { name: new RegExp(`^${tab}`) }).click();
     expect(await page.locator('body').innerText()).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);

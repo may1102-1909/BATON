@@ -35,7 +35,7 @@ export function OverviewTab({
               <OnboardingChecklist orgId={selectedOrgId} items={checklistItems} onGo={setActiveTab} />
             )}
 
-            {riskAlerts.length > 0 && (
+            {riskAlerts.length > 0 && !isDemo && (
               <section className="ws-alert-list" aria-label="Bus factor alerts">
                 {(showAllAlerts ? riskAlerts : riskAlerts.slice(0, 3)).map(alert => (
                   <div key={alert.module} className="ws-alert">
