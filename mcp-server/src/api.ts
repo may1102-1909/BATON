@@ -126,6 +126,9 @@ async function request<T>(path: string, init: RequestInit = {}, asText = false):
       const detail = typeof body === 'object' && body !== null && 'error' in body
         ? String((body as { error: unknown }).error).slice(0, 500)
         : `HTTP ${response.status}`;
+      if (response.status >= 500) {
+        return { success: false, message: safe(`Baton backend is temporarily unavailable (${response.status}): ${detail} No data was saved; try again shortly.`) };
+      }
       return { success: false, message: safe(`Baton backend rejected the request (${response.status}): ${detail}`) };
     }
     return { success: true, message: 'Baton backend request succeeded.', data: safe(body) as T };

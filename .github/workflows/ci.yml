@@ -20,6 +20,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: MCP build matches the committed mcp-server/dist
+        run: |
+          npm run build:mcp
+          git diff --exit-code -- mcp-server/dist || { echo "::error::mcp-server/dist is stale. Run 'npm run build:mcp' and commit the result."; exit 1; }
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

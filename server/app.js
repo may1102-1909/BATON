@@ -121,6 +121,15 @@ const sourceAllowed = (source, actor) => sourceVisible(source, actor) && (actor.
 // GitHub's redirect cannot carry a bearer token; the one-use OAuth state identifies the user instead.
 const PUBLIC_PATHS = new Set(['/api/health', '/api/github/callback', '/api/demo']);
 
+// Supabase unreachable, timing out or failing upstream: the request can be retried, so answer 503, not 500.
+const OUTAGE = /fetch failed|ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|socket hang up|network ?error|timed? ?out|aborted|upstream connect|service unavailable|bad gateway|gateway timeout/i;
+function isDatabaseOutage(error) {
+  const message = String(error?.message ?? '');
+  return /(^|: )Supabase \w+ \S+ failed:/.test(message) && OUTAGE.test(message)
+    || ['TimeoutError', 'AbortError'].includes(error?.name) || ['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET'].includes(error?.cause?.code);
+}
+const DATABASE_UNAVAILABLE = 'Database unavailable, try again shortly.';
+
 function githubCallbackReason(error) {
   const message = String(error?.message ?? '');
   if (/state is invalid|code and state/i.test(message)) return 'expired';
@@ -135,7 +144,7 @@ function githubCallbackReason(error) {
 async function githubCall(run) {
   try { return await run(); }
   catch (error) {
-    if (error instanceof HttpError) throw error;
+    if (error instanceof HttpError || isDatabaseOutage(error)) throw error;
     const message = String(error?.message ?? '');
     if (/^Link a GitHub account/.test(message)) throw new HttpError(409, message);
     if (/GitHub API .* failed \(401\)/.test(message)) throw new HttpError(409, 'Your GitHub link has expired. Connect GitHub again.');
@@ -219,6 +228,8 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
 
     const client = await getServiceClient();
     const { data, error } = await client.auth.getUser(bearer);
+    // A Supabase outage is not a bad token: do not tell the user to sign in again.
+    if (error && (error.name === 'AuthRetryableFetchError' || Number(error.status) >= 500)) throw new HttpError(503, DATABASE_UNAVAILABLE);
     if (error || !data?.user) throw new HttpError(401, 'Invalid or expired access token');
     const user = data.user;
     const memberships = (await store.list('members', { user_id: user.id })).filter(item => !item.disabled_at);
@@ -717,19 +728,28 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
         try {
           const qEmbedding = await embedText(rawQuery, geminiKey, fetchImpl);
           if (qEmbedding) {
-            const vectorMatches = await store.rpc('match_memory', {
-              query_embedding: qEmbedding,
-              p_org: orgId,
-              p_repo: repositoryId || null,
-              match_count: 40
-            });
-            // match_memory ignores per-source visibility, so every hit is re-checked against the caller.
+            const base = { query_embedding: qEmbedding, p_org: orgId, p_repo: repositoryId || null, match_count: 40 };
+            let vectorMatches;
+            try {
+              vectorMatches = await store.rpc('match_memory', { ...base, p_user: actor.id, p_role: actor.role, p_function_role: actor.function_role ?? null });
+            } catch (error) {
+              // Databases without migration 20261115_match_memory_visibility only know the 4-argument version.
+              if (!/match_memory|function|schema cache/i.test(String(error?.message))) throw error;
+              vectorMatches = await store.rpc('match_memory', base);
+            }
+            // The database filters by caller too; this second check keeps older databases and future edits safe.
+            const hits = Array.isArray(vectorMatches) ? vectorMatches : [];
+            const sourceIds = hits.filter(m => m.kind !== 'file').map(m => m.id);
+            const fetched = typeof store.getMany === 'function'
+              ? await store.getMany('sources', sourceIds)
+              : await Promise.all(sourceIds.map(id => store.get('sources', id)));
+            const byId = new Map(fetched.filter(Boolean).map(source => [source.id, source]));
             const allowed = [];
-            for (const m of Array.isArray(vectorMatches) ? vectorMatches : []) {
+            for (const m of hits) {
               if (m.kind === 'file') {
                 if (actor.role === 'admin' || canSee(audienceFromPaths([m.path]), actor.function_role)) allowed.push(m);
               } else {
-                const source = await store.get('sources', m.id);
+                const source = byId.get(m.id);
                 if (source && source.org_id === orgId && sourceAllowed(source, actor)) allowed.push(m);
               }
             }
@@ -998,6 +1018,11 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       return await routes(req, res, url, auth, body);
     } catch (error) {
       if (res.headersSent) return res.end();
+      if (!(error instanceof HttpError) && isDatabaseOutage(error)) {
+        console.error('[api] database unavailable', req.method, req.url?.split('?')[0], error?.message ?? error);
+        res.setHeader('retry-after', '5');
+        return json(res, 503, { error: DATABASE_UNAVAILABLE });
+      }
       const status = error instanceof HttpError ? error.status
         : Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599 ? error.status : 500;
       if (status === 500) console.error('[api]', req.method, req.url?.split('?')[0], error?.message ?? error);

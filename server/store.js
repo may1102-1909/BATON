@@ -12,6 +12,7 @@ const TABLES = {
 const DB_SOURCE_TYPES = { decision: 'mcp_decision', blocker: 'mcp_blocker', pull_request: 'pr' };
 const API_SOURCE_TYPES = Object.fromEntries(Object.entries(DB_SOURCE_TYPES).map(([api, db]) => [db, api]));
 const OPTIONAL_COLUMNS = { handover_questions: ['risk_score', 'risk_reasons', 'confidence', 'answer_mode'], members: ['function_role'] };
+const DB_TIMEOUT_MS = 15_000;
 // Types the production sources.type constraint may not know are stored as mcp_decision; metadata.source_type keeps the real one.
 const LEGACY_ONLY_TYPES = new Set(['branch', 'task_comment', 'memory', 'interview']);
 const sourceFromDb = record => {
@@ -43,6 +44,10 @@ export function createMemoryStore(seed = {}) {
     async get(name, id) {
       return clone(table(name).find(record => record.id === id) ?? null);
     },
+    async getMany(name, ids = []) {
+      const wanted = new Set(ids);
+      return clone(table(name).filter(record => wanted.has(record.id)));
+    },
     async insert(name, record) {
       const value = { id: randomUUID(), created_at: new Date().toISOString(), ...clone(record) };
       table(name).push(value);
@@ -61,6 +66,17 @@ export function createMemoryStore(seed = {}) {
       invite.accepted_at = acceptedAt;
       invite.accepted_by = acceptedBy;
       return clone(invite);
+    },
+    async claimGeneration(id, startedAt, staleBefore) {
+      const handover = table('handovers').find(record => record.id === id);
+      if (!handover) return null;
+      if (handover.generation_started_at && Date.parse(handover.generation_started_at) >= Date.parse(staleBefore)) return null;
+      handover.generation_started_at = startedAt;
+      return clone(handover);
+    },
+    async releaseGeneration(id) {
+      const handover = table('handovers').find(record => record.id === id);
+      if (handover) handover.generation_started_at = null;
     },
     async remove(name, id) {
       const records = table(name);
@@ -90,6 +106,8 @@ export function createSupabaseStore(client, env = process.env) {
       const { createClient } = await import('@supabase/supabase-js');
       return createClient(url, serviceRoleKey, {
         auth: { autoRefreshToken: false, persistSession: false },
+        // A hung database must fail fast (mapped to 503) instead of holding the request until the platform limit.
+        global: { fetch: (input, init = {}) => fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(DB_TIMEOUT_MS) }) },
       });
     })();
   } else {
@@ -160,6 +178,12 @@ export function createSupabaseStore(client, env = process.env) {
       const record = await run(`get ${name}`, db.from(tableName(name)).select('*').eq('id', id).maybeSingle());
       return name === 'sources' ? sourceFromDb(record) : record;
     },
+    async getMany(name, ids = []) {
+      if (!ids.length) return [];
+      const db = await clientPromise;
+      const rows = await run(`getMany ${name}`, db.from(tableName(name)).select('*').in('id', [...new Set(ids)]));
+      return name === 'sources' ? rows.map(sourceFromDb) : rows;
+    },
     async insert(name, record) {
       const db = await clientPromise;
       const saved = await writeTolerant(name, normalizeForDb(name, record), payload => run(`insert ${name}`, db.from(tableName(name)).insert(payload).select('*').single()));
@@ -175,6 +199,16 @@ export function createSupabaseStore(client, env = process.env) {
       const result = await run('claim invite', db.from(tableName('invites')).update({ accepted_at: acceptedAt, accepted_by: acceptedBy })
         .eq('id', id).is('accepted_at', null).gt('expires_at', acceptedAt).select('*').maybeSingle());
       return result;
+    },
+    // Conditional update: only one serverless instance can hold a handover's generation claim at a time.
+    async claimGeneration(id, startedAt, staleBefore) {
+      const db = await clientPromise;
+      return run('claim generation', db.from('handovers').update({ generation_started_at: startedAt })
+        .eq('id', id).or(`generation_started_at.is.null,generation_started_at.lt.${staleBefore}`).select('id').maybeSingle());
+    },
+    async releaseGeneration(id) {
+      const db = await clientPromise;
+      await run('release generation', db.from('handovers').update({ generation_started_at: null }).eq('id', id));
     },
     async remove(name, id) {
       const db = await clientPromise;

@@ -264,3 +264,33 @@ test('vector hits that are all hidden fall back to filtered text search instead 
   assert.equal(fe.body.mode, 'text');
   assert.deepEqual(searchIds(fe.body), ['pub']);
 });
+
+test('vector search sends the caller to match_memory, falls back on older databases, and re-checks in one lookup', async () => {
+  const store = searchFixture();
+  const hits = await store.rpc();
+  const calls = [];
+  let upgraded = true;
+  store.rpc = async (name, params) => {
+    calls.push(params);
+    if (!upgraded && 'p_role' in params) throw new Error('Supabase rpc match_memory failed: Could not find the function public.match_memory(match_count, p_function_role, p_org, p_repo, p_role, p_user, query_embedding) in the schema cache');
+    return hits;
+  };
+  let single = 0, batched = 0;
+  const get = store.get, getMany = store.getMany;
+  store.get = async (...args) => { if (args[0] === 'sources') single += 1; return get(...args); };
+  store.getMany = async (...args) => { batched += 1; return getMany(...args); };
+  const { call } = makeApp(store, { env: { GEMINI_API_KEY: 'k' }, fetchImpl: embedFetch });
+
+  const fe = await call('user:user-fe', 'GET', `/api/collector/search?org_id=${ORG}&q=deploy`);
+  assert.deepEqual(searchIds(fe.body), ['f2', 'pub']);
+  assert.deepEqual({ user: calls[0].p_user, role: calls[0].p_role, fn: calls[0].p_function_role }, { user: 'user-fe', role: 'team', fn: 'frontend' });
+  assert.equal(batched, 1);
+  assert.equal(single, 0, 'sources are fetched in one batch, not one lookup per hit');
+
+  upgraded = false;
+  calls.length = 0;
+  const old = await call('user:user-fe', 'GET', `/api/collector/search?org_id=${ORG}&q=deploy`);
+  assert.equal(calls.length, 2);
+  assert.equal('p_role' in calls[1], false, 'retries with the 4-argument signature');
+  assert.deepEqual(searchIds(old.body), ['f2', 'pub'], 'the API still filters what an old database returns');
+});

@@ -195,6 +195,8 @@ create table if not exists public.handovers (
   updated_at timestamptz not null default now()
 );
 alter table public.handovers add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+-- Cross-instance generation lock (see claimGeneration in server/store.js).
+alter table public.handovers add column if not exists generation_started_at timestamptz;
 
 create table if not exists public.handover_claims (
   id uuid primary key default gen_random_uuid(),
@@ -563,8 +565,12 @@ create policy agent_messages_member_access on public.agent_messages for all to a
 create policy file_summaries_member_access on public.file_summaries for all to authenticated using (public.is_org_member(org_id)) with check (public.is_org_member(org_id));
 
 -- 18. Stored Procedure for Hybrid Semantic Recall (pgvector)
+-- Caller-aware: non-admins never receive admin-only, other people's private, or other-function evidence.
+-- File summaries carry no visibility; their path-based audience is applied by the API.
+drop function if exists public.match_memory(vector, uuid, uuid, int);
 create or replace function public.match_memory(
-  query_embedding vector(768), p_org uuid, p_repo uuid, match_count int default 8
+  query_embedding vector(768), p_org uuid, p_repo uuid, match_count int default 8,
+  p_user text default null, p_role text default null, p_function_role text default null
 ) returns table (kind text, id uuid, content text, path text, similarity float)
 language sql stable as $$
   (select 'source'::text, s.id, s.content, null::text,
@@ -572,6 +578,13 @@ language sql stable as $$
      from public.sources s
     where s.org_id = p_org and (p_repo is null or s.repository_id = p_repo)
       and s.embedding is not null
+      and (p_role = 'admin' or (
+            coalesce(s.visibility, 'all') <> 'admin'
+        and (coalesce(s.visibility, 'all') <> 'private' or s.author_id = p_user)
+        and (p_function_role is null
+          or jsonb_typeof(s.metadata->'audience') is distinct from 'array'
+          or s.metadata->'audience' ? 'all'
+          or s.metadata->'audience' ? p_function_role)))
     order by s.embedding <=> query_embedding limit match_count)
   union all
   (select 'file'::text, f.id, f.summary, f.path,

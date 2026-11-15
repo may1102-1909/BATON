@@ -244,6 +244,42 @@ test('generating twice, even concurrently, never duplicates claims', async () =>
   assert.equal((await call(member, 'POST', `/api/handovers/${id}/generate`, {})).status, 403);
 });
 
+test('a generation running on another server instance is refused; a stale claim is taken over and always released', async () => {
+  const { call, store } = handoverFixture();
+  const id = await start(call);
+  const claimOf = async () => (await store.get('handovers', id)).generation_started_at ?? null;
+
+  // Another instance claimed it a moment ago: refuse instead of interleaving claims.
+  await store.update('handovers', id, { generation_started_at: new Date().toISOString() });
+  const busy = await call(admin, 'POST', `/api/handovers/${id}/generate`, {});
+  assert.equal(busy.status, 409);
+  assert.match(busy.body.error, /already being generated/);
+  assert.equal((await store.list('handover_claims', { handover_id: id })).length, 0);
+
+  // A claim older than five minutes belongs to a crashed run.
+  await store.update('handovers', id, { generation_started_at: new Date(Date.now() - 6 * 60 * 1000).toISOString() });
+  const takeover = await call(admin, 'POST', `/api/handovers/${id}/generate`, {});
+  assert.equal(takeover.status, 200);
+  assert.ok(takeover.body.claims.length > 0);
+  assert.equal(await claimOf(), null, 'released after success');
+
+  // A failure part-way through still releases the claim.
+  const insert = store.insert;
+  store.insert = async (name, record) => { if (name === 'handover_claims') throw new Error('disk full'); return insert(name, record); };
+  assert.equal((await call(admin, 'POST', `/api/handovers/${id}/generate`, {})).status, 500);
+  store.insert = insert;
+  assert.equal(await claimOf(), null, 'released after failure');
+});
+
+test('databases without the generation_started_at column still generate (in-process lock only)', async () => {
+  const { call, store } = handoverFixture();
+  const id = await start(call);
+  store.claimGeneration = async () => { throw new Error('Supabase claim generation failed: column handovers.generation_started_at does not exist'); };
+  const generated = await call(admin, 'POST', `/api/handovers/${id}/generate`, {});
+  assert.equal(generated.status, 200);
+  assert.ok(generated.body.claims.length > 0);
+});
+
 test('exit interviews refresh: the leaver sees new state after answering, and others see nothing', async () => {
   const { call } = handoverFixture();
   const id = await start(call);
@@ -324,4 +360,63 @@ test('a configured GEMINI_MODEL is used for every Gemini request, with one share
   const standard = handoverFixture({ GEMINI_API_KEY: 'k' }, fetchImpl);
   await standard.call(admin, 'POST', `/api/handovers/${await start(standard.call)}/generate`, {});
   assert.ok(urls.every(url => url.includes('models/gemini-2.5-flash:generateContent')));
+});
+
+// ---------- database outage: retryable 503s, never "Internal server error" or "session expired" ----------
+
+// Fails the chosen store calls the way the Supabase adapter does when the database is unreachable.
+function failing(store, match) {
+  for (const method of ['list', 'get', 'getMany', 'insert', 'update', 'remove']) {
+    const original = store[method];
+    store[method] = async (name, ...args) => {
+      if (match(method, name)) throw new Error(`Supabase ${method} ${name} failed: TypeError: fetch failed`);
+      return original.call(store, name, ...args);
+    };
+  }
+  return store;
+}
+
+test('a database outage answers 503 with a retryable message on reads and writes', async () => {
+  const { call, store } = handoverFixture();
+  const id = await start(call);
+  failing(store, () => true);
+  for (const [method, path, body] of [
+    ['GET', '/api/me'], ['GET', `/api/orgs/${A}/state`], ['POST', `/api/orgs/${A}/memories`, { type: 'memory', content: 'note' }],
+    ['POST', `/api/handovers/${id}/generate`, {}],
+  ]) {
+    const response = await call(admin, method, path, body);
+    assert.equal(response.status, 503, `${method} ${path}`);
+    assert.equal(response.body.error, 'Database unavailable, try again shortly.');
+  }
+});
+
+test('an outage part-way through generation leaves the handover unchanged and unlocked', async () => {
+  const { call, store } = handoverFixture();
+  const id = await start(call);
+  const before = await store.get('handovers', id);
+  failing(store, (method, name) => method === 'insert' && name === 'handover_claims');
+  const response = await call(admin, 'POST', `/api/handovers/${id}/generate`, {});
+  assert.equal(response.status, 503);
+  const after = await store.get('handovers', id);
+  assert.equal(after.version, before.version);
+  assert.equal(after.generation_mode ?? null, before.generation_mode ?? null);
+  assert.equal(after.generation_started_at ?? null, null);
+});
+
+test('a Supabase auth outage is a 503, not "invalid or expired access token"', async () => {
+  const store = createMemoryStore({ organizations: [{ id: A, name: 'Alpha' }] });
+  const outage = Object.assign(new Error('fetch failed'), { name: 'AuthRetryableFetchError', status: 0 });
+  const { call } = makeApp(store, { supabaseClient: { auth: { getUser: async () => ({ data: { user: null }, error: outage }) } } });
+  const me = await call('some-session-token', 'GET', '/api/me');
+  assert.equal(me.status, 503);
+  assert.equal(me.body.error, 'Database unavailable, try again shortly.');
+  const { call: badToken } = makeApp(store, { supabaseClient: { auth: { getUser: async () => ({ data: { user: null }, error: Object.assign(new Error('bad jwt'), { status: 401 }) }) } } });
+  assert.equal((await badToken('expired', 'GET', '/api/me')).status, 401);
+});
+
+test('ordinary database errors still surface as 500, so real bugs are not hidden as outages', async () => {
+  const { call, store } = handoverFixture();
+  store.list = async () => { throw new Error('Supabase list org_memberships failed: column org_memberships.nope does not exist'); };
+  const response = await call(admin, 'GET', '/api/me');
+  assert.equal(response.status, 500);
 });

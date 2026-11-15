@@ -44,7 +44,9 @@ flowchart TD
 
 Admin-only routes (never available to API tokens): `PATCH /api/orgs/:id` renames, `DELETE /api/orgs/:id` removes the organization and everything in it, `POST /api/orgs/:id/reset` removes memory (`scope: "sources"`) or memory plus tasks and handovers (`scope: "all"`), and `DELETE /api/orgs/:id/repositories/:repoId` disconnects a repository and the sources synced from it. Destructive organization routes require `confirm` to equal the exact organization name. Deletes are explicit per table, not database cascades; members, tokens, invites and the GitHub link survive a reset. `GET /api/handovers/:id/export.md` returns an approved handover as a Markdown attachment (claims by section with cited sources, resolved conflicts, known gaps; participants by GitHub login, never email) using the same visibility and audience filtering as the detail route.
 
-Search (`GET /api/collector/search`) re-checks every hit, vector or text, against source visibility and the caller's audience, because the database function `match_memory` does not filter by visibility.
+Search (`GET /api/collector/search`) passes the caller (user, role, function role) to the database function `match_memory`, which drops admin-only, other people's private and other-function sources itself (migration `20261115_match_memory_visibility.sql`). The API still re-checks every hit, vector or text, in one batched lookup, so databases without the migration (it falls back to the 4-argument call) and file summaries, whose audience comes from their path, stay filtered.
+
+Handover generation takes a conditional claim on `handovers.generation_started_at` (migration `20261115_handover_generation_lock.sql`) on top of the per-process lock, so two serverless instances cannot regenerate the same handover at once; a second request gets 409, and a claim older than 5 minutes is taken over. Database outages (network errors or the 15 s client timeout) answer 503 "Database unavailable, try again shortly."
 
 ## Round 3 handover intelligence
 

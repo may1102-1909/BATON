@@ -27,7 +27,8 @@ test.afterAll(async () => {
   await server?.close();
 });
 
-async function stubApi(page, { calls, repositories = repos, installations = [{ id: 5, account: { login: 'octo' } }] } = {}) {
+async function stubApi(page, { calls, repositories = repos, installations = [{ id: 5, account: { login: 'octo' } }], meOutages = 0 } = {}) {
+  let outagesLeft = meOutages;
   const log = calls || [];
   await page.route(`${SUPABASE_URL}/**`, route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
   await page.route('**/api/**', async route => {
@@ -38,6 +39,7 @@ async function stubApi(page, { calls, repositories = repos, installations = [{ i
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
     if (key === 'GET /api/health') return json({ ok: true, configured: { supabase: true, github: true }, githubInstallUrl: 'https://github.com/apps/baton-test/installations/new' });
+    if (key === 'GET /api/me' && outagesLeft > 0) { outagesLeft -= 1; return json({ error: 'Database unavailable, try again shortly.' }, 503); }
     if (key === 'GET /api/me') return json({ user: { id: 'user-1', email: 'owner@example.test' }, organizations: [{ id: 'org-1', name: org.name, role: 'admin' }] });
     if (key === 'GET /api/orgs/org-1/state') {
       return json({
@@ -140,6 +142,19 @@ test('the repository picker offers only your own GitHub account and organization
   const picker = page.getByRole('combobox', { name: 'GitHub account' });
   await expect(picker).toHaveValue('5');
   await expect(picker.locator('option')).toHaveText(['octo', 'acme-org']);
+});
+
+test('a database outage on first load shows a retryable message, and Retry recovers', async ({ page }) => {
+  await stubApi(page, { meOutages: 1 });
+  await signIn(page);
+  await page.goto(`${BASE}/dashboard`);
+
+  const alert = page.getByRole('alert').filter({ hasText: 'Database unavailable, try again shortly.' });
+  await expect(alert).toBeVisible();
+  await expect(page.getByText(/session has expired/i)).toHaveCount(0);
+  await alert.getByRole('button', { name: 'Retry' }).click();
+  await expect(alert).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /^Overview/ })).toBeVisible();
 });
 
 test('a GitHub account without the app installed is sent to the install step', async ({ page }) => {
