@@ -6,7 +6,7 @@ import { UsagePage } from './pages/UsagePage'
 import { DemoPage } from './pages/DemoPage'
 import { Auth } from './components/Auth'
 import { HandoverPage } from './pages/HandoverPage'
-import { captureInviteFromUrl } from './lib/invite'
+import { captureInviteFromUrl, getPendingInvite } from './lib/invite'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
 
 // Retired static screens; everything now lives in the real dashboard.
@@ -27,11 +27,12 @@ function AuthPageWrapper() {
   const [mode, setMode] = React.useState(isSignup ? 'signup' : 'login')
   const [hasInvite] = React.useState(() => Boolean(captureInviteFromUrl()))
 
-  // A visitor who is already signed in goes straight to the dashboard, where a pending invite is accepted.
+  // After signing in, visitors land on the usage guide; a pending invite goes to the dashboard, where it is accepted.
+  const afterSignIn = () => (getPendingInvite() ? '/dashboard' : '/usage')
   useEffect(() => {
     if (!isSupabaseConfigured) return
     supabase.auth.getSession().then(({ data }) => {
-      if (data?.session?.user) navigate('/dashboard', { replace: true })
+      if (data?.session?.user) navigate(afterSignIn(), { replace: true })
     }).catch(() => {})
   }, [])
 
@@ -41,7 +42,7 @@ function AuthPageWrapper() {
       setMode={setMode}
       hasInvite={hasInvite}
       back={() => navigate('/')}
-      onAuthSuccess={() => navigate('/dashboard')}
+      onAuthSuccess={() => navigate(afterSignIn())}
     />
   )
 }

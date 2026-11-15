@@ -19,9 +19,10 @@ test('an invite link keeps its token for after sign-in', async ({ page }) => {
   expect(await page.evaluate(() => sessionStorage.getItem('baton_invite'))).toBe('abc123-invite-token');
 });
 
-test('the landing page offers a sign-in path without waiting for the animation', async ({ page }) => {
+test('the landing page offers Launch App (no separate Sign in) without waiting for the animation', async ({ page }) => {
   await page.goto('/');
-  const signIn = page.getByRole('link', { name: 'Sign in' });
+  await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toHaveCount(0);
+  const signIn = page.getByRole('link', { name: 'Launch App' });
   await expect(signIn).toBeVisible();
   await signIn.click();
   await expect(page).toHaveURL(/\/auth$/);

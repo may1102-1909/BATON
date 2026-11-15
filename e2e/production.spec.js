@@ -282,3 +282,13 @@ test('a stored invite is accepted before the account data loads, then the dashbo
   expect(await page.evaluate(() => sessionStorage.getItem('baton_invite'))).toBeNull();
   await expect(page).toHaveURL(/\/dashboard$/);
 });
+
+test('a signed-in visitor on /auth lands on the usage guide; one with a pending invite lands on the dashboard', async ({ page }) => {
+  await stubApi(page);
+  await signIn(page);
+  await page.goto(`${BASE}/auth`);
+  await expect(page).toHaveURL(/\/usage$/);
+
+  await page.goto(`${BASE}/auth?invite=${INVITE}`);
+  await expect(page).toHaveURL(/\/dashboard$/);
+});
