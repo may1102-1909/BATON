@@ -845,36 +845,6 @@ export function UsagePage() {
             </span>
           </div>
 
-          {/* Technical Protocol Badge on right side */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                background: 'rgba(255, 255, 255, 0.025)',
-                border: '1px solid #272a31',
-                padding: '5px 12px',
-                borderRadius: 20,
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: '#9499a4',
-                letterSpacing: 0.3
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: C.green,
-                  boxShadow: '0 0 6px #34d399',
-                  display: 'inline-block'
-                }}
-              />
-              <span>Autonomous Handover Protocol</span>
-            </div>
-          </div>
         </div>
       </header>
 
@@ -900,34 +870,6 @@ export function UsagePage() {
                 alignItems: 'center'
               }}
             >
-              <span
-                className="hero-badge-enter"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 11,
-                  color: '#b3b9b5',
-                  border: '1px solid #284435',
-                  background: '#10b98108',
-                  borderRadius: 30,
-                  padding: '6px 14px',
-                  fontWeight: 500,
-                  marginBottom: 10
-                }}
-              >
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    background: C.green,
-                    borderRadius: 10,
-                    boxShadow: '0 0 8px #34d39966',
-                    display: 'inline-block'
-                  }}
-                />
-                Built for the next engineer.
-              </span>
 
               <h1 className="bt-title" style={{ marginBottom: 34 }}>
                 <span className="hero-word" style={{ animationDelay: '0.12s' }}>Pass</span>{' '}
@@ -939,20 +881,6 @@ export function UsagePage() {
                 <span className="hero-word" style={{ color: C.green, animationDelay: '0.64s' }}>code.</span>
               </h1>
 
-              <p
-                className="hero-subtext-enter"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 11,
-                  color: '#747982',
-                  marginTop: 26
-                }}
-              >
-                <Icon name="shield" size={12} />
-                Project-scoped. Secret-redacted. Always cited.
-              </p>
             </div>
           </section>
 
