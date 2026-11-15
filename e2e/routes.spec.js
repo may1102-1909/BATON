@@ -42,8 +42,11 @@ test('the demo workspace never offers workspace management or the first-run chec
   await expect(page.getByRole('button', { name: /^Disconnect/ })).toHaveCount(0);
 });
 
-test('the usage guide shows no fabricated product data', async ({ page }) => {
+test('the usage page shows the overview, developer notes and features, and both experiences', async ({ page }) => {
   await page.goto('/usage');
-  await expect(page.getByRole('heading', { level: 1, name: 'Getting started with Baton' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Open dashboard|Try the sample/ }).or(page.getByRole('button', { name: /Open dashboard/ })).first()).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /Pass the knowledge/ })).toBeVisible();
+  await expect(page.getByText('Behind the code.')).toBeAttached();
+  await expect(page.getByText('A handover. Not a guessing game.')).toBeAttached();
+  await page.getByRole('button', { name: 'Demo Mode' }).click();
+  await expect(page).toHaveURL(/\/demo-page/);
 });
