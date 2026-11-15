@@ -979,7 +979,7 @@ export function UsagePage() {
             </span>
           </div>
 
-          {/* Workspace Mode Selection */}
+          {/* Dashboard entry */}
           <section
             style={{
               padding: '36px 0 46px',
@@ -987,32 +987,6 @@ export function UsagePage() {
               position: 'relative'
             }}
           >
-            <div
-              style={{
-                color: C.green,
-                fontSize: 10,
-                letterSpacing: 2,
-                fontFamily: 'monospace',
-                marginBottom: 10,
-                fontWeight: 600
-              }}
-            >
-              WORKSPACE MODE
-            </div>
-            <h2
-              style={{
-                fontSize: 34,
-                fontWeight: 500,
-                letterSpacing: -1.2,
-                margin: '0 auto 24px',
-                maxWidth: 440,
-                color: '#f4f4f5'
-              }}
-            >
-              Choose your experience.
-            </h2>
-
-            {/* Dual Mode Buttons sized proportionally to the title */}
             <div
               style={{
                 display: 'flex',
@@ -1024,54 +998,15 @@ export function UsagePage() {
                 flexWrap: 'wrap'
               }}
             >
-              {/* Demo Mode Button */}
-              <button
-                onClick={() => {
-                  localStorage.setItem('baton_mode', 'demo')
-                  navigate('/demo-page')
-                }}
-                style={{
-                  flex: '1 1 185px',
-                  minWidth: 180,
-                  height: 48,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 24px',
-                  borderRadius: 8,
-                  background: '#131518',
-                  border: '1px solid #282c35',
-                  color: '#f4f4f5',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.35)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                  e.currentTarget.style.borderColor = 'rgba(52, 211, 153, 0.55)'
-                  e.currentTarget.style.boxShadow = '0 0 28px rgba(52, 211, 153, 0.25), 0 8px 24px rgba(0, 0, 0, 0.5)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.borderColor = '#282c35'
-                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.35)'
-                }}
-              >
-                Demo Mode
-              </button>
-
-              {/* Production Mode Button */}
+              {/* View Dashboard Button */}
               <button
                 onClick={() => {
                   localStorage.setItem('baton_mode', 'production')
                   navigate('/dashboard')
                 }}
                 style={{
-                  flex: '1 1 185px',
-                  minWidth: 180,
+                  flex: '0 0 auto',
+                  minWidth: 220,
                   height: 48,
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1102,7 +1037,7 @@ export function UsagePage() {
                   if (arrow) arrow.style.transform = 'translateX(0)'
                 }}
               >
-                <span>Production Mode</span>
+                <span>View Dashboard</span>
                 <span
                   className="prod-arrow"
                   style={{
