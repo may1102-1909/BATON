@@ -121,6 +121,15 @@ const sourceAllowed = (source, actor) => sourceVisible(source, actor) && (actor.
 // GitHub's redirect cannot carry a bearer token; the one-use OAuth state identifies the user instead.
 const PUBLIC_PATHS = new Set(['/api/health', '/api/github/callback', '/api/demo']);
 
+// Supabase unreachable, timing out or failing upstream: the request can be retried, so answer 503, not 500.
+const OUTAGE = /fetch failed|ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|socket hang up|network ?error|timed? ?out|aborted|upstream connect|service unavailable|bad gateway|gateway timeout/i;
+function isDatabaseOutage(error) {
+  const message = String(error?.message ?? '');
+  return /(^|: )Supabase \w+ \S+ failed:/.test(message) && OUTAGE.test(message)
+    || ['TimeoutError', 'AbortError'].includes(error?.name) || ['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET'].includes(error?.cause?.code);
+}
+const DATABASE_UNAVAILABLE = 'Database unavailable, try again shortly.';
+
 function githubCallbackReason(error) {
   const message = String(error?.message ?? '');
   if (/state is invalid|code and state/i.test(message)) return 'expired';
@@ -135,7 +144,7 @@ function githubCallbackReason(error) {
 async function githubCall(run) {
   try { return await run(); }
   catch (error) {
-    if (error instanceof HttpError) throw error;
+    if (error instanceof HttpError || isDatabaseOutage(error)) throw error;
     const message = String(error?.message ?? '');
     if (/^Link a GitHub account/.test(message)) throw new HttpError(409, message);
     if (/GitHub API .* failed \(401\)/.test(message)) throw new HttpError(409, 'Your GitHub link has expired. Connect GitHub again.');
@@ -219,6 +228,8 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
 
     const client = await getServiceClient();
     const { data, error } = await client.auth.getUser(bearer);
+    // A Supabase outage is not a bad token: do not tell the user to sign in again.
+    if (error && (error.name === 'AuthRetryableFetchError' || Number(error.status) >= 500)) throw new HttpError(503, DATABASE_UNAVAILABLE);
     if (error || !data?.user) throw new HttpError(401, 'Invalid or expired access token');
     const user = data.user;
     const memberships = (await store.list('members', { user_id: user.id })).filter(item => !item.disabled_at);
@@ -1007,6 +1018,11 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
       return await routes(req, res, url, auth, body);
     } catch (error) {
       if (res.headersSent) return res.end();
+      if (!(error instanceof HttpError) && isDatabaseOutage(error)) {
+        console.error('[api] database unavailable', req.method, req.url?.split('?')[0], error?.message ?? error);
+        res.setHeader('retry-after', '5');
+        return json(res, 503, { error: DATABASE_UNAVAILABLE });
+      }
       const status = error instanceof HttpError ? error.status
         : Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599 ? error.status : 500;
       if (status === 500) console.error('[api]', req.method, req.url?.split('?')[0], error?.message ?? error);

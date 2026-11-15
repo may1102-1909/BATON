@@ -361,3 +361,62 @@ test('a configured GEMINI_MODEL is used for every Gemini request, with one share
   await standard.call(admin, 'POST', `/api/handovers/${await start(standard.call)}/generate`, {});
   assert.ok(urls.every(url => url.includes('models/gemini-2.5-flash:generateContent')));
 });
+
+// ---------- database outage: retryable 503s, never "Internal server error" or "session expired" ----------
+
+// Fails the chosen store calls the way the Supabase adapter does when the database is unreachable.
+function failing(store, match) {
+  for (const method of ['list', 'get', 'getMany', 'insert', 'update', 'remove']) {
+    const original = store[method];
+    store[method] = async (name, ...args) => {
+      if (match(method, name)) throw new Error(`Supabase ${method} ${name} failed: TypeError: fetch failed`);
+      return original.call(store, name, ...args);
+    };
+  }
+  return store;
+}
+
+test('a database outage answers 503 with a retryable message on reads and writes', async () => {
+  const { call, store } = handoverFixture();
+  const id = await start(call);
+  failing(store, () => true);
+  for (const [method, path, body] of [
+    ['GET', '/api/me'], ['GET', `/api/orgs/${A}/state`], ['POST', `/api/orgs/${A}/memories`, { type: 'memory', content: 'note' }],
+    ['POST', `/api/handovers/${id}/generate`, {}],
+  ]) {
+    const response = await call(admin, method, path, body);
+    assert.equal(response.status, 503, `${method} ${path}`);
+    assert.equal(response.body.error, 'Database unavailable, try again shortly.');
+  }
+});
+
+test('an outage part-way through generation leaves the handover unchanged and unlocked', async () => {
+  const { call, store } = handoverFixture();
+  const id = await start(call);
+  const before = await store.get('handovers', id);
+  failing(store, (method, name) => method === 'insert' && name === 'handover_claims');
+  const response = await call(admin, 'POST', `/api/handovers/${id}/generate`, {});
+  assert.equal(response.status, 503);
+  const after = await store.get('handovers', id);
+  assert.equal(after.version, before.version);
+  assert.equal(after.generation_mode ?? null, before.generation_mode ?? null);
+  assert.equal(after.generation_started_at ?? null, null);
+});
+
+test('a Supabase auth outage is a 503, not "invalid or expired access token"', async () => {
+  const store = createMemoryStore({ organizations: [{ id: A, name: 'Alpha' }] });
+  const outage = Object.assign(new Error('fetch failed'), { name: 'AuthRetryableFetchError', status: 0 });
+  const { call } = makeApp(store, { supabaseClient: { auth: { getUser: async () => ({ data: { user: null }, error: outage }) } } });
+  const me = await call('some-session-token', 'GET', '/api/me');
+  assert.equal(me.status, 503);
+  assert.equal(me.body.error, 'Database unavailable, try again shortly.');
+  const { call: badToken } = makeApp(store, { supabaseClient: { auth: { getUser: async () => ({ data: { user: null }, error: Object.assign(new Error('bad jwt'), { status: 401 }) }) } } });
+  assert.equal((await badToken('expired', 'GET', '/api/me')).status, 401);
+});
+
+test('ordinary database errors still surface as 500, so real bugs are not hidden as outages', async () => {
+  const { call, store } = handoverFixture();
+  store.list = async () => { throw new Error('Supabase list org_memberships failed: column org_memberships.nope does not exist'); };
+  const response = await call(admin, 'GET', '/api/me');
+  assert.equal(response.status, 500);
+});

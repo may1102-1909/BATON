@@ -12,6 +12,7 @@ const TABLES = {
 const DB_SOURCE_TYPES = { decision: 'mcp_decision', blocker: 'mcp_blocker', pull_request: 'pr' };
 const API_SOURCE_TYPES = Object.fromEntries(Object.entries(DB_SOURCE_TYPES).map(([api, db]) => [db, api]));
 const OPTIONAL_COLUMNS = { handover_questions: ['risk_score', 'risk_reasons', 'confidence', 'answer_mode'], members: ['function_role'] };
+const DB_TIMEOUT_MS = 15_000;
 // Types the production sources.type constraint may not know are stored as mcp_decision; metadata.source_type keeps the real one.
 const LEGACY_ONLY_TYPES = new Set(['branch', 'task_comment', 'memory', 'interview']);
 const sourceFromDb = record => {
@@ -105,6 +106,8 @@ export function createSupabaseStore(client, env = process.env) {
       const { createClient } = await import('@supabase/supabase-js');
       return createClient(url, serviceRoleKey, {
         auth: { autoRefreshToken: false, persistSession: false },
+        // A hung database must fail fast (mapped to 503) instead of holding the request until the platform limit.
+        global: { fetch: (input, init = {}) => fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(DB_TIMEOUT_MS) }) },
       });
     })();
   } else {

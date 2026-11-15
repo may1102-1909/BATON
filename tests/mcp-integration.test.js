@@ -81,3 +81,22 @@ test('export_handover writes the approved packet into the repository as Markdown
     assert.ok(Array.isArray(sync.content));
   }finally{if(client)await client.close();await new Promise(resolve=>server.close(resolve));await rm(repo,{recursive:true,force:true});}
 });
+
+test('during a database outage save_memory tells the agent that nothing was saved',async()=>{
+  const store=createMemoryStore(demoSeed());
+  const server=createServer(createApp({store,env:{BATON_DEMO_MODE:'true'}}));
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  let client;
+  try {
+    const base=`http://127.0.0.1:${server.address().port}`;
+    const issue=await fetch(base+'/api/orgs/demo-org/tokens',{method:'POST',headers:{'content-type':'application/json','x-baton-demo-user':'demo-member'},body:JSON.stringify({name:'outage-test'})});
+    const {token}=await issue.json();
+    const insert=store.insert;
+    store.insert=async(name,record)=>{if(name==='sources')throw new Error('Supabase insert sources failed: TypeError: fetch failed');return insert.call(store,name,record);};
+    client=new Client({name:'baton-outage-test',version:'1.0.0'});
+    await client.connect(new StdioClientTransport({command:process.execPath,args:['mcp-server/dist/index.js'],env:{...process.env,BATON_API_URL:base,BATON_API_KEY:token,BATON_ORG_ID:'demo-org',BATON_REPOSITORY_ID:'demo-repo'}}));
+    const saved=await client.callTool({name:'save_memory',arguments:{type:'change',content:'Retry queue now drains on deploy.'}});
+    assert.equal(saved.isError,true);
+    assert.match(JSON.stringify(saved),/temporarily unavailable \(503\).*No data was saved/);
+  }finally{if(client)await client.close();await new Promise(resolve=>server.close(resolve));}
+});
