@@ -31,7 +31,8 @@ const C = {
 
 export function DemoPage() {
   const { navigate } = useRouter()
-  const [activePersona, setActivePersona] = useState(DEMO_PERSONAS.some((p) => p.id === api.getDemoUser()) ? api.getDemoUser() : 'demo-admin')
+  // The demo is viewed as the admin only; the leaver and incoming engineer appear as team members.
+  const [activePersona, setActivePersona] = useState('demo-admin')
   const [resetNotice, setResetNotice] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
   const [inviteResult, setInviteResult] = useState(null)
@@ -243,8 +244,8 @@ export function DemoPage() {
           >
             Viewing as:
           </span>
-          {DEMO_PERSONAS.map((p) => {
-            const active = activePersona === p.id
+          {DEMO_PERSONAS.filter((p) => p.id === 'demo-admin').map((p) => {
+            const active = true
             return (
               <button
                 key={p.id}

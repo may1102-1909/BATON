@@ -2,8 +2,8 @@
 // answered by the real engine through POST /api/demo (server/demo.js), which keeps nothing and uses no credentials.
 import snapshot from './demoSnapshot.json' with { type: 'json' }
 
-const STORAGE_KEY = 'baton_demo_state_v4'
-const LEGACY_STORAGE_KEYS = ['baton_demo_state_v3', 'baton_demo_state_v2', 'baton_demo_state']
+const STORAGE_KEY = 'baton_demo_state_v5'
+const LEGACY_STORAGE_KEYS = ['baton_demo_state_v4', 'baton_demo_state_v3', 'baton_demo_state_v2', 'baton_demo_state']
 const ORG_ID = 'demo-org'
 const REPO_ID = 'demo-repo'
 const DEMO_INSTALLATION_ID = 'demo-installation'
@@ -237,11 +237,12 @@ async function callEngine(persona, method, path, body, authorization) {
   return result
 }
 
-// The first visit opens with a handover the real engine built from the repository data: interview answered and
-// claims approved, so only the conflict is left for the visitor.
+// The handover is built once an MCP token exists (the step that connects an agent to Baton): the real engine
+// answers the interview from the repository data and approves the claims, leaving only the conflict for the visitor.
 async function ensureSeedHandover() {
   const state = loadDemoState()
   if (state.handovers?.length) return
+  if (!(state.tokens ?? []).some(token => !token.revoked_at)) return
   await callEngine('demo-admin', 'POST', '/api/demo/prepare-handover', { orgId: ORG_ID, leaverId: 'demo-leaver', incomingId: 'demo-incoming' })
 }
 
