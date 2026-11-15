@@ -911,7 +911,7 @@ export function Workspace({
         />
       )}
 
-      {showInviteModal && <InviteModal orgId={selectedOrgId} notify={notify} linkPrefix={isDemo ? '/demo-page?join=' : '/auth?invite='} onClose={() => { setShowInviteModal(false); refreshOrgState(selectedOrgId); }} />}
+      {showInviteModal && <InviteModal orgId={selectedOrgId} notify={notify} linkPrefix={isDemo ? '/demo-page?join=' : '/auth?invite='} demo={isDemo} onClose={() => { setShowInviteModal(false); refreshOrgState(selectedOrgId); }} />}
 
       {showTokenModal && (
         <TokenModal

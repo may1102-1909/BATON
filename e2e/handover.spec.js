@@ -70,6 +70,7 @@ test('demo GitHub, team invite and MCP tools work without signing in', async ({ 
   await expect(page.locator('body')).not.toContainText('renoschubert');
 
   await page.getByRole('button', { name: '+ Invite member' }).click();
+  await expect(page.getByRole('note')).toContainText('can be opened by anyone');
   await page.getByRole('button', { name: 'Generate invite' }).click();
   const link = await page.getByLabel('Invite link').inputValue();
   expect(link).toMatch(/\/demo-page\?join=/);
