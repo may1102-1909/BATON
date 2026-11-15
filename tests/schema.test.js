@@ -2,9 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
+import {vector} from '@electric-sql/pglite-pgvector';
+
+// schema.sql needs pgvector (embedding columns, hnsw indexes, match_memory).
+const newDb=()=>new PGlite({extensions:{vector}});
 
 test('schema applies twice and isolates direct authenticated database access',async()=>{
-  const db=new PGlite();
+  const db=newDb();
   try {
     await db.exec(`CREATE ROLE authenticated; CREATE ROLE anon; CREATE SCHEMA auth;
       CREATE TABLE auth.users(id uuid PRIMARY KEY);
@@ -33,7 +37,7 @@ test('schema applies twice and isolates direct authenticated database access',as
 
 test('handover domain persists its actual records in PostgreSQL',async()=>{
   const {createHandovers}=await import('../server/handover.js');
-  const db=new PGlite();
+  const db=newDb();
   try {
     await db.exec(`CREATE ROLE authenticated; CREATE ROLE anon; CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT null::uuid $$;`);
     const sql=(await readFile(new URL('../supabase/schema.sql',import.meta.url),'utf8')).replace(/create extension if not exists pgcrypto;/i,'');
