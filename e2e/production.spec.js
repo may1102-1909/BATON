@@ -228,6 +228,7 @@ test('team tab: workspace settings, typed confirmations, invite link and reposit
 
   await page.getByRole('button', { name: '+ Invite member' }).click();
   const dialog = page.getByRole('dialog', { name: 'Invite team member' });
+  await expect(dialog.getByText('Demo only:')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Generate invite' }).click();
   await expect(dialog.getByRole('textbox', { name: 'Invite link' })).toHaveValue(`${BASE}/auth?invite=${INVITE}`);
   await page.keyboard.press('Escape');

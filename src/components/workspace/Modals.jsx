@@ -58,7 +58,7 @@ export function CreateOrgModal({ onClose, onCreated }) {
   );
 }
 
-export function InviteModal({ orgId, onClose, notify, linkPrefix = '/auth?invite=' }) {
+export function InviteModal({ orgId, onClose, notify, linkPrefix = '/auth?invite=', demo = false }) {
   const [role, setRole] = useState('member');
   const [email, setEmail] = useState('');
   const [link, setLink] = useState('');
@@ -75,11 +75,16 @@ export function InviteModal({ orgId, onClose, notify, linkPrefix = '/auth?invite
 
   return (
     <Modal title="Invite team member" onClose={onClose}>
+      {demo && (
+        <div role="note" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: 6, padding: '10px 12px', marginBottom: 14, color: '#fcd34d', fontSize: '0.8rem', lineHeight: 1.5 }}>
+          <strong>Demo only:</strong> this invite link can be opened by anyone who has it and joins this demo team without signing in. The secure, sign-in-protected invite flow is on the production <a href="/dashboard" style={{ color: '#fbbf24' }}>/dashboard</a>.
+        </div>
+      )}
       {link ? (
         <div>
           <div style={{ color: 'var(--green)', fontWeight: 600, marginBottom: 8 }}>✓ Invite link created</div>
           <div className="ws-muted" style={{ marginBottom: 8 }}>
-            Send this link to your teammate. It can be used once{email.trim() ? ` and only by ${email.trim()}` : ''}.
+            Send this link to your teammate. It can be used once{email.trim() && !demo ? ` and only by ${email.trim()}` : ''}.
           </div>
           <label className="ws-form-label" htmlFor="ws-invite-link">Invite link</label>
           <input id="ws-invite-link" className="ws-input" readOnly value={link} onFocus={e => e.target.select()} style={{ width: '100%', marginBottom: 14, fontFamily: 'monospace', fontSize: '0.8rem' }} />
@@ -92,7 +97,7 @@ export function InviteModal({ orgId, onClose, notify, linkPrefix = '/auth?invite
       ) : (
         <form onSubmit={submit}>
           <div className="ws-form-group">
-            <label className="ws-form-label" htmlFor="ws-invite-email">Email address (optional, restricts the invite to this email)</label>
+            <label className="ws-form-label" htmlFor="ws-invite-email">{demo ? 'Email address (optional, for your reference in the demo)' : 'Email address (optional, restricts the invite to this email)'}</label>
             <input id="ws-invite-email" type="email" className="ws-input" placeholder="engineer@company.com" value={email} onChange={e => setEmail(e.target.value)} />
           </div>
           <div className="ws-form-group">
