@@ -2,8 +2,8 @@
 // answered by the real engine through POST /api/demo (server/demo.js), which keeps nothing and uses no credentials.
 import snapshot from './demoSnapshot.json' with { type: 'json' }
 
-const STORAGE_KEY = 'baton_demo_state_v3'
-const LEGACY_STORAGE_KEY = 'baton_demo_state_v2'
+const STORAGE_KEY = 'baton_demo_state_v4'
+const LEGACY_STORAGE_KEYS = ['baton_demo_state_v3', 'baton_demo_state_v2', 'baton_demo_state']
 const ORG_ID = 'demo-org'
 const REPO_ID = 'demo-repo'
 const DEMO_INSTALLATION_ID = 'demo-installation'
@@ -11,7 +11,11 @@ const ADMIN_LOGIN = 'may1102-1909'
 const SEED_DATE = '2026-11-01T10:00:00Z'
 const PRODUCTION_ONLY = 'Available in Production mode'
 
-const isBot = login => !login || login === 'unknown' || login.endsWith('[bot]')
+const LEAVER_LOGIN = 'krishna2205gupta-rgb'
+const INCOMING_LOGIN = 'vikrannntttt8'
+// GitHub attributes some of Vikrant's commits (git author "vikrannntttt8") to the linked account "renoschubert".
+const LOGIN_ALIASES = { renoschubert: INCOMING_LOGIN }
+const alias = login => LOGIN_ALIASES[login] ?? login
 const toFiles = list => (list ?? []).map(filename => ({ filename }))
 
 // Commits, pull requests and branches in the snapshot shape become engine "sources".
@@ -19,7 +23,8 @@ export function sourcesFromSnapshot(data, repoId = REPO_ID) {
   const repo = data.repository
   const common = { org_id: ORG_ID, repository_id: repoId, author_id: null, visibility: 'team' }
   const sources = []
-  for (const commit of data.commits ?? []) {
+  for (const raw of data.commits ?? []) {
+    const commit = { ...raw, author_login: alias(raw.author_login) }
     sources.push({
       ...common, id: `gh-commit-${commit.sha.slice(0, 12)}`, external_id: `github:${repo}:commit:${commit.sha}`,
       author_login: commit.author_login, type: 'commit', content: String(commit.message ?? '').slice(0, 500), url: commit.url,
@@ -27,7 +32,8 @@ export function sourcesFromSnapshot(data, repoId = REPO_ID) {
       created_at: commit.date
     })
   }
-  for (const pr of data.pulls ?? []) {
+  for (const raw of data.pulls ?? []) {
+    const pr = { ...raw, author_login: alias(raw.author_login) }
     sources.push({
       ...common, id: `gh-pr-${pr.number}`, external_id: `github:${repo}:pull_request:${pr.number}`,
       author_login: pr.author_login, type: 'pull_request', content: `PR #${pr.number}: ${pr.title}`, url: pr.url,
@@ -49,22 +55,13 @@ export function sourcesFromSnapshot(data, repoId = REPO_ID) {
   return sources
 }
 
-// Leaver and incoming come from the real contributors, most active first.
-function pickPeople(data) {
-  const counts = new Map()
-  const bump = login => { if (!isBot(login) && login !== ADMIN_LOGIN) counts.set(login, (counts.get(login) ?? 0) + 1) }
-  for (const commit of data.commits ?? []) bump(commit.author_login)
-  for (const pr of data.pulls ?? []) bump(pr.author_login)
-  const [leaver, incoming] = [...counts].sort((a, b) => b[1] - a[1]).map(([login]) => login)
-  return { leaver: leaver ?? null, incoming: incoming ?? null }
-}
-
-const people = pickPeople(snapshot)
+// The repository's collaborators: Krishna hands over to Vikrant.
+const people = { leaver: LEAVER_LOGIN, incoming: INCOMING_LOGIN }
 
 export const DEMO_PERSONAS = [
   { id: 'demo-admin', name: 'May (Admin)', role: 'Team lead' },
-  { id: 'demo-leaver', name: people.leaver ?? 'Leaving engineer', role: 'Leaving engineer' },
-  { id: 'demo-incoming', name: people.incoming ?? 'Incoming engineer', role: 'Incoming engineer' }
+  { id: 'demo-leaver', name: 'Krishna Gupta', role: 'Leaving engineer' },
+  { id: 'demo-incoming', name: 'Vikrant', role: 'Incoming engineer' }
 ]
 
 export const DEMO_SIMULATOR_SAMPLE = {
@@ -76,8 +73,8 @@ export function getInitialDemoState() {
   const member = (id, user_id, name, role, github_login) => ({ id, org_id: ORG_ID, user_id, name, role, ...(github_login ? { github_login } : {}), created_at: SEED_DATE })
   const members = [
     member('m-admin', 'demo-admin', 'May (Admin)', 'admin', ADMIN_LOGIN),
-    member('m-leaver', 'demo-leaver', `${DEMO_PERSONAS[1].name} (Leaving)`, 'member', people.leaver),
-    { ...member('m-incoming', 'demo-incoming', `${DEMO_PERSONAS[2].name} (Incoming)`, 'member', people.incoming), function_role: 'backend' }
+    member('m-leaver', 'demo-leaver', DEMO_PERSONAS[1].name, 'member', people.leaver),
+    { ...member('m-incoming', 'demo-incoming', DEMO_PERSONAS[2].name, 'member', people.incoming), function_role: 'backend' }
   ]
   const idFor = login => members.find(item => item.github_login === login)?.user_id ?? null
   const sources = sourcesFromSnapshot(snapshot)
@@ -85,7 +82,7 @@ export function getInitialDemoState() {
 
   // Decisions: commits that record a choice, plus the project's own agent protocol.
   const choice = /^(feat|refactor)\b|\b(migrat|switch|replac|adopt)/i
-  for (const commit of snapshot.commits.filter(item => choice.test(item.message)).slice(0, 6)) {
+  for (const commit of snapshot.commits.filter(item => choice.test(item.message)).slice(0, 6).map(item => ({ ...item, author_login: alias(item.author_login) }))) {
     const [subject, ...rest] = commit.message.split('\n').filter(Boolean)
     sources.push({
       id: `decision-${commit.sha.slice(0, 12)}`, org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(commit.author_login), author_login: commit.author_login,
@@ -153,8 +150,7 @@ export function getInitialDemoState() {
 export function loadDemoState() {
   if (typeof window === 'undefined') return getInitialDemoState()
   try {
-    localStorage.removeItem(LEGACY_STORAGE_KEY)
-    localStorage.removeItem('baton_demo_state')
+    for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key)
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch (err) {
@@ -224,13 +220,13 @@ export function isDemoRoute() {
 
 const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
-async function callEngine(persona, method, path, body) {
+async function callEngine(persona, method, path, body, authorization) {
   const state = loadDemoState()
   let response
   try {
     response = await originalFetch.call(window, '/api/demo', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ persona, state, request: { method, path, body } })
+      body: JSON.stringify({ persona, state, request: { method, path, body, ...(authorization ? { authorization } : {}) } })
     })
   } catch {
     return { status: 503, body: { error: 'The demo engine could not be reached' } }
@@ -241,12 +237,33 @@ async function callEngine(persona, method, path, body) {
   return result
 }
 
-// The first visit opens with a handover generated from the repository data by the real engine.
+// The first visit opens with a handover the real engine built from the repository data: interview answered and
+// claims approved, so only the conflict is left for the visitor.
 async function ensureSeedHandover() {
   const state = loadDemoState()
   if (state.handovers?.length) return
-  const started = await callEngine('demo-admin', 'POST', `/api/orgs/${ORG_ID}/handovers`, { leaverId: 'demo-leaver', incomingId: 'demo-incoming' })
-  if (started.body?.handover) await callEngine('demo-admin', 'POST', `/api/handovers/${started.body.handover.id}/generate`)
+  await callEngine('demo-admin', 'POST', '/api/demo/prepare-handover', { orgId: ORG_ID, leaverId: 'demo-leaver', incomingId: 'demo-incoming' })
+}
+
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+// Accepting happens in the browser: the demo has no second signed-in user, so the invite adds a new teammate.
+async function acceptDemoInvite(token) {
+  const state = loadDemoState()
+  const tokenHash = await sha256Hex(String(token ?? ''))
+  const invite = (state.invites ?? []).find(item => item.token_hash === tokenHash)
+  if (!invite || invite.accepted_at || Date.parse(invite.expires_at) <= Date.now()) return { status: 400, body: { error: 'Invite is invalid, expired, or already used' } }
+  const now = new Date().toISOString()
+  const count = state.members.filter(item => item.user_id.startsWith('demo-invitee')).length + 1
+  const membership = { id: `m-invitee-${count}`, org_id: invite.org_id, user_id: `demo-invitee-${count}`, name: `Invited teammate ${count}`, role: invite.role === 'admin' ? 'admin' : 'member', created_at: now }
+  invite.accepted_at = now
+  invite.accepted_by = membership.user_id
+  state.members.push(membership)
+  saveDemoState(state)
+  return { status: 200, body: { organization_id: invite.org_id, membership } }
 }
 
 async function syncRepository() {
@@ -310,10 +327,13 @@ export function installDemoInterceptor(initialPersona = 'demo-admin') {
     let body
     try { body = init.body ? JSON.parse(init.body) : undefined } catch { body = undefined }
     const persona = currentPersona
+    const headers = new Headers(init.headers || {})
+    const authorization = headers.get('authorization') || undefined
     // Requests are serialized so concurrent calls never overwrite each other's state.
     const run = queue.then(async () => {
+      if (pathname === '/api/invites/accept' && method === 'POST') return acceptDemoInvite(body?.token)
       if (/^\/api\/orgs\/[^/]+\/state$/.test(pathname)) await ensureSeedHandover()
-      return callEngine(persona, method, pathname + url.search, body)
+      return callEngine(persona, method, pathname + url.search, body, authorization)
     })
     queue = run.catch(() => {})
     const result = await run

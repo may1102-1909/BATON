@@ -30,13 +30,14 @@ test('the landing page offers a sign-in path without waiting for the animation',
 
 test('the demo workspace never offers workspace management or the first-run checklist', async ({ page }) => {
   await page.goto('/demo-page');
-  await expect(page.getByRole('region', { name: 'Bus factor alerts' })).toBeVisible();
+  await expect(page.getByRole('table')).toContainText('Bus factor');
   await expect(page.getByText('Get started')).toHaveCount(0);
   await page.getByRole('tab', { name: /^Team & Tokens/ }).click();
   await expect(page.getByRole('heading', { name: 'Organization members' })).toBeVisible();
   await expect(page.getByText('Workspace settings')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Delete workspace/ })).toHaveCount(0);
   await page.getByRole('tab', { name: /^GitHub/ }).click();
+  await page.getByRole('dialog', { name: 'GitHub account connected' }).getByRole('button', { name: 'Later' }).click();
   await expect(page.getByRole('button', { name: /^Disconnect/ })).toHaveCount(0);
 });
 

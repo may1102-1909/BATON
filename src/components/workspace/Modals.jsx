@@ -58,14 +58,14 @@ export function CreateOrgModal({ onClose, onCreated }) {
   );
 }
 
-export function InviteModal({ orgId, onClose, notify }) {
+export function InviteModal({ orgId, onClose, notify, linkPrefix = '/auth?invite=' }) {
   const [role, setRole] = useState('member');
   const [email, setEmail] = useState('');
   const [link, setLink] = useState('');
   const [copied, setCopied] = useState(false);
   const { busy, error, submit } = useSubmit(async () => {
     const res = await api.createInvite(orgId, role, email.trim() || null);
-    setLink(`${window.location.origin}/auth?invite=${res.token}`);
+    setLink(`${window.location.origin}${linkPrefix}${res.token}`);
   });
 
   async function copy() {

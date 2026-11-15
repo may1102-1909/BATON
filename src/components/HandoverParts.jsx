@@ -50,9 +50,9 @@ export function RiskBadge({ question }) {
   return <span className={`ws-badge ${tone}`}>{label} risk · score {question.risk_score}</span>;
 }
 
-function ConflictCard({ conflict, canResolve, onResolve, nameOf }) {
-  const [text, setText] = useState('');
-  const [chosen, setChosen] = useState('');
+function ConflictCard({ conflict, canResolve, onResolve, nameOf, suggestion }) {
+  const [text, setText] = useState(suggestion?.resolution ?? '');
+  const [chosen, setChosen] = useState(suggestion?.chosenSourceId ?? '');
   const [busy, setBusy] = useState(false);
   const sides = conflict.sides || [];
   const chosenSide = sides.find(side => side.source_id === conflict.chosen_source_id);
@@ -127,7 +127,7 @@ function ConflictCard({ conflict, canResolve, onResolve, nameOf }) {
   );
 }
 
-export function ConflictsPanel({ conflicts, canResolve, onResolve, nameOf = id => id }) {
+export function ConflictsPanel({ conflicts, canResolve, onResolve, nameOf = id => id, suggestions = {} }) {
   const list = Array.isArray(conflicts) ? conflicts : [];
   if (list.length === 0) return null;
   const open = list.filter(item => !item.resolved).length;
@@ -140,7 +140,7 @@ export function ConflictsPanel({ conflicts, canResolve, onResolve, nameOf = id =
         Sources disagree. Baton does not pick a winner; {open > 0 ? 'an admin must decide.' : 'the decision is recorded below.'}
       </div>
       {list.map(conflict => (
-        <ConflictCard key={conflict.claim_id} conflict={conflict} canResolve={canResolve} onResolve={onResolve} nameOf={nameOf} />
+        <ConflictCard key={conflict.claim_id} conflict={conflict} canResolve={canResolve} onResolve={onResolve} nameOf={nameOf} suggestion={suggestions[conflict.claim_id]} />
       ))}
     </section>
   );

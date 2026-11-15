@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import * as api from '../../lib/api.js';
 import { GithubConnect } from '../GithubConnect';
-import { ConfirmDialog } from './Modal';
+import { ConfirmDialog, Modal } from './Modal';
 
 const formatDate = value => (value ? new Date(value).toLocaleString() : 'Never');
+// Demo: the GitHub account is already connected; the popup offers a sync until one has run in this visit.
+let demoSyncedThisVisit = false;
 
 export function GithubTab({ orgId, isDemo, isAdmin, health, outcome, repositories, sources, notify, onRefresh }) {
   const [syncingId, setSyncingId] = useState(null);
   const [disconnecting, setDisconnecting] = useState(null); // repository awaiting confirmation
   const [disconnectBusy, setDisconnectBusy] = useState(false);
   const [repoFilter, setRepoFilter] = useState('all');
+  const [connectedDismissed, setConnectedDismissed] = useState(false);
+  const showConnected = isDemo && !demoSyncedThisVisit && !connectedDismissed && repositories.length > 0;
+  const setShowConnected = open => setConnectedDismissed(!open);
 
   const repoName = id => repositories.find(repo => repo.id === id)?.full_name;
   const evidence = sources
@@ -24,6 +29,7 @@ export function GithubTab({ orgId, isDemo, isAdmin, health, outcome, repositorie
       const large = res?.truncated ? " Only the most recent history was imported because the repository is large." : "";
       if (res?.skipped) notify(`${repo.full_name} synced (${counts}), but ${res.skipped} record${res.skipped === 1 ? " was" : "s were"} skipped: ${res.skippedReason}${large}`);
       else notify(`${repo.full_name} synced: ${counts}.${large}`, "success");
+      if (isDemo) demoSyncedThisVisit = true;
       await onRefresh();
     } catch (err) {
       notify(`Sync failed for ${repo.full_name}: ${err.message}`);
@@ -137,6 +143,29 @@ export function GithubTab({ orgId, isDemo, isAdmin, health, outcome, repositorie
           </div>
         )}
       </section>
+
+      {showConnected && repositories[0] && (
+        <Modal title="GitHub account connected" onClose={() => setShowConnected(false)}>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 14px', display: 'flex', flexDirection: 'column', gap: 8, fontSize: '0.88rem' }}>
+            <li><span style={{ color: 'var(--green)' }}>✓</span> Signed in to GitHub as <strong>@{repositories[0].full_name.split('/')[0]}</strong></li>
+            <li><span style={{ color: 'var(--green)' }}>✓</span> Baton GitHub App installed on <strong>{repositories.map(repo => repo.full_name).join(', ')}</strong></li>
+            <li><span style={{ color: 'var(--green)' }}>✓</span> Last synced: {formatDate(repositories[0].last_synced_at)}</li>
+          </ul>
+          <div className="ws-muted" style={{ marginBottom: 16 }}>
+            Sync the repository now to pull its latest commits and pull requests from GitHub. The handover export is rebuilt from whatever is synced.
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="ws-btn" onClick={() => setShowConnected(false)}>Later</button>
+            <button
+              type="button"
+              className="ws-btn ws-btn-primary"
+              onClick={() => { setShowConnected(false); syncRepo(repositories[0]); }}
+            >
+              ↻ Sync repository now
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {disconnecting && (
         <ConfirmDialog
