@@ -841,7 +841,7 @@ export function UsagePage() {
                 letterSpacing: 0.3
               }}
             >
-              Hackathon Build · Round 2
+              Hackathon Build · Round 3
             </span>
           </div>
 
