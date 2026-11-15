@@ -246,6 +246,25 @@ async function ensureSeedHandover() {
   await callEngine('demo-admin', 'POST', '/api/demo/prepare-handover', { orgId: ORG_ID, leaverId: 'demo-leaver', incomingId: 'demo-incoming' })
 }
 
+// Revoking removes the token from the demo, and with no active token left the handover is withdrawn so the
+// visitor is back at "create an MCP token first".
+function revokeDemoToken(tokenId) {
+  const state = loadDemoState()
+  const before = (state.tokens ?? []).length
+  state.tokens = (state.tokens ?? []).filter(token => token.id !== tokenId)
+  if (state.tokens.length === before) return { status: 404, body: { error: 'Token not found' } }
+  if (!state.tokens.some(token => !token.revoked_at)) {
+    const ids = new Set((state.handovers ?? []).map(handover => handover.id))
+    state.handovers = []
+    for (const table of ['handover_claims', 'handover_questions', 'handover_events', 'handover_versions']) {
+      if (Array.isArray(state[table])) state[table] = state[table].filter(row => !ids.has(row.handover_id))
+    }
+    state.sources = (state.sources ?? []).filter(source => !ids.has(source.metadata?.handover_id))
+  }
+  saveDemoState(state)
+  return { status: 200, body: { record: { id: tokenId, revoked_at: new Date().toISOString() }, handover_withdrawn: !state.handovers.length } }
+}
+
 async function sha256Hex(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
@@ -333,6 +352,8 @@ export function installDemoInterceptor(initialPersona = 'demo-admin') {
     // Requests are serialized so concurrent calls never overwrite each other's state.
     const run = queue.then(async () => {
       if (pathname === '/api/invites/accept' && method === 'POST') return acceptDemoInvite(body?.token)
+      const revoke = method === 'DELETE' && /^\/api\/orgs\/[^/]+\/tokens\/([^/]+)$/.exec(pathname)
+      if (revoke) return revokeDemoToken(decodeURIComponent(revoke[1]))
       if (/^\/api\/orgs\/[^/]+\/state$/.test(pathname)) await ensureSeedHandover()
       return callEngine(persona, method, pathname + url.search, body, authorization)
     })

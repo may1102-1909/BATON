@@ -39,7 +39,12 @@ test('the handover appears after an MCP token is created; resolving the conflict
   await expect(conflicts.getByRole('radio', { name: /Task comment/ })).toBeChecked();
   await expect(conflicts.getByRole('textbox', { name: 'Resolution explanation' })).toHaveValue(/^The task comment is correct/);
   await expect(page.getByRole('button', { name: /Export PDF/ })).toHaveCount(0);
+  // Slow the demo engine so the loading state where the export buttons go is visible.
+  await page.route('**/api/demo', async route => { const response = await route.fetch(); await new Promise(resolve => setTimeout(resolve, 700)); await route.fulfill({ response }); });
   await conflicts.getByRole('button', { name: 'Resolve conflict' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Preparing your export' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Preparing your export' })).toHaveCount(0, { timeout: 30_000 });
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
   await expect(conflicts).toContainText('All conflicts resolved');
   await expect(page.getByText('Status: APPROVED')).toBeVisible();
 
@@ -53,6 +58,16 @@ test('the handover appears after an MCP token is created; resolving the conflict
   expect(pdf.suggestedFilename()).toBe('handover-krishna-gupta-to-vikrant.pdf');
   const bytes = await (await pdf.createReadStream()).toArray().then(chunks => Buffer.concat(chunks).toString('latin1'));
   expect(bytes.startsWith('%PDF-1.4')).toBe(true);
+
+  // Revoking the only token removes it and withdraws the handover until a new token is created.
+  await page.getByRole('tab', { name: /^Team & Tokens/ }).click();
+  await page.getByRole('button', { name: 'Revoke token claude code' }).click();
+  await page.getByRole('dialog', { name: 'Revoke MCP token?' }).getByRole('button', { name: 'Revoke token' }).click();
+  await expect(page.getByText(/the handover was withdrawn/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Revoke token claude code' })).toHaveCount(0);
+  await page.getByRole('tab', { name: /^Handovers/ }).click();
+  await expect(page.getByText('Create an MCP token first')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Export PDF/ })).toHaveCount(0);
 
   await expect(page.locator('body')).not.toContainText(/undefined|\[object Object\]/);
 });
