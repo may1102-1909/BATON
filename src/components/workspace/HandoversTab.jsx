@@ -7,6 +7,7 @@ export function HandoversTab({
   handleDemoExport,
   isDemo = false,
   demoNeedsToken = false,
+  demoExportPreparing = false,
   onGoToTokens,
   riskAlerts = [],
   showAllAlerts = false,
@@ -49,8 +50,17 @@ export function HandoversTab({
             <div className="ws-card">
               <div className="ws-card-header">
                 <h2 className="ws-card-title">Engineering handovers</h2>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {demoExportReady && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+                  {isDemo && demoExportPreparing && (
+                    <div role="status" className="ws-export-preparing">
+                      <span className="ws-spinner" aria-hidden="true" />
+                      <span>
+                        <strong>Preparing your export…</strong>
+                        <span className="ws-muted" style={{ display: 'block', fontSize: '0.72rem' }}>Resolving the conflict and approving the handover. This can take a few seconds.</span>
+                      </span>
+                    </div>
+                  )}
+                  {demoExportReady && !demoExportPreparing && (
                     <>
                       <button type="button" className="ws-btn ws-btn-primary ws-btn-sm" onClick={() => handleDemoExport('pdf')} disabled={isBusy('export:pdf')}>
                         {isBusy('export:pdf') ? 'Building PDF…' : '⬇ Export PDF'}

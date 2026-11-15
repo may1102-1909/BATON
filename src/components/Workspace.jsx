@@ -82,6 +82,7 @@ export function Workspace({
   const [qaResult, setQaResult] = useState(null);
   const [qaLoading, setQaLoading] = useState(false);
   const [packetId, setPacketId] = useState(null);
+  const [demoExportPreparing, setDemoExportPreparing] = useState(false);
 
   // Demo-only MCP simulator state
   const [simDecisionText, setSimDecisionText] = useState(demoSimulatorSample?.decision ?? '');
@@ -279,9 +280,13 @@ export function Workspace({
       confirmLabel: 'Revoke token',
       body: <>Any MCP client using <strong>{token.name}</strong> will stop working immediately.</>,
       run: () => runBusy(`token:${token.id}`, async () => {
-        await api.deleteToken(selectedOrgId, token.id);
+        const res = await api.deleteToken(selectedOrgId, token.id);
+        if (isDemo) {
+          setNewestToken(null);
+          if (res?.handover_withdrawn) setActiveHandoverDetail(null);
+        }
         await refreshOrgState(selectedOrgId);
-        notify('Token revoked.', 'success');
+        notify(isDemo && res?.handover_withdrawn ? 'Token revoked. With no MCP token left, the handover was withdrawn; create a token to build it again.' : 'Token revoked.', 'success');
       }),
     });
   }
@@ -384,14 +389,29 @@ export function Workspace({
   const handleSkipQuestion = questionId => runHandoverAction(id => api.skipQuestion(id, questionId));
 
   // In the demo the conflict is the last open item, so resolving it also approves the handover for export.
+  // Demo calls each carry the whole workspace to the engine, so the intermediate reloads are skipped.
   async function handleResolveConflict(claimId, body) {
-    const ok = await runHandoverAction(id => api.resolveConflict(id, claimId, body), isDemo ? null : 'Conflict resolved.');
-    if (!ok || !isDemo) return;
+    if (!isDemo) return runHandoverAction(id => api.resolveConflict(id, claimId, body), 'Conflict resolved.');
     const id = activeHandoverDetail?.handover?.id;
-    const detail = await api.getHandover(id).catch(() => null);
-    const waiting = (detail?.claims || []).some(c => c.status === 'pending') || (detail?.conflicts || []).some(c => !c.resolved);
-    if (waiting) { notify('Conflict resolved. Review the remaining claims, then approve the handover.', 'success'); return; }
-    await runHandoverAction(handoverId => api.approveHandover(handoverId), 'Conflict resolved and handover approved. Export it with the buttons at the top right.');
+    if (!id) return false;
+    return runBusy('handover', async () => {
+      setDemoExportPreparing(true);
+      try {
+        await api.resolveConflict(id, claimId, body);
+        const detail = await api.getHandover(id);
+        const waiting = (detail?.claims || []).some(c => c.status === 'pending') || (detail?.conflicts || []).some(c => !c.resolved);
+        if (!waiting) await api.approveHandover(id);
+        await loadHandover(id);
+        refreshOrgState(selectedOrgId);
+        notify(waiting ? 'Conflict resolved. Review the remaining claims, then approve the handover.' : 'Conflict resolved and handover approved. Export it with the buttons at the top right.', 'success');
+        return true;
+      } catch (err) {
+        notify(err.message);
+        return false;
+      } finally {
+        setDemoExportPreparing(false);
+      }
+    });
   }
 
   function handleDemoExport(format) {
@@ -854,6 +874,7 @@ export function Workspace({
             conflictSuggestions={conflictSuggestions}
             handleDemoExport={handleDemoExport}
             isDemo={isDemo}
+            demoExportPreparing={demoExportPreparing}
             demoNeedsToken={isDemo && handovers.length === 0 && !tokens.some(t => !t.revoked_at)}
             onGoToTokens={() => setActiveTab('team')}
             riskAlerts={riskAlerts}
