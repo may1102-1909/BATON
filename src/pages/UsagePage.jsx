@@ -1,7 +1,9 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Brand } from '../components/Brand'
 import { Button } from '../components/Button'
 import { useRouter } from '../router'
+import { getPendingInvite } from '../lib/invite'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 const STEPS = [
   ['Create or join a team', 'Create a workspace, or paste an invite link from an admin to join theirs.'],
@@ -13,6 +15,14 @@ const STEPS = [
 
 export function UsagePage() {
   const { navigate } = useRouter()
+
+  // Sign-in lands here; an invite carried through the GitHub sign-in is accepted on the dashboard.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !getPendingInvite()) return
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session?.user) navigate('/dashboard', { replace: true })
+    }).catch(() => {})
+  }, [])
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)', padding: '28px 24px 80px' }}>
