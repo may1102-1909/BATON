@@ -292,3 +292,23 @@ test('a signed-in visitor on /auth lands on the usage guide; one with a pending 
   await page.goto(`${BASE}/auth?invite=${INVITE}`);
   await expect(page).toHaveURL(/\/dashboard$/);
 });
+
+test('Continue with GitHub asks Supabase to return to the usage guide', async ({ page }) => {
+  let redirectTo = null;
+  await page.route(`${SUPABASE_URL}/auth/v1/authorize**`, route => {
+    redirectTo = new URL(route.request().url()).searchParams.get('redirect_to');
+    return route.fulfill({ status: 200, contentType: 'text/html', body: 'stopped' });
+  });
+  await page.goto(`${BASE}/auth`);
+  await page.getByRole('button', { name: /GitHub/ }).first().click();
+  await expect.poll(() => redirectTo).toBe(`${BASE}/usage`);
+});
+
+test('a signed-in visitor reaching the usage guide with a pending invite is sent to the dashboard to accept it', async ({ page }) => {
+  await stubApi(page);
+  await signIn(page);
+  await page.addInitScript(token => sessionStorage.setItem('baton_invite', token), INVITE);
+  await page.goto(`${BASE}/usage`);
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByText('Invite accepted. You joined the team.')).toBeVisible();
+});

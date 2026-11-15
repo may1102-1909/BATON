@@ -63,7 +63,7 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
       const { data, error } = await supabase.auth.signUp({
         email: emailToSubmit,
         password: passwordToSubmit,
-        options: { emailRedirectTo: `${window.location.origin}/dashboard` }
+        options: { emailRedirectTo: `${window.location.origin}/usage` }
       })
 
       if (error) {
@@ -85,7 +85,7 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
       setInviteError(result.message)
       return
     }
-    setMessage(result.status === 'accepted' ? 'Invite accepted. Opening your team…' : 'Signed in. Opening your dashboard…')
+    setMessage(result.status === 'accepted' ? 'Invite accepted. Opening your team…' : 'Signed in. Opening Baton…')
     onAuthSuccess?.(user)
   }
 
@@ -112,7 +112,7 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: emailToSubmit,
-        options: { emailRedirectTo: `${window.location.origin}/dashboard` }
+        options: { emailRedirectTo: `${window.location.origin}/usage` }
       })
 
       if (error) {
@@ -287,7 +287,7 @@ export function Auth({ mode: propMode = 'login', setMode: externalSetMode, back,
               try {
                 const { error } = await supabase.auth.signInWithOAuth({
                   provider: 'github',
-                  options: { redirectTo: `${window.location.origin}/dashboard` }
+                  options: { redirectTo: `${window.location.origin}/usage` }
                 })
                 if (error) setErrorMessage(`GitHub sign-in failed: ${error.message}`)
               } catch (err) {
