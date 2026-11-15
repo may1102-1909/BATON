@@ -717,19 +717,28 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
         try {
           const qEmbedding = await embedText(rawQuery, geminiKey, fetchImpl);
           if (qEmbedding) {
-            const vectorMatches = await store.rpc('match_memory', {
-              query_embedding: qEmbedding,
-              p_org: orgId,
-              p_repo: repositoryId || null,
-              match_count: 40
-            });
-            // match_memory ignores per-source visibility, so every hit is re-checked against the caller.
+            const base = { query_embedding: qEmbedding, p_org: orgId, p_repo: repositoryId || null, match_count: 40 };
+            let vectorMatches;
+            try {
+              vectorMatches = await store.rpc('match_memory', { ...base, p_user: actor.id, p_role: actor.role, p_function_role: actor.function_role ?? null });
+            } catch (error) {
+              // Databases without migration 20261115_match_memory_visibility only know the 4-argument version.
+              if (!/match_memory|function|schema cache/i.test(String(error?.message))) throw error;
+              vectorMatches = await store.rpc('match_memory', base);
+            }
+            // The database filters by caller too; this second check keeps older databases and future edits safe.
+            const hits = Array.isArray(vectorMatches) ? vectorMatches : [];
+            const sourceIds = hits.filter(m => m.kind !== 'file').map(m => m.id);
+            const fetched = typeof store.getMany === 'function'
+              ? await store.getMany('sources', sourceIds)
+              : await Promise.all(sourceIds.map(id => store.get('sources', id)));
+            const byId = new Map(fetched.filter(Boolean).map(source => [source.id, source]));
             const allowed = [];
-            for (const m of Array.isArray(vectorMatches) ? vectorMatches : []) {
+            for (const m of hits) {
               if (m.kind === 'file') {
                 if (actor.role === 'admin' || canSee(audienceFromPaths([m.path]), actor.function_role)) allowed.push(m);
               } else {
-                const source = await store.get('sources', m.id);
+                const source = byId.get(m.id);
                 if (source && source.org_id === orgId && sourceAllowed(source, actor)) allowed.push(m);
               }
             }

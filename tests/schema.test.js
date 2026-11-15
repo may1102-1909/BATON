@@ -69,3 +69,30 @@ test('handover domain persists its actual records in PostgreSQL',async()=>{
     assert.equal(detail.handover.status,'approved');
   }finally{await db.close();}
 });
+
+test('match_memory filters visibility, private authorship and function audience inside the database',async()=>{
+  const db=newDb();
+  try {
+    await db.exec(`CREATE ROLE authenticated; CREATE ROLE anon; CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT null::uuid $$;`);
+    const sql=(await readFile(new URL('../supabase/schema.sql',import.meta.url),'utf8')).replace(/create extension if not exists pgcrypto;/i,'');
+    await db.exec(sql);
+    // The standalone migration must also apply cleanly on top of the schema.
+    await db.exec(await readFile(new URL('../supabase/migrations/20261115_match_memory_visibility.sql',import.meta.url),'utf8'));
+    const org='20000000-0000-4000-8000-000000000009',me='10000000-0000-4000-8000-000000000009',other='10000000-0000-4000-8000-000000000008';
+    const vec=`('[' || array_to_string(array_fill(0.1::float, array[768]), ',') || ']')::vector`;
+    await db.exec(`INSERT INTO organizations(id,name) VALUES ('${org}','Recall');
+      INSERT INTO sources(org_id,author_id,content,type,visibility,metadata,embedding) VALUES
+        ('${org}','${other}','team note','decision','team','{"audience":["all"]}',${vec}),
+        ('${org}','${other}','admin note','decision','admin','{"audience":["all"]}',${vec}),
+        ('${org}','${other}','their private note','decision','private','{"audience":["all"]}',${vec}),
+        ('${org}','${me}','my private note','decision','private','{"audience":["all"]}',${vec}),
+        ('${org}','${other}','infra note','decision','team','{"audience":["infra"]}',${vec}),
+        ('${org}','${other}','untagged note','decision','team','{}',${vec});`);
+    const recall=async(role,fn)=>(await db.query(`SELECT content FROM match_memory(${vec},'${org}',null,20,'${me}',$1,$2) ORDER BY content`,[role,fn])).rows.map(r=>r.content);
+    assert.deepEqual(await recall('team','frontend'),['my private note','team note','untagged note']);
+    assert.deepEqual(await recall('team','infra'),['infra note','my private note','team note','untagged note']);
+    assert.deepEqual(await recall('team',null),['infra note','my private note','team note','untagged note']);
+    assert.deepEqual(await recall('admin',null),['admin note','infra note','my private note','team note','their private note','untagged note']);
+    assert.deepEqual(await recall(null,null),['infra note','my private note','team note','untagged note'],'no role means the restrictive member view');
+  }finally{await db.close();}
+});

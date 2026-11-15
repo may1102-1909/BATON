@@ -43,6 +43,10 @@ export function createMemoryStore(seed = {}) {
     async get(name, id) {
       return clone(table(name).find(record => record.id === id) ?? null);
     },
+    async getMany(name, ids = []) {
+      const wanted = new Set(ids);
+      return clone(table(name).filter(record => wanted.has(record.id)));
+    },
     async insert(name, record) {
       const value = { id: randomUUID(), created_at: new Date().toISOString(), ...clone(record) };
       table(name).push(value);
@@ -159,6 +163,12 @@ export function createSupabaseStore(client, env = process.env) {
       const db = await clientPromise;
       const record = await run(`get ${name}`, db.from(tableName(name)).select('*').eq('id', id).maybeSingle());
       return name === 'sources' ? sourceFromDb(record) : record;
+    },
+    async getMany(name, ids = []) {
+      if (!ids.length) return [];
+      const db = await clientPromise;
+      const rows = await run(`getMany ${name}`, db.from(tableName(name)).select('*').in('id', [...new Set(ids)]));
+      return name === 'sources' ? rows.map(sourceFromDb) : rows;
     },
     async insert(name, record) {
       const db = await clientPromise;
