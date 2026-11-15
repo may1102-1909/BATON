@@ -85,13 +85,10 @@ export function LandingPage() {
               <Icon size={12} />
             </Link>
           ) : (
-            <>
-              <Link to="/auth" style={linkStyle}>Sign in</Link>
-              <Link to="/auth" style={primaryStyle}>
-                <span>Launch App</span>
-                <Icon size={12} />
-              </Link>
-            </>
+            <Link to="/auth" style={primaryStyle}>
+              <span>Launch App</span>
+              <Icon size={12} />
+            </Link>
           )}
         </nav>
       </header>
