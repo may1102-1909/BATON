@@ -854,6 +854,8 @@ export function Workspace({
             conflictSuggestions={conflictSuggestions}
             handleDemoExport={handleDemoExport}
             isDemo={isDemo}
+            demoNeedsToken={isDemo && handovers.length === 0 && !tokens.some(t => !t.revoked_at)}
+            onGoToTokens={() => setActiveTab('team')}
             riskAlerts={riskAlerts}
             showAllAlerts={showAllAlerts}
             setShowAllAlerts={setShowAllAlerts}
@@ -917,7 +919,12 @@ export function Workspace({
         <TokenModal
           orgId={selectedOrgId}
           notify={notify}
-          onCreated={token => { setNewestToken(token); refreshOrgState(selectedOrgId); }}
+          onCreated={async token => {
+            setNewestToken(token);
+            const hadHandover = handovers.length > 0;
+            await refreshOrgState(selectedOrgId);
+            if (isDemo && !hadHandover) notify('Token created. Baton has built the Krishna Gupta to Vikrant handover; open the Handovers tab.', 'success');
+          }}
           onClose={() => setShowTokenModal(false)}
         />
       )}

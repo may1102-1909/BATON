@@ -1,13 +1,28 @@
 import { test, expect } from '@playwright/test';
 
-// Whole demo handover flow: prepared handover, prefilled conflict, approval on resolve, Markdown and PDF export,
-// then the incoming engineer acknowledges and asks a cited question.
-test('admin resolves the prefilled conflict, exports Markdown and PDF; incoming engineer acknowledges and asks', async ({ page }) => {
+// Whole demo handover flow: no handover until an MCP token exists, then the prepared handover, prefilled conflict,
+// approval on resolve, and Markdown and PDF export.
+test('the handover appears after an MCP token is created; resolving the conflict enables Markdown and PDF export', async ({ page }) => {
   await page.goto('/demo-page');
 
   // Bus-factor alerts live under Handovers in the demo, not on the overview.
   await expect(page.getByRole('table')).toContainText('Bus factor');
   await expect(page.getByRole('region', { name: 'Bus factor alerts' })).toHaveCount(0);
+
+  // Only the admin is shown; there is no persona switcher.
+  await expect(page.getByRole('button', { name: /Leaving engineer|Incoming engineer/ })).toHaveCount(0);
+
+  await page.getByRole('tab', { name: /^Handovers/ }).click();
+  await expect(page.getByText('Create an MCP token first')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Initiate Handover/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Start handover for/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Go to Team & Tokens' }).click();
+  await page.getByRole('button', { name: '+ Generate MCP Token' }).first().click();
+  await page.getByLabel(/Token name/).fill('claude code');
+  await page.getByRole('button', { name: 'Create token' }).click();
+  await expect(page.getByLabel('New token')).toHaveValue(/^baton_/);
+  await page.keyboard.press('Escape');
+  await expect(page.getByText(/Baton has built the Krishna Gupta to Vikrant handover/)).toBeVisible();
 
   await page.getByRole('tab', { name: /^Handovers/ }).click();
   await expect(page.getByRole('button', { name: 'Handover Krishna Gupta → Vikrant (draft)' })).toBeVisible();
@@ -39,19 +54,6 @@ test('admin resolves the prefilled conflict, exports Markdown and PDF; incoming 
   const bytes = await (await pdf.createReadStream()).toArray().then(chunks => Buffer.concat(chunks).toString('latin1'));
   expect(bytes.startsWith('%PDF-1.4')).toBe(true);
 
-  await page.getByRole('button', { name: /Incoming engineer/ }).click();
-  await page.getByRole('tab', { name: /^Handovers/ }).click();
-  await expect(page.getByText('Status: APPROVED')).toBeVisible();
-  await page.getByRole('button', { name: 'Open packet' }).click();
-  await expect(page.getByText(/items? hidden for your role/)).toBeVisible();
-  await expect(page.locator('body')).not.toContainText('Terraform');
-
-  await page.getByRole('button', { name: 'Acknowledge handover' }).click();
-  await expect(page.getByText(/acknowledged \d{4}-/i)).toBeVisible();
-
-  await page.getByRole('textbox', { name: 'Your question' }).fill('What is the deadline for the walkthrough?');
-  await page.getByRole('button', { name: 'Ask Baton' }).click();
-  await expect(page.getByText('What is the deadline for the walkthrough?')).toBeVisible();
   await expect(page.locator('body')).not.toContainText(/undefined|\[object Object\]/);
 });
 
@@ -66,7 +68,7 @@ test('demo GitHub, team invite and MCP tools work without signing in', async ({ 
   await expect(connected).toHaveCount(0);
 
   await page.getByRole('tab', { name: /^Team & Tokens/ }).click();
-  await expect(page.getByText('Krishna Gupta').first()).toBeVisible();
+  await expect(page.getByText('Krishna Gupta', { exact: true }).first()).toBeVisible();
   await expect(page.locator('body')).not.toContainText('renoschubert');
 
   await page.getByRole('button', { name: '+ Invite member' }).click();

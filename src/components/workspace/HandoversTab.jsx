@@ -6,6 +6,8 @@ export function HandoversTab({
   conflictSuggestions = {},
   handleDemoExport,
   isDemo = false,
+  demoNeedsToken = false,
+  onGoToTokens,
   riskAlerts = [],
   showAllAlerts = false,
   setShowAllAlerts,
@@ -58,7 +60,7 @@ export function HandoversTab({
                       </button>
                     </>
                   )}
-                  {(isAdmin || !isDemo) && (
+                  {(isAdmin || !isDemo) && !demoNeedsToken && (
                     <button
                       type="button"
                       className={`ws-btn ws-btn-sm ${demoExportReady ? '' : 'ws-btn-primary'}`}
@@ -70,7 +72,14 @@ export function HandoversTab({
                 </div>
               </div>
 
-              {handovers.length === 0 ? (
+              {demoNeedsToken ? (
+                <div className="ws-empty-state">
+                  <div className="ws-empty-icon" aria-hidden="true">🔑</div>
+                  <div className="ws-empty-title">Create an MCP token first</div>
+                  <div style={{ marginBottom: 14 }}>The handover is built once an agent can report to Baton. Generate an MCP token in Team &amp; Tokens, then come back here.</div>
+                  <button type="button" className="ws-btn ws-btn-primary" onClick={onGoToTokens}>Go to Team &amp; Tokens</button>
+                </div>
+              ) : handovers.length === 0 ? (
                 <div className="ws-empty-state">
                   <div className="ws-empty-icon" aria-hidden="true">🤝</div>
                   <div className="ws-empty-title">No active handovers</div>
@@ -346,7 +355,7 @@ export function HandoversTab({
                       <span>
                         <strong style={{ color: '#fbbf24' }}>{alert.module}:</strong> {alert.message}
                       </span>
-                      {isAdmin && (
+                      {isAdmin && !demoNeedsToken && (
                         <button
                           type="button"
                           className="ws-btn ws-btn-sm"
