@@ -2,8 +2,8 @@
 // answered by the real engine through POST /api/demo (server/demo.js), which keeps nothing and uses no credentials.
 import snapshot from './demoSnapshot.json' with { type: 'json' }
 
-const STORAGE_KEY = 'baton_demo_state_v5'
-const LEGACY_STORAGE_KEYS = ['baton_demo_state_v4', 'baton_demo_state_v3', 'baton_demo_state_v2', 'baton_demo_state']
+const STORAGE_KEY = 'baton_demo_state_v6'
+const LEGACY_STORAGE_KEYS = ['baton_demo_state_v5', 'baton_demo_state_v4', 'baton_demo_state_v3', 'baton_demo_state_v2', 'baton_demo_state']
 const ORG_ID = 'demo-org'
 const REPO_ID = 'demo-repo'
 const DEMO_INSTALLATION_ID = 'demo-installation'
@@ -11,10 +11,10 @@ const ADMIN_LOGIN = 'may1102-1909'
 const SEED_DATE = '2026-11-01T10:00:00Z'
 const PRODUCTION_ONLY = 'Available in Production mode'
 
-const LEAVER_LOGIN = 'krishna2205gupta-rgb'
-const INCOMING_LOGIN = 'vikrannntttt8'
+const LEAVER_LOGIN = 'vikrannntttt8'
+const INCOMING_LOGIN = 'krishna2205gupta-rgb'
 // GitHub attributes some of Vikrant's commits (git author "vikrannntttt8") to the linked account "renoschubert".
-const LOGIN_ALIASES = { renoschubert: INCOMING_LOGIN }
+const LOGIN_ALIASES = { renoschubert: LEAVER_LOGIN }
 const alias = login => LOGIN_ALIASES[login] ?? login
 const toFiles = list => (list ?? []).map(filename => ({ filename }))
 
@@ -55,13 +55,13 @@ export function sourcesFromSnapshot(data, repoId = REPO_ID) {
   return sources
 }
 
-// The repository's collaborators: Krishna hands over to Vikrant.
+// The repository's collaborators: Vikrant (frontend) hands over to Krishna.
 const people = { leaver: LEAVER_LOGIN, incoming: INCOMING_LOGIN }
 
 export const DEMO_PERSONAS = [
   { id: 'demo-admin', name: 'May (Admin)', role: 'Team lead' },
-  { id: 'demo-leaver', name: 'Krishna Gupta', role: 'Leaving engineer' },
-  { id: 'demo-incoming', name: 'Vikrant', role: 'Incoming engineer' }
+  { id: 'demo-leaver', name: 'Vikrant GP', role: 'Leaving engineer (frontend)' },
+  { id: 'demo-incoming', name: 'Krishna Gupta', role: 'Incoming engineer' }
 ]
 
 export const DEMO_SIMULATOR_SAMPLE = {
@@ -73,29 +73,29 @@ export const DEMO_SIMULATOR_SAMPLE = {
 // save_memory stores what was decided; the demo replays those calls with the visitor's new MCP token.
 export const ANTIGRAVITY_SESSION = {
   client: 'antigravity',
-  session_id: 'agy-session-handover-lock',
+  session_id: 'agy-session-landing-hero',
   config_path: '.agents/mcp_config.json',
   turns: [
-    { index: 1, role: 'user', content: 'Two servers generated the same handover at once and the claims were duplicated. Fix it.' },
-    { index: 2, role: 'assistant', content: 'I will add a per-handover generation lock in server/handover.js, with a 5-minute stale timeout so a crashed worker cannot block it forever.' },
-    { index: 3, role: 'user', content: 'Also make sure nothing secret leaves the machine when you log this.' },
-    { index: 4, role: 'assistant', content: 'Memory is redacted client-side by mcp-server/src/redact.ts before save_memory sends it. Note: mcp-server/dist can drift from src and CI does not check it yet.' }
+    { index: 1, role: 'user', content: 'The 3D paper hero makes the landing page janky on my laptop. Speed it up without losing the look.' },
+    { index: 2, role: 'assistant', content: 'I will keep the shader in its own iframe (srcDoc) so it cannot block the React app, drop the extra hero overlays and lower the paper mesh detail in src/shaders/3d-paper/sources/3d-paper-baton.html.' },
+    { index: 3, role: 'user', content: 'Also check the /usage page, it feels heavy on mobile.' },
+    { index: 4, role: 'assistant', content: 'The two developer sticker images in public/stickers are about 780 KB each and load on every visit to /usage. They should be converted to WebP and lazy-loaded; I have not done that yet.' }
   ],
   memories: [
     {
       event_id: 'agy-1', type: 'decision',
-      content: '[Antigravity · MCP] Handover generation takes a per-handover lock with a 5-minute stale timeout.',
-      metadata: { decision: 'Lock handover generation per handover', reason: 'Concurrent servers duplicated claims; the stale timeout recovers from crashed workers.', files_affected: ['server/handover.js'], source_turns: [1, 2] }
+      content: '[Antigravity · MCP] The landing-page shader renders inside its own iframe so it never blocks the React app.',
+      metadata: { decision: 'Isolate the 3D Paper hero in an iframe', reason: 'The shader competed with the app for the main thread; an isolated frame keeps navigation responsive.', files_affected: ['src/shaders/3d-paper/ThreeDPaper.tsx', 'src/pages/LandingPage.jsx'], source_turns: [1, 2] }
     },
     {
       event_id: 'agy-2', type: 'decision',
-      content: '[Antigravity · MCP] Conversation memory is redacted client-side before it leaves the IDE.',
-      metadata: { decision: 'Redact memory in the MCP server before sending', reason: 'Secrets in agent conversations must never reach Baton storage.', files_affected: ['mcp-server/src/redact.ts'], source_turns: [3, 4] }
+      content: '[Antigravity · MCP] Hero overlays were removed and the paper mesh simplified for faster first paint.',
+      metadata: { decision: 'Streamline the hero and lower shader detail', reason: 'Low-end laptops dropped frames; the simpler hero keeps the same look.', files_affected: ['src/shaders/3d-paper/sources/3d-paper-baton.html'], source_turns: [2] }
     },
     {
       event_id: 'agy-3', type: 'blocker',
-      content: '[Antigravity · MCP] mcp-server/dist can drift from src; CI has no drift check yet.',
-      metadata: { problem: 'mcp-server/dist drift is not checked in CI', status: 'active', workaround_notes: 'Run npm run build in mcp-server before committing.', source_turns: [4] }
+      content: '[Antigravity · MCP] The /usage page loads two ~780 KB sticker PNGs on every visit; not yet converted or lazy-loaded.',
+      metadata: { problem: 'Sticker images on /usage are ~780 KB PNGs each', status: 'active', workaround_notes: 'Convert public/stickers/*.png to WebP and add loading="lazy" in src/pages/UsagePage.jsx.', files_affected: ['public/stickers/dev-glasses.png', 'src/pages/UsagePage.jsx'], source_turns: [3, 4] }
     }
   ]
 }
@@ -121,15 +121,16 @@ export function getInitialDemoState() {
   const members = [
     member('m-admin', 'demo-admin', 'May (Admin)', 'admin', ADMIN_LOGIN),
     member('m-leaver', 'demo-leaver', DEMO_PERSONAS[1].name, 'member', people.leaver),
-    { ...member('m-incoming', 'demo-incoming', DEMO_PERSONAS[2].name, 'member', people.incoming), function_role: 'backend' }
+    { ...member('m-incoming', 'demo-incoming', DEMO_PERSONAS[2].name, 'member', people.incoming), function_role: 'frontend' }
   ]
   const idFor = login => members.find(item => item.github_login === login)?.user_id ?? null
   const sources = sourcesFromSnapshot(snapshot)
   const now = snapshot.generated_at
 
-  // Decisions: commits that record a choice, plus the project's own agent protocol.
+  // Decisions: commits that record a choice (the leaving engineer's first), plus the project's own agent protocol.
   const choice = /^(feat|refactor)\b|\b(migrat|switch|replac|adopt)/i
-  for (const commit of snapshot.commits.filter(item => choice.test(item.message)).slice(0, 6).map(item => ({ ...item, author_login: alias(item.author_login) }))) {
+  const choices = snapshot.commits.filter(item => choice.test(item.message)).map(item => ({ ...item, author_login: alias(item.author_login) }))
+  for (const commit of [...choices.filter(item => item.author_login === people.leaver).slice(0, 6), ...choices.filter(item => item.author_login !== people.leaver).slice(0, 4)]) {
     const [subject, ...rest] = commit.message.split('\n').filter(Boolean)
     sources.push({
       id: `decision-${commit.sha.slice(0, 12)}`, org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(commit.author_login), author_login: commit.author_login,
@@ -143,37 +144,28 @@ export function getInitialDemoState() {
     metadata: { decision: 'Capture decisions with the Baton MCP server', reason: String(snapshot.agents ?? '').split('\n').filter(line => line && !line.startsWith('#'))[0] ?? 'Keeps context across agent sessions.', files_affected: ['AGENTS.md'] }
   })
 
-  // Planted examples, labelled as samples because they are not part of the repository's history.
+  // Records the leaving engineer added by hand (not in the git history). `illustrative` marks them for the demo's own bookkeeping.
+  const byLeaver = { org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, visibility: 'team', created_at: now }
   sources.push(
     {
-      id: 'sample-decision-a', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, type: 'decision', visibility: 'team', created_at: now,
-      content: '[SAMPLE] Keep the MCP collector local-only so no project data leaves the developer machine.',
-      metadata: { decision: '[SAMPLE] Collector stays local-only', reason: 'Sample of one side of a conflict.', files_affected: ['mcp-server/'] }
+      ...byLeaver, id: 'note-route-split', type: 'decision',
+      content: 'Keep the landing page (/) separate from the signed-in app (/dashboard, /usage) so the 3D hero never loads inside the workspace.',
+      metadata: { decision: 'Landing page and app use separate routes', reason: 'The shader is heavy; signed-in users should not pay for it on every page.', files_affected: ['src/router.jsx', 'src/pages/LandingPage.jsx'], illustrative: true }
     },
     {
-      id: 'sample-decision-b', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(ADMIN_LOGIN), author_login: ADMIN_LOGIN, type: 'decision', visibility: 'team', created_at: now,
-      content: '[SAMPLE] Expose the MCP collector over HTTP so hosted agents can push decisions.',
-      metadata: { decision: '[SAMPLE] Collector is exposed over HTTP', reason: 'Sample of the opposing side of a conflict.', files_affected: ['mcp-server/'] }
+      ...byLeaver, id: 'note-redaction', type: 'decision',
+      content: 'Setup notes for the /usage page mentioned an API key [REDACTED: API_KEY]; Baton scrubbed the raw value before it was stored.',
+      metadata: { decision: 'Never paste real keys into the usage guide', reason: 'Shows that secrets never reach storage.', files_affected: ['src/pages/UsagePage.jsx'], illustrative: true }
     },
     {
-      id: 'sample-redaction', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, type: 'decision', visibility: 'team', created_at: now,
-      content: '[SAMPLE] Deploy notes mentioned an API key [REDACTED: API_KEY]; the raw value was scrubbed before it was stored.',
-      metadata: { decision: '[SAMPLE] Redaction example', reason: 'Shows secrets never reach storage.', files_affected: [] }
+      ...byLeaver, id: 'note-shader-bundle', type: 'blocker',
+      content: 'ThreeDPaper.tsx imports all four 3D Paper template variants as raw HTML, so the unused certificate, japanese and site-of-the-year pages ship in the landing bundle.',
+      metadata: { status: 'active', problem: 'Unused shader templates are bundled with the landing page', workaround_notes: 'Load the variants with dynamic import(), or delete the ones the landing page does not use.', files_affected: ['src/shaders/3d-paper/ThreeDPaper.tsx'], illustrative: true }
     },
     {
-      id: 'sample-blocker', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, type: 'blocker', visibility: 'team', created_at: now,
-      content: '[SAMPLE] Release waits for a review of the handover generation fallback.',
-      metadata: { status: 'active', problem: '[SAMPLE] Handover fallback needs review', workaround_notes: 'Evidence-only mode is used until a model key is configured.' }
-    },
-    ...[['queue', ['src/webhooks/queue.js', 'src/webhooks/retry.js']], ['backoff', ['src/webhooks/retry.js']], ['signing', ['src/webhooks/signing.js']]].map(([name, files]) => ({
-      id: `sample-commit-${name}`, org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(people.leaver), author_login: people.leaver, type: 'commit', visibility: 'team', created_at: now,
-      content: `[SAMPLE] Webhook delivery ${name} work (only the leaving engineer has touched src/webhooks).`,
-      metadata: { kind: 'commit', sha: `sample${name}`, author_login: people.leaver, repository: snapshot.repository, files: toFiles(files), audience: ['all'] }
-    })),
-    {
-      id: 'sample-infra-blocker', org_id: ORG_ID, repository_id: REPO_ID, author_id: idFor(ADMIN_LOGIN), author_login: ADMIN_LOGIN, type: 'blocker', visibility: 'team', created_at: now,
-      content: '[SAMPLE] Infra-only: the staging cluster certificate expires soon and only the Terraform state bucket credentials can rotate it.',
-      metadata: { status: 'active', problem: '[SAMPLE] Infra-only certificate rotation', audience: ['infra'] }
+      ...byLeaver, id: 'note-vercel-access', type: 'blocker',
+      content: 'Infra: production environment variables for the frontend build live in the team owner\'s Vercel account; only the owner can change them.',
+      metadata: { status: 'active', problem: 'Frontend build settings need the Vercel owner', audience: ['infra'], files_affected: ['vite.config.js'], illustrative: true }
     }
   )
 
@@ -183,12 +175,12 @@ export function getInitialDemoState() {
     repositories: [{ id: REPO_ID, org_id: ORG_ID, full_name: snapshot.repository, installation_id: DEMO_INSTALLATION_ID, last_synced_at: now, demo: true, created_at: SEED_DATE }],
     sources,
     tasks: [{
-      id: 'sample-task', org_id: ORG_ID, title: '[SAMPLE] Walk the incoming engineer through server/ and mcp-server/', description: 'Sample task for the handover story.',
+      id: 'handover-task', org_id: ORG_ID, title: 'Walk Krishna through the landing page shader and the /usage page', description: 'Cover the 3D Paper hero, routing and the usage guide before Vikrant leaves.',
       assignee_id: 'demo-leaver', created_by: 'demo-admin', status: 'open', due_at: '2026-11-10', created_at: SEED_DATE
     }],
     task_comments: [{
-      id: 'sample-comment', org_id: ORG_ID, task_id: 'sample-task', author_id: 'demo-admin', parent_id: null, created_at: SEED_DATE,
-      content: '[SAMPLE] Walkthrough moved to 15 Nov because the review slipped.'
+      id: 'handover-task-comment', org_id: ORG_ID, task_id: 'handover-task', author_id: 'demo-admin', parent_id: null, created_at: SEED_DATE,
+      content: 'Walkthrough moved to 15 Nov because Krishna is reviewing the /usage page copy first.'
     }],
     handovers: []
   }

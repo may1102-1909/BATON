@@ -19,7 +19,20 @@ function canRunShader() {
   }
 }
 
-const linkStyle = { color: '#f4f4f5', fontSize: 13, fontWeight: 500, textDecoration: 'none', cursor: 'pointer' }
+const linkStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '7px 17px',
+  borderRadius: 8,
+  border: '1px solid rgba(52, 211, 153, 0.55)',
+  background: 'rgba(16, 185, 129, 0.12)',
+  color: '#a7f3d0',
+  fontSize: 13,
+  fontWeight: 600,
+  textDecoration: 'none',
+  cursor: 'pointer'
+}
 const primaryStyle = {
   display: 'inline-flex',
   alignItems: 'center',

@@ -957,7 +957,7 @@ export function Workspace({
             if (isDemo) setAgyPopup('pending');
             const hadHandover = handovers.length > 0;
             await refreshOrgState(selectedOrgId);
-            if (isDemo && !hadHandover) notify('Token created. Baton has built the Krishna Gupta to Vikrant handover; open the Handovers tab.', 'success');
+            if (isDemo && !hadHandover) notify('Token created. Baton has built the Vikrant GP to Krishna Gupta handover; open the Handovers tab.', 'success');
           }}
           onClose={() => { setShowTokenModal(false); setAgyPopup(p => (p === 'pending' ? 'open' : p)); }}
         />

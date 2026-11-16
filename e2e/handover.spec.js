@@ -25,13 +25,13 @@ test('the handover appears after an MCP token is created; resolving the conflict
   // The demo then explains the Antigravity connection; closing it scrolls to the Antigravity panel.
   await page.getByRole('dialog', { name: 'Antigravity is connected to Baton MCP' }).getByRole('button', { name: 'Close dialog' }).click();
   await expect(page.getByTestId('antigravity-link')).toBeInViewport();
-  await expect(page.getByText(/Baton has built the Krishna Gupta to Vikrant handover/)).toBeVisible();
+  await expect(page.getByText(/Baton has built the Vikrant GP to Krishna Gupta handover/)).toBeVisible();
 
   await page.getByRole('tab', { name: /^Handovers/ }).click();
-  await expect(page.getByRole('button', { name: 'Handover Krishna Gupta → Vikrant (draft)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Handover Vikrant GP → Krishna Gupta (draft)' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Bus factor alerts' }).getByRole('button', { name: /^Start handover for/ }).first()).toBeVisible();
 
-  // Krishna's exit interview is already answered from the repository records.
+  // Vikrant's exit interview is already answered from the repository records.
   await expect(page.getByText(/RISK · SCORE \d+/i).first()).toBeVisible();
   await expect(page.getByText(/^Answer:/).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /^Answer question:/ })).toHaveCount(0);
@@ -52,13 +52,13 @@ test('the handover appears after an MCP token is created; resolving the conflict
   await expect(page.getByText('Status: APPROVED')).toBeVisible();
 
   const [markdown] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Export Markdown/ }).click()]);
-  expect(markdown.suggestedFilename()).toBe('handover-krishna-gupta-to-vikrant.md');
+  expect(markdown.suggestedFilename()).toBe('handover-vikrant-gp-to-krishna-gupta.md');
   const text = await (await markdown.createReadStream()).toArray().then(chunks => Buffer.concat(chunks).toString('utf8'));
-  expect(text).toMatch(/^# Engineering handover: Krishna Gupta to Vikrant/);
-  expect(text).toContain('Exit interview with Krishna Gupta');
+  expect(text).toMatch(/^# Engineering handover: Vikrant GP to Krishna Gupta/);
+  expect(text).toContain('Exit interview with Vikrant GP');
   expect(text).toMatch(/Resolved by May \(Admin\)/);
   const [pdf] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Export PDF/ }).click()]);
-  expect(pdf.suggestedFilename()).toBe('handover-krishna-gupta-to-vikrant.pdf');
+  expect(pdf.suggestedFilename()).toBe('handover-vikrant-gp-to-krishna-gupta.pdf');
   const bytes = await (await pdf.createReadStream()).toArray().then(chunks => Buffer.concat(chunks).toString('latin1'));
   expect(bytes.startsWith('%PDF-1.4')).toBe(true);
 
