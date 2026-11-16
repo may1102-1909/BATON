@@ -1,12 +1,31 @@
-# BATON
+<div align="center">
 
-> Pass the knowledge, not just the code.
+<img src="public/baton-logo-dark.png" alt="Baton — pass the knowledge, not just the code" width="640" />
 
-BATON helps a team keep the reasoning behind its code when someone leaves. It collects decisions and blockers from AI coding agents (through an MCP server), collects commits, pull requests, issues and branches from GitHub, and turns that evidence into a handover for the incoming engineer. Every claim in a handover cites the sources it came from; an admin reviews and approves the claims before the newcomer can read them.
+<br />
 
-Built for the CodersInPune Hackathon 2026 (team MUMBAI_WALE).
+### Pass the knowledge, not just the code.
 
-## What is in this repository
+BATON helps a team keep the reasoning behind its code when someone leaves. It collects decisions and blockers from AI coding agents (through an MCP server), collects commits, pull requests, issues and branches from GitHub, and turns that evidence into a handover for the incoming engineer.
+
+**Every claim in a handover cites the sources it came from, and an admin approves it before the newcomer can read it.**
+
+![React](https://img.shields.io/badge/React-18-149ECA?logo=react&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3FCF8E?logo=supabase&logoColor=white)
+![MCP](https://img.shields.io/badge/MCP-stdio%20server-10b981)
+![Playwright](https://img.shields.io/badge/e2e-Playwright-2EAD33?logo=playwright&logoColor=white)
+
+**CodersInPune Hackathon 2026** · **Track: Full Stack** · **Team: MUMBAI_WALE**
+
+[Repository map](#-what-is-in-this-repository) · [How it works](#-how-it-works) · [MCP](#-connect-an-ai-agent-mcp) · [Setup](#-setup) · [Demo](#-production-vs-demo) · [GitHub](#-connecting-a-github-repository) · [API](#-api-overview) · [Testing](#-testing) · [Limits](#-known-limits)
+
+</div>
+
+---
+
+## 🗂 What is in this repository
 
 | Part | Where | Notes |
 | --- | --- | --- |
@@ -14,20 +33,26 @@ Built for the CodersInPune Hackathon 2026 (team MUMBAI_WALE).
 | API | `server/` | A Node ESM request handler (`server/app.js`) with a memory store and a Supabase store. Vercel serves it from `api/index.js`; `vite dev` mounts it through `src/server/apiMiddleware.js`; `server/index.js` is a standalone Node server for `dist/`. |
 | MCP server | `mcp-server/` | Eleven tools: `log_decision`, `log_blocker`, `get_context`, `bootstrap_project`, `save_memory`, `get_file_context`, `sync_history`, `github_activity`, `get_exit_interview`, `answer_exit_question`, `export_handover`. Also a `baton` CLI (`init`, `sync`, `handover export`) used by the git and Claude Code hooks. |
 | Database | `supabase/schema.sql`, `supabase/migrations/` | Postgres schema; the app also runs without the optional Round 3 migration. |
-| Tests | `tests/` (unit, `node:test`), `e2e/` (Playwright) | See [Testing](#testing). |
+| Tests | `tests/` (unit, `node:test`), `e2e/` (Playwright) | See [Testing](#-testing). |
 
-## How it works
+---
 
-1. **Capture.** MCP tools and the git post-commit hook send decisions, blockers, commits and file summaries to `/api/collector/*`. A GitHub repository can also be synced directly (commits, pull requests with changed files, issues, branches ahead of the default branch) and updated by webhook.
-2. **Redact.** Text is scrubbed with regular expressions and an entropy check for secrets such as JWTs, API keys and private keys, both in the MCP client and on the server. This is pattern-based redaction, not a guarantee that every secret is caught.
-3. **Generate.** An admin starts a handover for a leaver and an incoming member. BATON asks the leaver targeted questions (exit interview), then drafts claims. With `GEMINI_API_KEY` set, Gemini drafts them; without it, or if Gemini fails, a deterministic evidence-only compiler is used and the result is labelled `evidence-only`. Claims are validated against the supplied sources: unknown citations are dropped and a claim only counts as `verified` when its text appears in a cited source.
-4. **Review and approve.** The admin approves, edits or rejects each claim and resolves conflicting evidence.
-5. **Hand over the file.** The approved handover is the final product: a Markdown file (decisions, risks, resolved conflicts, known gaps, cited sources). Download it with **Export Markdown** on the handover page, or let the agent save it into the repository with the `export_handover` MCP tool / `npm run baton -- handover export` (default `docs/handovers/handover-<id>.md`). Example: [docs/examples/sample-handover.md](docs/examples/sample-handover.md).
-6. **Onboard.** The incoming engineer reads the approved handover and asks cited questions answered only from approved evidence.
+## 🔄 How it works
+
+| Step | What happens |
+| :--- | :--- |
+| **1 · Capture** | MCP tools and the git post-commit hook send decisions, blockers, commits and file summaries to `/api/collector/*`. A GitHub repository can also be synced directly (commits, pull requests with changed files, issues, branches ahead of the default branch) and updated by webhook. |
+| **2 · Redact** | Text is scrubbed with regular expressions and an entropy check for secrets such as JWTs, API keys and private keys, both in the MCP client and on the server. This is pattern-based redaction, not a guarantee that every secret is caught. |
+| **3 · Generate** | An admin starts a handover for a leaver and an incoming member. BATON asks the leaver targeted questions (exit interview), then drafts claims. With `GEMINI_API_KEY` set, Gemini drafts them; without it, or if Gemini fails, a deterministic evidence-only compiler is used and the result is labelled `evidence-only`. Claims are validated against the supplied sources: unknown citations are dropped and a claim only counts as `verified` when its text appears in a cited source. |
+| **4 · Review and approve** | The admin approves, edits or rejects each claim and resolves conflicting evidence. |
+| **5 · Hand over the file** | The approved handover is the final product: a Markdown file (decisions, risks, resolved conflicts, known gaps, cited sources). Download it with **Export Markdown** on the handover page, or let the agent save it into the repository with the `export_handover` MCP tool / `npm run baton -- handover export` (default `docs/handovers/handover-<id>.md`). Example: [docs/examples/sample-handover.md](docs/examples/sample-handover.md). |
+| **6 · Onboard** | The incoming engineer reads the approved handover and asks cited questions answered only from approved evidence. |
 
 Access is enforced in the API: organization membership, `admin` vs `member`/`team` roles, source visibility (`team`, `admin`, `private`) and optional function-role audiences (`backend`, `frontend`, `infra`, `data`, `design`, `product`). API tokens only work on collector routes, MCP interview routes and the Markdown export of a handover their member takes part in (exported without admin-only evidence, because the file may be committed).
 
-## Connect an AI agent (MCP)
+---
+
+## 🔌 Connect an AI agent (MCP)
 
 The MCP server runs locally over stdio and talks to the Baton API with a per-member API token. Tested on 14 Nov 2026: Claude Code 2.1 discovers the project config and connects (`claude mcp list` → `✔ Connected`); the Antigravity config follows its documented format but was not run inside Antigravity.
 
@@ -58,7 +83,9 @@ Nothing is kept by the agent itself. Every tool call goes to the Baton API, whic
 
 Every row is scoped by `org_id` and `repository_id`, so one conversation or codebase's memory is retrievable with `get_context` / `get_file_context` by anyone in that organization. Locally, only the configuration (`.baton/config.env`, the client config files) and a snapshot hash cache (`mcp-server/.baton/snapshot.json`, used to send only changed files) live on disk. With `BATON_DEMO_MODE=true` the API uses an in-memory store that is lost on restart.
 
-## Setup
+---
+
+## ⚡ Setup
 
 Requirements: Node.js 20+.
 
@@ -87,14 +114,18 @@ Copy `.env.example` to `.env.local` and fill it in. Names the code reads:
 | `BATON_ALLOWED_ORIGINS` | Optional comma-separated CORS allow-list. |
 | `BATON_DEMO_MODE` | Test/offline switch that replaces Supabase with a seeded in-memory store. Keep it `false` (unset) in production. |
 
-Database: run `supabase/schema.sql` in the Supabase SQL editor (new databases need nothing else). Existing databases also run the migrations listed under [Operations](#operations), in date order.
+Database: run `supabase/schema.sql` in the Supabase SQL editor (new databases need nothing else). Existing databases also run the migrations listed under [Operations](#-operations), in date order.
 
-## Production vs demo
+---
+
+## 🧪 Production vs demo
 
 - **Production** is `/auth` → `/usage` → `/dashboard`. It uses your Supabase data only and starts empty: a new account sees onboarding instead of sample data.
 - **Demo** is `/demo-page`. State lives in the browser and every call is answered by the real engine through `/api/demo` with a bundled synthetic snapshot; it needs no credentials and never reads or writes production data.
 
-## Connecting a GitHub repository
+---
+
+## 🐙 Connecting a GitHub repository
 
 Any repository can be connected, not only this one.
 
@@ -108,7 +139,9 @@ Limits: a sync reads the newest 300 commits, 200 pull requests, 200 issues and 5
 
 Details: [docs/GITHUB.md](docs/GITHUB.md). Other docs: [docs/SETUP.md](docs/SETUP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/MCP.md](docs/MCP.md).
 
-## API overview
+---
+
+## 🔗 API overview
 
 All routes need `Authorization: Bearer <Supabase access token>` unless noted. Admin routes reject API tokens.
 
@@ -121,7 +154,9 @@ All routes need `Authorization: Bearer <Supabase access token>` unless noted. Ad
 | Handovers | `POST /api/orgs/:id/handovers`, `GET /api/orgs/:id/risks`, `GET /api/handovers/:id`, `POST /api/handovers/:id/{generate,approve,acknowledge,ask,answers}`, `PATCH /api/handovers/:id/claims/:claimId`, `POST /api/handovers/:id/questions/:qid/skip`, `POST /api/handovers/:id/conflicts/:claimId/resolve`, `GET /api/handovers/:id/versions[/diff]`, `GET /api/handovers/:id/export.md` (approved only), `GET /api/mcp/interviews`, `POST /api/mcp/interviews/:id/answers` |
 | GitHub | `GET /api/orgs/:id/github/connect`, `GET /api/github/callback` (public), `GET /api/orgs/:id/github/installations[/:installationId/repositories]`, `POST /api/orgs/:id/repositories`, `DELETE /api/orgs/:id/repositories/:repoId`, `POST /api/orgs/:id/repositories/:repoId/sync`, `POST /api/github/webhook` (signature-verified) |
 
-## Testing
+---
+
+## ✅ Testing
 
 ```bash
 npm test             # unit, API and database tests (node --test, no network, no credentials)
@@ -134,7 +169,9 @@ Unit tests cover the store adapters, the HTTP routes, GitHub connect/sync/webhoo
 
 CI (`.github/workflows/ci.yml`) runs the build, rebuilds the MCP server and fails if the committed `mcp-server/dist` differs, then runs `npm test` and Playwright.
 
-## Operations
+---
+
+## 📚 Operations
 
 **Migrations.** New databases only need `supabase/schema.sql`. Existing databases run these once, in order, in the Supabase SQL editor; each is safe to re-run:
 
@@ -147,13 +184,15 @@ CI (`.github/workflows/ci.yml`) runs the build, rebuilds the MCP server and fail
 | `20261116_handover_columns.sql` | Databases whose `handovers` table predates the current schema (e.g. `leaver_name`/`incoming_name` columns): starting a handover fails with "column leaver_id does not exist". Additive only; run it before the RLS migration |
 | `20261116_rls_hardening.sql` | Nothing visible in the app (it uses the server key). Without it, a signed-in member querying the database directly with their own token could read every handover, draft claim and transcript in their workspace |
 
-**Vercel environment.** See the variable table under [Setup](#setup). `GITHUB_APP_PRIVATE_KEY` can be pasted in any form: the raw `.pem`, quoted, with literal `\n`, with spaces instead of line breaks, or base64-encoded. An unreadable key makes sync answer 503 "GITHUB_APP_PRIVATE_KEY could not be read". `GITHUB_APP_SLUG` is optional; without it the install page is looked up from GitHub.
+**Vercel environment.** See the variable table under [Setup](#-setup). `GITHUB_APP_PRIVATE_KEY` can be pasted in any form: the raw `.pem`, quoted, with literal `\n`, with spaces instead of line breaks, or base64-encoded. An unreadable key makes sync answer 503 "GITHUB_APP_PRIVATE_KEY could not be read". `GITHUB_APP_SLUG` is optional; without it the install page is looked up from GitHub.
 
 **GitHub App settings.** The app must be **public** (Advanced → Make public); a private app shows every other account a GitHub 404 page. Set **Setup URL** to `<PUBLIC_APP_URL>/dashboard` and tick **Redirect on update**.
 
 **Reading failures.** Vercel → project → Logs, filter by Error. Server lines start with `[api]`, `[api] database unavailable`, `[github]`, `[github sync] skipped record` or `[github callback]`. A database outage answers 503 "Database unavailable, try again shortly." (database calls time out after 15 s); anything still answering "Internal server error" is a real bug, and the log line names it.
 
-## Known limits
+---
+
+## 🧭 Known limits
 
 - Redaction is pattern and entropy based; review what you capture.
 - Handover claims are checked against cited source text, not against code structure.
@@ -163,7 +202,9 @@ CI (`.github/workflows/ci.yml`) runs the build, rebuilds the MCP server and fail
 - The Supabase store's `claimGeneration` and `getMany` use PostgREST filters that are covered by the in-memory store and code review, not by a test against a live Supabase instance.
 - MCP clients: Claude Code was checked against a local API (connects, tools listed); Antigravity, Cursor, Codex and Claude Desktop configurations follow their documentation in [docs/MCP.md](docs/MCP.md). The stdio round trip (save, search, interview, Markdown export, outage message) is covered by automated tests.
 
-## Roadmap
+---
+
+## 🗺 Roadmap
 
 Everything in the Round 3 completion and improvement plans is built. What remains, sequenced by dependency; effort and risk are rough estimates.
 
@@ -179,3 +220,13 @@ Everything in the Round 3 completion and improvement plans is built. What remain
 | 8 | Self-hosting guide (Docker image, Postgres with pgvector) | none | 1 d | Low |
 
 Out of scope for now: desktop or mobile packages, further landing-page variants and additional MCP tools.
+
+---
+
+<div align="center">
+
+**Built for CodersInPune Hackathon 2026 — Team MUMBAI_WALE**
+
+`BATON // PASS THE KNOWLEDGE, NOT JUST THE CODE`
+
+</div>
