@@ -47,7 +47,7 @@ To connect Baton to a live PostgreSQL database:
    The frontend build reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, and also accepts the `NEXT_PUBLIC_` variants or plain `SUPABASE_URL` / `SUPABASE_ANON_KEY`. Set them before `npm run build`.
 4. Optional: run `supabase/migrations/20261114_round3.sql` to store risk scores and member function roles. The app works without it, except that saving a function role answers 503 until it is applied.
 5. Existing databases: run `supabase/migrations/20261114_org_delete_keep_admin.sql` so **Delete workspace** works (the last-admin guard otherwise blocks it). New databases get it from `schema.sql`.
-6. Existing databases: also run `supabase/migrations/20261115_match_memory_visibility.sql` (search permissions inside the database) and `20261115_handover_generation_lock.sql` (generation lock across server instances), and `20261116_rls_hardening.sql` (limits direct database reads of handovers, transcripts and summaries). All are safe to re-run, and the app keeps working before they are applied.
+6. Existing databases: also run `supabase/migrations/20261115_match_memory_visibility.sql` (search permissions inside the database) and `20261115_handover_generation_lock.sql` (generation lock across server instances), then `20261116_handover_columns.sql` (upgrades older handover tables) and `20261116_rls_hardening.sql` (limits direct database reads of handovers, transcripts and summaries). All are safe to re-run, and the app keeps working before they are applied.
 7. Keep `BATON_DEMO_MODE` unset or `false` in production.
 
 ---

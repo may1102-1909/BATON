@@ -144,6 +144,7 @@ CI (`.github/workflows/ci.yml`) runs the build, rebuilds the MCP server and fail
 | `20261114_org_delete_keep_admin.sql` | Deleting a workspace fails (the last-admin trigger blocks the cascade) |
 | `20261115_match_memory_visibility.sql` | Nothing visible: vector search falls back to the old function and the API filters every hit itself |
 | `20261115_handover_generation_lock.sql` | Nothing visible: generation falls back to the per-process lock, so two instances generating the same handover at once can interleave claims |
+| `20261116_handover_columns.sql` | Databases whose `handovers` table predates the current schema (e.g. `leaver_name`/`incoming_name` columns): starting a handover fails with "column leaver_id does not exist". Additive only; run it before the RLS migration |
 | `20261116_rls_hardening.sql` | Nothing visible in the app (it uses the server key). Without it, a signed-in member querying the database directly with their own token could read every handover, draft claim and transcript in their workspace |
 
 **Vercel environment.** See the variable table under [Setup](#setup). `GITHUB_APP_PRIVATE_KEY` can be pasted in any form: the raw `.pem`, quoted, with literal `\n`, with spaces instead of line breaks, or base64-encoded. An unreadable key makes sync answer 503 "GITHUB_APP_PRIVATE_KEY could not be read". `GITHUB_APP_SLUG` is optional; without it the install page is looked up from GitHub.
