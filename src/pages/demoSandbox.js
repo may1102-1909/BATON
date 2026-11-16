@@ -69,6 +69,53 @@ export const DEMO_SIMULATOR_SAMPLE = {
   reason: '[SAMPLE] The log contained ' + 'sk_' + 'live_SAMPLE00000000000000000000' + '. This is a made-up key to show redaction before anything is stored.'
 }
 
+// An Antigravity IDE session connected to baton-mcp-server. sync_history reads the conversation turns and
+// save_memory stores what was decided; the demo replays those calls with the visitor's new MCP token.
+export const ANTIGRAVITY_SESSION = {
+  client: 'antigravity',
+  session_id: 'agy-session-handover-lock',
+  config_path: '.agents/mcp_config.json',
+  turns: [
+    { index: 1, role: 'user', content: 'Two servers generated the same handover at once and the claims were duplicated. Fix it.' },
+    { index: 2, role: 'assistant', content: 'I will add a per-handover generation lock in server/handover.js, with a 5-minute stale timeout so a crashed worker cannot block it forever.' },
+    { index: 3, role: 'user', content: 'Also make sure nothing secret leaves the machine when you log this.' },
+    { index: 4, role: 'assistant', content: 'Memory is redacted client-side by mcp-server/src/redact.ts before save_memory sends it. Note: mcp-server/dist can drift from src and CI does not check it yet.' }
+  ],
+  memories: [
+    {
+      event_id: 'agy-1', type: 'decision',
+      content: '[Antigravity · MCP] Handover generation takes a per-handover lock with a 5-minute stale timeout.',
+      metadata: { decision: 'Lock handover generation per handover', reason: 'Concurrent servers duplicated claims; the stale timeout recovers from crashed workers.', files_affected: ['server/handover.js'], source_turns: [1, 2] }
+    },
+    {
+      event_id: 'agy-2', type: 'decision',
+      content: '[Antigravity · MCP] Conversation memory is redacted client-side before it leaves the IDE.',
+      metadata: { decision: 'Redact memory in the MCP server before sending', reason: 'Secrets in agent conversations must never reach Baton storage.', files_affected: ['mcp-server/src/redact.ts'], source_turns: [3, 4] }
+    },
+    {
+      event_id: 'agy-3', type: 'blocker',
+      content: '[Antigravity · MCP] mcp-server/dist can drift from src; CI has no drift check yet.',
+      metadata: { problem: 'mcp-server/dist drift is not checked in CI', status: 'active', workaround_notes: 'Run npm run build in mcp-server before committing.', source_turns: [4] }
+    }
+  ]
+}
+
+const isAntigravityMemory = source => source?.metadata?.mcp_client === ANTIGRAVITY_SESSION.client
+
+// Uses the same collector endpoint as save_memory, authenticated with the token Antigravity was configured with.
+async function syncAntigravitySession(token) {
+  const { repositories = [] } = loadDemoState()
+  for (const memory of ANTIGRAVITY_SESSION.memories) {
+    await callEngine(currentPersona, 'POST', '/api/collector/push', {
+      payload: {
+        type: memory.type, content: memory.content, repository_id: repositories[0]?.id ?? null,
+        session_id: ANTIGRAVITY_SESSION.session_id, event_id: memory.event_id,
+        metadata: { ...memory.metadata, mcp_client: ANTIGRAVITY_SESSION.client, mcp_server: 'baton-mcp-server', mcp_tools: ['sync_history', 'save_memory'] }
+      }
+    }, `Bearer ${token}`)
+  }
+}
+
 export function getInitialDemoState() {
   const member = (id, user_id, name, role, github_login) => ({ id, org_id: ORG_ID, user_id, name, role, ...(github_login ? { github_login } : {}), created_at: SEED_DATE })
   const members = [
@@ -259,7 +306,7 @@ function revokeDemoToken(tokenId) {
     for (const table of ['handover_claims', 'handover_questions', 'handover_events', 'handover_versions']) {
       if (Array.isArray(state[table])) state[table] = state[table].filter(row => !ids.has(row.handover_id))
     }
-    state.sources = (state.sources ?? []).filter(source => !ids.has(source.metadata?.handover_id))
+    state.sources = (state.sources ?? []).filter(source => !ids.has(source.metadata?.handover_id) && !isAntigravityMemory(source))
   }
   saveDemoState(state)
   return { status: 200, body: { record: { id: tokenId, revoked_at: new Date().toISOString() }, handover_withdrawn: !state.handovers.length } }
@@ -355,7 +402,12 @@ export function installDemoInterceptor(initialPersona = 'demo-admin') {
       const revoke = method === 'DELETE' && /^\/api\/orgs\/[^/]+\/tokens\/([^/]+)$/.exec(pathname)
       if (revoke) return revokeDemoToken(decodeURIComponent(revoke[1]))
       if (/^\/api\/orgs\/[^/]+\/state$/.test(pathname)) await ensureSeedHandover()
-      return callEngine(persona, method, pathname + url.search, body, authorization)
+      const result = await callEngine(persona, method, pathname + url.search, body, authorization)
+      // A new token is what connects Antigravity, so its memory is stored before the handover is built.
+      if (method === 'POST' && /^\/api\/orgs\/[^/]+\/tokens$/.test(pathname) && result.status < 300 && result.body?.token) {
+        await syncAntigravitySession(result.body.token)
+      }
+      return result
     })
     queue = run.catch(() => {})
     const result = await run

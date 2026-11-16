@@ -159,3 +159,22 @@ test('the demo shows a deadline conflict, bus-factor alerts, a top-risk question
   assert.doesNotMatch(JSON.stringify(incomingView.body), /Terraform state/);
   assert.equal(hasEmail([detail, risks, incomingView]), false);
 });
+
+test('Antigravity memory pushed with the demo MCP token is cited by the prepared handover alongside GitHub history', async () => {
+  const { ANTIGRAVITY_SESSION } = await import('../src/pages/demoSandbox.js');
+  let { state, body } = await call(getInitialDemoState(), 'demo-admin', 'POST', '/api/orgs/demo-org/tokens', { name: 'antigravity' });
+  for (const memory of ANTIGRAVITY_SESSION.memories) {
+    const payload = { type: memory.type, content: memory.content, repository_id: 'demo-repo', session_id: ANTIGRAVITY_SESSION.session_id, event_id: memory.event_id, metadata: { ...memory.metadata, mcp_client: 'antigravity' } };
+    const pushed = await handleDemoRequest({ persona: 'demo-admin', state, request: { method: 'POST', path: '/api/collector/push', body: { payload }, authorization: `Bearer ${body.token}` } }, { createApp });
+    assert.equal(pushed.status, 201);
+    state = pushed.state;
+  }
+  const prepared = await call(state, 'demo-admin', 'POST', '/api/demo/prepare-handover', { orgId: 'demo-org', leaverId: 'demo-leaver', incomingId: 'demo-incoming' });
+  assert.ok(prepared.status < 300, JSON.stringify(prepared.body));
+  const memoryIds = new Set(prepared.state.sources.filter(s => s.metadata?.mcp_client === 'antigravity').map(s => s.id));
+  const githubIds = new Set(prepared.state.sources.filter(s => /^decision-[0-9a-f]{12}$/.test(s.id)).map(s => s.id));
+  const cited = (prepared.state.handover_claims ?? []).flatMap(c => c.source_ids ?? []);
+  assert.equal(memoryIds.size, 3);
+  assert.ok(cited.some(id => memoryIds.has(id)), 'handover cites Antigravity memory');
+  assert.ok(cited.some(id => githubIds.has(id)), 'handover cites GitHub history');
+});

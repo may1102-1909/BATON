@@ -2,6 +2,7 @@ import React from 'react';
 import { FUNCTION_ROLES } from '../../../server/audience.js';
 import { McpConfig } from './McpConfig';
 import { DemoMcpConsole } from './DemoMcpConsole';
+import { DemoAntigravityLink } from './DemoAntigravityLink';
 import { SettingsCard } from './SettingsCard';
 
 export function TeamTab({
@@ -188,6 +189,8 @@ export function TeamTab({
                 )}
               </McpConfig>
             </div>
+
+            {isDemo && <DemoAntigravityLink tokens={tokens} sources={sources} onNeedToken={() => setShowTokenModal(true)} />}
 
             {isAdmin && !isDemo && selectedOrg && (
               <SettingsCard
