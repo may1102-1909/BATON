@@ -6,11 +6,10 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 const Scene = React.lazy(() => import('../components/Scene'))
 
-// The 3D scene is skipped on small screens, without WebGL, or when the visitor prefers reduced motion.
+// The 3D scene is skipped without WebGL or when the visitor prefers reduced motion.
 function canRunShader() {
   if (typeof window === 'undefined') return false
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false
-  if (window.innerWidth < 768) return false
   try {
     const canvas = document.createElement('canvas')
     return Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl'))
