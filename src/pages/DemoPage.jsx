@@ -125,7 +125,7 @@ export function DemoPage() {
               color: C.muted,
               fontSize: '0.88rem',
               letterSpacing: '0.04em',
-              fontFamily: 'monospace'
+              fontFamily: 'var(--mono)'
             }}
           >
             Loading Baton Workspace...
@@ -154,10 +154,17 @@ export function DemoPage() {
         .demo-page-root .ws-container {
           min-height: calc(100vh - 60px) !important;
         }
+        @media (max-width: 760px) {
+          .demo-page-root .demo-header { height: auto !important; flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px !important; }
+          .demo-page-root .demo-header-left { gap: 10px !important; }
+          .demo-page-root .demo-org-chip, .demo-page-root .demo-persona > span:first-child { display: none; }
+          .demo-page-root .demo-actions { width: 100%; gap: 8px !important; }
+          .demo-page-root .demo-actions > button { flex: 1; justify-content: center; padding: 8px 10px !important; font-size: 12.5px !important; }
+        }
       `}</style>
 
       {/* Single Unified Header */}
-      <header
+      <header className="demo-header"
         style={{
           height: 60,
           background: '#0d0f12',
@@ -173,7 +180,7 @@ export function DemoPage() {
         }}
       >
         {/* Left: Brand + Demo Badge + Org Tag */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div className="demo-header-left" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <button
             type="button"
             onClick={() => navigate('/usage')}
@@ -202,22 +209,20 @@ export function DemoPage() {
           </button>
           <span
             style={{
-              fontSize: 9,
-              fontFamily: 'monospace',
+              fontSize: 12,
               color: C.green,
-              background: 'rgba(52, 211, 153, 0.08)',
-              border: '1px solid rgba(52, 211, 153, 0.25)',
-              padding: '2px 8px',
-              borderRadius: 4,
-              letterSpacing: 0.8,
-              fontWeight: 600
+              border: '1px solid rgba(52, 211, 153, 0.4)',
+              padding: '0 8px',
+              borderRadius: 999,
+              lineHeight: '20px',
+              fontWeight: 500
             }}
           >
-            DEMO MODE
+            Demo
           </span>
-          <span
+          <span className="demo-org-chip"
             style={{
-              fontSize: 11,
+              fontSize: 12,
               color: '#9ca3af',
               background: '#16181d',
               border: '1px solid #282c35',
@@ -231,18 +236,15 @@ export function DemoPage() {
         </div>
 
         {/* Center: Persona Switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="demo-persona" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span
             style={{
-              fontSize: 10,
-              color: '#686e7a',
-              fontFamily: 'monospace',
-              marginRight: 4,
-              textTransform: 'uppercase',
-              letterSpacing: 0.5
+              fontSize: 12,
+              color: '#8b949e',
+              marginRight: 4
             }}
           >
-            Viewing as:
+            Viewing as
           </span>
           {DEMO_PERSONAS.filter((p) => p.id === 'demo-admin').map((p) => {
             const active = true
@@ -274,7 +276,7 @@ export function DemoPage() {
         </div>
 
         {/* Right: Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="demo-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             onClick={handleResetDemo}
             style={{

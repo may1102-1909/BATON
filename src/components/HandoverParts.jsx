@@ -164,7 +164,7 @@ function ClaimItem({ claim, sources, editable, onReview, onEdit }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className={`ws-badge ${tone}`}>{claim.confidence || 'inferred'}</span>
-          <span style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase' }}>{sectionLabel(claim.section)}</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 500 }}>{sectionLabel(claim.section)}</span>
           {claim.status && <span className="ws-badge ws-badge-muted">{claim.status}</span>}
         </div>
         {editable && (

@@ -67,10 +67,10 @@ export function LandingPage() {
         overflow: shader ? 'hidden' : 'auto',
         backgroundColor: '#08080a',
         color: '#f4f4f5',
-        fontFamily: "'Inter', sans-serif"
+        fontFamily: 'var(--sans)'
       }}
     >
-      <header
+      <header className="landing-header"
         style={{
           position: shader ? 'absolute' : 'relative',
           top: 0,

@@ -405,7 +405,7 @@
   border: 1px solid #282a30;
   border-radius: 6px;
   padding: 14px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--mono);
   font-size: 0.8rem;
   color: #38bdf8;
   overflow-x: auto;
@@ -610,3 +610,32 @@ h1.ws-page-title { margin: 0; }
 }
 @keyframes ws-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .ws-spinner { animation-duration: 2.4s; } }
+
+/* GitHub-style typography: system fonts, sentence-case labels, pill-shaped labels. */
+.ws-container { font-family: var(--sans); font-size: 14px; }
+.ws-container code, .ws-container pre { font-family: var(--mono); }
+.ws-stat-label { text-transform: none; letter-spacing: normal; font-size: 0.8rem; font-weight: 500; }
+.ws-stat-val { font-weight: 600; }
+.ws-badge, .ws-demo-badge { text-transform: none; letter-spacing: normal; border-radius: 999px; font-weight: 500; padding: 1px 8px; font-size: 0.75rem; line-height: 18px; }
+.ws-tab-btn.active { color: var(--text, #f4f4f5); font-weight: 600; }
+.ws-card-title { font-size: 1rem; }
+
+/* Dialogs scroll instead of running off small screens. */
+.ws-modal { max-height: calc(100dvh - 32px); overflow-y: auto; }
+
+@media (max-width: 720px) {
+  .ws-header { height: auto; min-height: 56px; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
+  .ws-header-left, .ws-header-right { gap: 8px; flex-wrap: wrap; }
+  .ws-user-badge { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-nav-tabs { padding: 0 8px; }
+  .ws-tab-btn { padding: 12px 10px; }
+  .ws-main { padding: 16px 12px 48px; }
+  .ws-card { padding: 14px; }
+  .ws-grid-2, .ws-grid-3 { grid-template-columns: 1fr; }
+  .ws-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .ws-stat-card { padding: 12px; }
+  .ws-stat-val { font-size: 1.4rem; }
+  .ws-card-header { flex-wrap: wrap; gap: 8px; }
+  .ws-modal-backdrop { padding: 16px; }
+  .ws-modal { padding: 18px; }
+}

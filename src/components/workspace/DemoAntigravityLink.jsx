@@ -2,8 +2,8 @@ import React from 'react';
 import { ANTIGRAVITY_SESSION } from '../../pages/demoSandbox.js';
 
 const box = { background: '#0e1115', border: '1px solid #252b36', borderRadius: 8, padding: 14 };
-const label = { fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 8px' };
-const code = { fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem', color: '#e5e7eb' };
+const label = { fontSize: '0.8rem', fontWeight: 600, color: 'var(--muted)', margin: '0 0 8px' };
+const code = { fontFamily: 'var(--mono)', fontSize: '0.78rem', color: '#e5e7eb' };
 
 // Demo only: shows the Antigravity IDE connected to baton-mcp-server and the memory its tool calls stored.
 export function DemoAntigravityLink({ tokens, sources, onNeedToken }) {
