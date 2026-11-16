@@ -4,7 +4,7 @@ import * as api from '../lib/api.js';
 import { HandoverPage } from '../pages/HandoverPage';
 import { downloadText, slugify } from '../lib/download.js';
 import { inviteErrorMessage, parseInviteToken } from '../lib/invite.js';
-import { ConfirmDialog } from './workspace/Modal';
+import { ConfirmDialog, Modal } from './workspace/Modal';
 import { CreateOrgModal, InviteModal, MemoryModal, StartHandoverModal, TaskModal, TokenModal } from './workspace/Modals';
 import { buildChecklist } from './workspace/OnboardingChecklist';
 import { GithubTab } from './workspace/GithubTab';
@@ -59,6 +59,8 @@ export function Workspace({
   const [newOrgName, setNewOrgName] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showTokenModal, setShowTokenModal] = useState(false);
+  // Demo only: after a token is created, explain the Antigravity connection, then scroll to its panel.
+  const [agyPopup, setAgyPopup] = useState('');
   const [newestToken, setNewestToken] = useState(null);
   const [showMemoryModal, setShowMemoryModal] = useState(false);
   const [memoryFilter, setMemoryFilter] = useState('all');
@@ -952,12 +954,35 @@ export function Workspace({
           notify={notify}
           onCreated={async token => {
             setNewestToken(token);
+            if (isDemo) setAgyPopup('pending');
             const hadHandover = handovers.length > 0;
             await refreshOrgState(selectedOrgId);
             if (isDemo && !hadHandover) notify('Token created. Baton has built the Krishna Gupta to Vikrant handover; open the Handovers tab.', 'success');
           }}
-          onClose={() => setShowTokenModal(false)}
+          onClose={() => { setShowTokenModal(false); setAgyPopup(p => (p === 'pending' ? 'open' : p)); }}
         />
+      )}
+
+      {isDemo && agyPopup === 'open' && (
+        <Modal
+          title="Antigravity is connected to Baton MCP"
+          onClose={() => {
+            setAgyPopup('');
+            setActiveTab('team');
+            setTimeout(() => document.querySelector('[data-testid="antigravity-link"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+          }}
+        >
+          <p style={{ margin: '0 0 12px', color: 'var(--muted)', fontSize: '0.9rem' }}>
+            Your new token connected the Antigravity IDE to <code>baton-mcp-server</code>. Antigravity called <code>sync_history</code> to keep a memory of the conversation and <code>save_memory</code> to store 2 decisions and 1 blocker. The handover is built from that memory together with the GitHub history.
+          </p>
+          <div className="ws-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" className="ws-btn ws-btn-primary" data-testid="antigravity-popup-close" onClick={() => {
+              setAgyPopup('');
+              setActiveTab('team');
+              setTimeout(() => document.querySelector('[data-testid="antigravity-link"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+            }}>Close</button>
+          </div>
+        </Modal>
       )}
 
       {showMemoryModal && (
