@@ -278,19 +278,24 @@ export function DemoPage() {
           <button
             onClick={handleResetDemo}
             style={{
-              background: 'transparent',
-              border: `1px solid ${C.line}`,
-              color: '#8e939d',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#191a1e',
+              border: '1px solid rgba(52, 211, 153, 0.45)',
+              color: '#d1fae5',
               borderRadius: 6,
-              padding: '5px 12px',
-              fontSize: 11,
+              padding: '9px 16px',
+              fontSize: 12.5,
+              fontWeight: 600,
               cursor: 'pointer',
               fontFamily: 'inherit',
               transition: 'all 0.15s ease'
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#f4f4f5')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#8e939d')}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)'; e.currentTarget.style.color = '#f4f4f5' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#191a1e'; e.currentTarget.style.color = '#d1fae5' }}
           >
+            <span aria-hidden="true">↺</span>
             {resetNotice ? 'Resetting...' : 'Reset Demo'}
           </button>
           <Button

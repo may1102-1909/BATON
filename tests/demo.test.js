@@ -78,7 +78,7 @@ test('a demo MCP token authenticates the collector push and search the MCP serve
 
 test('the prepared demo handover is answered and approved except its conflict, and the export follows the workspace commits', async () => {
   const seed = getInitialDemoState();
-  assert.deepEqual(seed.members.map(member => member.name), ['May (Admin)', 'Krishna Gupta', 'Vikrant']);
+  assert.deepEqual(seed.members.map(member => member.name), ['May (Admin)', 'Vikrant GP', 'Krishna Gupta']);
   assert.ok(!JSON.stringify(seed.sources).includes('renoschubert'));
   const prepared = await call(seed, 'demo-admin', 'POST', '/api/demo/prepare-handover', {});
   assert.equal(prepared.status, 200);
@@ -100,7 +100,7 @@ test('the prepared demo handover is answered and approved except its conflict, a
   const memberLabel = userId => workspace.members.find(member => member.user_id === userId)?.name ?? userId;
   const build = sources => buildHandoverMarkdown({ detail: final.body, workspace: { ...workspace, sources }, memberLabel, orgName: 'Demo', repositoryName: 'may1102-1909/BATON' });
   const markdown = build(workspace.sources);
-  assert.match(markdown, /^# Engineering handover: Krishna Gupta to Vikrant/);
+  assert.match(markdown, /^# Engineering handover: Vikrant GP to Krishna Gupta/);
   assert.match(markdown, new RegExp(`${workspace.sources.filter(source => source.type === 'commit').length} commits`));
   assert.match(markdown, /Resolved by May \(Admin\)/);
   const fewer = build(workspace.sources.filter((source, index) => source.type !== 'commit' || index % 2 === 0));
@@ -128,20 +128,21 @@ test('oversized or empty demo state is rejected', async () => {
   assert.equal((await call({}, 'demo-admin', 'GET', '/api/me')).status, 400);
 });
 
-test('the demo shows a deadline conflict, bus-factor alerts, a top-risk question and role-hidden items through the real engine', async () => {
+test('the demo shows a deadline conflict, bus-factor alerts, a leaver-scoped handover and role-hidden items through the real engine', async () => {
   const seed = getInitialDemoState();
-  assert.ok(seed.tasks.every(task => /^\[SAMPLE\]/.test(task.title)) && seed.task_comments.every(item => /^\[SAMPLE\]/.test(item.content)));
+  assert.ok(seed.sources.every(source => !/\[SAMPLE\]/.test(source.content ?? '')) && seed.tasks.every(task => !/\[SAMPLE\]/.test(task.title)));
   const started = await call(seed, 'demo-admin', 'POST', '/api/orgs/demo-org/handovers', { leaverId: 'demo-leaver', incomingId: 'demo-incoming' });
   const top = started.body.questions[0];
-  assert.match(top.question_text, /only recorded contributor to src\/webhooks/);
-  assert.ok(top.risk_score >= 40 && top.risk_reasons.length);
+  assert.match(top.question_text, /3D Paper template variants/);
+  assert.ok(top.risk_score >= 20 && top.risk_reasons.length);
   const generated = await call(started.state, 'demo-admin', 'POST', `/api/handovers/${started.body.handover.id}/generate`);
   const detail = await call(generated.state, 'demo-admin', 'GET', `/api/handovers/${started.body.handover.id}`);
   assert.equal(detail.body.conflicts.length, 1);
   assert.deepEqual(detail.body.conflicts[0].sides.map(side => side.date), ['2026-11-10', '2026-11-15']);
   const risks = await call(generated.state, 'demo-admin', 'GET', '/api/orgs/demo-org/risks');
   assert.ok(risks.body.alerts.length >= 1 && risks.body.modules.length && risks.body.matrix.cells.length);
-  assert.ok(risks.body.alerts.some(alert => alert.module === 'src/webhooks'));
+  // Vikrant's handover covers only his frontend work, even though the workspace has backend records.
+  assert.ok(detail.body.claims.length && detail.body.claims.every(claim => !/server\/|mcp-server|supabase/.test(claim.text)));
 
   let state = generated.state;
   for (const claim of detail.body.claims) {

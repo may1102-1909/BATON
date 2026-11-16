@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMemoryStore, createSupabaseStore } from '../server/store.js';
-import { createHandovers } from '../server/handover.js';
+import { createHandovers, leaverEvidence } from '../server/handover.js';
 import { createApp } from '../server/app.js';
 import { detectConflicts, extractDates } from '../server/conflicts.js';
 import { aggregateModules, moduleOf, scoreGap } from '../server/risk.js';
@@ -315,4 +315,19 @@ test('the Supabase adapter keeps working against the pre-round-3 schema', async 
   const stored = log.at(-1).payload;
   assert.equal(stored.type, 'mcp_decision');
   assert.equal(stored.metadata.source_type, 'branch');
+});
+
+test('a handover only uses the leaving member\'s work and records touching their modules', () => {
+  const members = [{ user_id: 'u-front', github_login: 'front' }, { user_id: 'u-back', github_login: 'back' }];
+  const leaver = { ids: new Set(['u-front']), logins: new Set(['front']) };
+  const sources = [
+    { id: 'own', type: 'commit', author_login: 'front', metadata: { files: ['src/pages/A.jsx'] } },
+    { id: 'shared-module', type: 'decision', author_id: 'u-back', metadata: { files_affected: ['src/pages/B.jsx'] } },
+    { id: 'backend', type: 'blocker', author_id: 'u-back', metadata: { files_affected: ['server/app.js'] } },
+    { id: 'branch', type: 'branch', author_login: null, metadata: {} },
+    { id: 'conflict', type: 'task_comment', author_id: 'u-back', metadata: {} },
+  ];
+  assert.deepEqual(leaverEvidence(sources, members, leaver).map(source => source.id), ['own', 'shared-module', 'branch', 'conflict']);
+  // Without attributable work the whole workspace is evidence.
+  assert.equal(leaverEvidence(sources, members, { ids: new Set(['nobody']), logins: new Set() }).length, sources.length);
 });

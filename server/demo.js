@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 import { createMemoryStore } from './store.js';
-import { createHandovers } from './handover.js';
+import { createHandovers, leaverEvidence } from './handover.js';
 import { analyzeWorkspace, composeInterviewAnswer } from './demoInsights.js';
 
 // Synthetic fixture only; demo mode never reads or writes a live project.
@@ -101,7 +101,13 @@ async function prepareHandover(dispatch, memory, { orgId = 'demo-org', leaverId 
   if (!id) return started;
 
   const [sources, members, tasks] = await Promise.all(['sources', 'members', 'tasks'].map(table => memory.list(table)));
-  const analysis = analyzeWorkspace({ sources, members, tasks });
+  // Answers draw only on the leaver's own work, like the handover itself.
+  const leaverLogin = members.find(member => member.user_id === leaverId)?.github_login;
+  const scoped = leaverEvidence(sources, members, { ids: new Set([leaverId]), logins: new Set(leaverLogin ? [leaverLogin.toLowerCase()] : []) });
+  // Sole ownership is judged on the whole history, then limited to the leaver's areas.
+  const scopedAnalysis = analyzeWorkspace({ sources: scoped, members, tasks });
+  const areas = new Set(scopedAnalysis.modules.map(module => module.name));
+  const analysis = { ...scopedAnalysis, singleOwner: analyzeWorkspace({ sources, members, tasks }).singleOwner.filter(module => areas.has(module.name)) };
   const nameOf = userId => members.find(member => member.user_id === userId)?.name ?? userId;
   const detail = await dispatch('demo-admin', 'GET', `/api/handovers/${id}`);
   const sourcesById = new Map([...sources, ...(detail.body?.sources ?? [])].map(source => [source.id, source]));
