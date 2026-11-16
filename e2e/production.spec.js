@@ -255,7 +255,9 @@ test('every production tab renders its data without script errors', async ({ pag
   await expect(page.getByText('On it', { exact: true })).toBeVisible();
 
   await page.getByRole('tab', { name: /^Handovers/ }).click();
-  await expect(page.getByText('No active handovers')).toBeVisible();
+  // No MCP token yet, so handovers wait for one.
+  await expect(page.getByText('Create an MCP token first')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Initiate Handover/ })).toHaveCount(0);
 
   await page.getByRole('tab', { name: /^GitHub/ }).click();
   await page.getByLabel('Filter evidence by repository').selectOption('repo-2');

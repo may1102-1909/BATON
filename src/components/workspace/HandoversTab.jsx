@@ -114,7 +114,7 @@ export function HandoversTab({
             </div>
 
             {/* Handover Detail View */}
-            {activeHandoverDetail && (
+            {activeHandoverDetail && !demoNeedsToken && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <ConflictsPanel
                   conflicts={activeHandoverDetail.conflicts}

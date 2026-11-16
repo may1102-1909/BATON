@@ -4,7 +4,7 @@ import { redactData } from './redact.js';
 import { audienceOf, canSee } from './audience.js';
 import { detectConflicts } from './conflicts.js';
 import { geminiGenerateUrl } from './gemini.js';
-import { aggregateModules, filesOf, moduleOf, riskLabel, scoreGap } from './risk.js';
+import { aggregateModules, contributorOf, filesOf, moduleOf, riskLabel, scoreGap } from './risk.js';
 
 const SECTIONS = ['decisions', 'unfinished_work', 'risks', 'dependencies', 'next_actions'];
 class HandoverError extends Error {
@@ -488,6 +488,15 @@ export function createHandovers({ store, env = process.env, fetchImpl = fetch })
       if (actor.role !== 'admin') throw fail(403, 'Forbidden');
       if (!leaverId || !incomingId || leaverId === incomingId) throw fail(400, 'Distinct leaverId and incomingId are required');
       let sources = await sourcesFor(orgId);
+      // The leaver must be on the team and have commits or pull requests in the synced repositories.
+      const members = (await store.list('members', { org_id: orgId })).filter(member => !member.disabled_at);
+      const leaverMember = members.find(member => member.user_id === leaverId);
+      if (members.length && !leaverMember) throw fail(400, 'The departing engineer must be a member of this team (Team & Tokens)');
+      const repositoryWork = sources.filter(source => ['commit', 'pull_request'].includes(lower(source.type)));
+      if (leaverMember && repositoryWork.length && !repositoryWork.some(source => contributorOf(source, members)?.user_id === leaverId)) {
+        const name = leaverMember.name || leaverMember.github_login || leaverMember.email || 'This member';
+        throw fail(409, `${name} has not contributed to the connected repositories (no commits or pull requests are attributed to them), so a handover from them cannot start.${leaverMember.github_login ? '' : ' If their work is under a GitHub account, they need to link it first.'}`);
+      }
       const built = await contextFor(orgId, leaverId, sources);
       if (built.conflicts.length) { await materializeConflicts(orgId, built, actor); sources = await sourcesFor(orgId); }
       const now = new Date().toISOString();

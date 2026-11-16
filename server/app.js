@@ -820,7 +820,14 @@ export function createApp({ store, env = process.env, fetchImpl = fetch, handove
     if ((match = /^\/api\/orgs\/([^/]+)\/handovers$/.exec(url.pathname)) && method === 'POST') {
       const actor = await requireOrg(auth, match[1], true);
       const module = handovers ?? await maybeIntegration('handover', store, configuration, fetchImpl);
-      return json(res, 201, await module.start({ orgId: actor.org_id, actor, leaverId: body.leaverId, incomingId: body.incomingId }));
+      try {
+        return json(res, 201, await module.start({ orgId: actor.org_id, actor, leaverId: body.leaverId, incomingId: body.incomingId }));
+      } catch (error) {
+        // Name the failing step for the admin instead of a bare "Internal server error"; outages still answer 503.
+        if (error instanceof HttpError || error?.status || isDatabaseOutage(error)) throw error;
+        console.error('[api] start handover failed:', error?.message);
+        throw new HttpError(500, `Could not start the handover: ${String(error?.message ?? 'unknown error').slice(0, 300)}`);
+      }
     }
     if ((match = /^\/api\/orgs\/([^/]+)\/risks$/.exec(url.pathname)) && method === 'GET') {
       const actor = await requireOrg(auth, match[1]);

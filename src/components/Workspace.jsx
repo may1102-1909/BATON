@@ -284,6 +284,9 @@ export function Workspace({
         if (isDemo) {
           setNewestToken(null);
           if (res?.handover_withdrawn) setActiveHandoverDetail(null);
+        } else if (!tokens.some(t => t.id !== token.id)) {
+          setNewestToken(null);
+          setActiveHandoverDetail(null);
         }
         await refreshOrgState(selectedOrgId);
         notify(isDemo && res?.handover_withdrawn ? 'Token revoked. With no MCP token left, the handover was withdrawn; create a token to build it again.' : 'Token revoked.', 'success');
@@ -468,6 +471,11 @@ export function Workspace({
   }
 
   function startHandoverFor(leaverUserId) {
+    if (!isDemo && !(orgState?.tokens || []).some(t => !t.revoked_at)) {
+      notify('Create an MCP token first (Team & Tokens); handovers start once an agent can report to Baton.');
+      setActiveTab('team');
+      return;
+    }
     setHandoverLeaverId(leaverUserId || '');
     setShowStartHandoverModal(true);
   }
@@ -543,7 +551,9 @@ export function Workspace({
   const repositories = orgState?.repositories || [];
   const tasks = orgState?.tasks || [];
   const handovers = orgState?.handovers || [];
-  const tokens = orgState?.tokens || [];
+  const tokens = (orgState?.tokens || []).filter(t => !t.revoked_at);
+  // Handovers need an active MCP token; the demo keeps an existing handover, the dashboard hides them until a token exists.
+  const needsToken = !tokens.length && (!isDemo || handovers.length === 0);
 
   const hv = activeHandoverDetail?.handover;
   const myUserId = me?.user?.id;
@@ -875,7 +885,7 @@ export function Workspace({
             handleDemoExport={handleDemoExport}
             isDemo={isDemo}
             demoExportPreparing={demoExportPreparing}
-            demoNeedsToken={isDemo && handovers.length === 0 && !tokens.some(t => !t.revoked_at)}
+            demoNeedsToken={needsToken}
             onGoToTokens={() => setActiveTab('team')}
             riskAlerts={riskAlerts}
             showAllAlerts={showAllAlerts}
