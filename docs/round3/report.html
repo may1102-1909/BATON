@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>BATON — Round 3 Final Product Report · Team Mumbai_wale</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0c0d0e;--ink2:#111316;--g:#34d399;--g2:#10b981;--g3:#065f46;--txt:#1f2328;--mut:#5b616e;--line:#e3e6ea;--soft:#f3faf7;--red:#dc2626;--amber:#b45309}
+@page{size:A4;margin:15mm 15mm 17mm 15mm}
+@page :first{margin:0}
+*{box-sizing:border-box}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--txt);font-size:10.2pt;line-height:1.5}
+code,.mono{font-family:'JetBrains Mono',monospace;font-size:.86em}
+code{background:#eef2f1;padding:1px 4px;border-radius:3px;color:#064e3b}
+h1,h2,h3{letter-spacing:-.02em;margin:0}
+h2{font-size:19pt;font-weight:800;color:var(--ink);margin:0 0 4px}
+h3{font-size:12pt;font-weight:700;margin:16px 0 6px;color:var(--ink)}
+p{margin:6px 0}
+.section{break-before:page}
+.kicker{font-family:'JetBrains Mono',monospace;font-size:8pt;letter-spacing:.14em;text-transform:uppercase;color:var(--g2);font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.kicker:before{content:"";width:18px;height:2px;background:var(--g2)}
+.lead{font-size:11pt;color:#374151;margin:8px 0 14px}
+.rule{height:3px;width:56px;background:linear-gradient(90deg,var(--g),var(--g2));border-radius:2px;margin:10px 0 14px}
+table{width:100%;border-collapse:collapse;margin:8px 0 12px;font-size:9.1pt;break-inside:auto}
+th{background:var(--ink);color:#fff;text-align:left;font-weight:600;padding:6px 8px;font-size:8.6pt}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr{break-inside:avoid}
+tr:nth-child(even) td{background:#fafbfb}
+.pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:7.4pt;font-weight:700;padding:2px 7px;border-radius:20px;letter-spacing:.04em;white-space:nowrap}
+.ok{background:#d1fae5;color:#065f46}.warn{background:#fef3c7;color:#92400e}.bad{background:#fee2e2;color:#991b1b}.neu{background:#e5e7eb;color:#374151}
+.grid{display:grid;gap:10px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.card{border:1px solid var(--line);border-radius:10px;padding:11px 13px;break-inside:avoid;background:#fff}
+.card h4{margin:0 0 4px;font-size:10.5pt}
+.card.dark{background:var(--ink2);color:#e5e7eb;border-color:#27282d}
+.card.dark h4{color:#fff}
+.card.accent{border-left:4px solid var(--g2)}
+.metric{background:var(--ink);border-radius:10px;padding:12px 14px;color:#fff;break-inside:avoid}
+.metric b{display:block;font-size:22pt;font-weight:800;color:var(--g);line-height:1.1}
+.metric span{font-size:8.3pt;color:#a1a1aa}
+.shot{max-height:78mm;object-fit:cover;object-position:top;border-radius:9px;border:1px solid #27282d;width:100%;display:block;break-inside:avoid}
+figure{margin:10px 0 12px;break-inside:avoid}
+figcaption{font-size:8.2pt;color:var(--mut);margin-top:5px}
+ul{margin:6px 0;padding-left:18px}li{margin:2px 0}
+.check li{list-style:none;position:relative;padding-left:4px}
+.check li:before{content:"✓";position:absolute;left:-15px;color:var(--g2);font-weight:800}
+.callout{background:var(--soft);border:1px solid #bbf7d0;border-left:4px solid var(--g2);border-radius:8px;padding:10px 13px;margin:10px 0;break-inside:avoid}
+.callout.dark{background:var(--ink);color:#e5e7eb;border-color:#27282d;border-left-color:var(--g)}
+.callout.dark b{color:#fff}
+.flow{display:flex;align-items:stretch;gap:6px;margin:10px 0}
+.flow .st{flex:1;background:var(--ink2);color:#d1d5db;border:1px solid #27282d;border-radius:8px;padding:8px;font-size:8.3pt}
+.flow .st b{display:block;color:var(--g);font-size:8.6pt;margin-bottom:2px}
+.flow .ar{align-self:center;color:var(--g2);font-weight:800}
+.arch{background:var(--ink);border-radius:12px;padding:14px;color:#d1d5db;font-size:8.4pt;break-inside:avoid}
+.arch .row{display:grid;gap:8px;margin-bottom:8px}
+.arch .box{border:1px solid #2f3b37;border-radius:8px;padding:8px 9px;background:#121a17}
+.arch .box b{color:#fff;display:block;font-size:9pt;margin-bottom:2px}
+.arch .box i{color:var(--g);font-style:normal;font-family:'JetBrains Mono',monospace;font-size:7.4pt}
+.arch .lbl{font-family:'JetBrains Mono',monospace;color:var(--g);font-size:7.4pt;letter-spacing:.12em;margin:4px 0}
+.small{font-size:8.6pt;color:var(--mut)}
+.toc{columns:2;column-gap:24px;font-size:10pt}
+.toc div{display:flex;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);break-inside:avoid}
+.toc span{font-family:'JetBrains Mono',monospace;color:var(--g2);font-weight:700;width:22px}
+/* cover */
+.cover{height:297mm;width:210mm;background:radial-gradient(ellipse at 75% 20%,rgba(52,211,153,.20),transparent 55%),radial-gradient(ellipse at 10% 95%,rgba(16,185,129,.16),transparent 50%),#0c0d0e;color:#fff;padding:22mm 20mm;position:relative;overflow:hidden}
+.cover .wm{position:absolute;right:-30mm;bottom:20mm;font-size:120pt;font-weight:800;color:rgba(52,211,153,.06);letter-spacing:-6px}
+.cover h1{font-size:40pt;line-height:1.04;font-weight:800;margin-top:44mm;letter-spacing:-.035em}
+.cover h1 em{font-style:normal;color:#34d399}
+.cover .sub{font-size:13pt;color:#a1a1aa;margin-top:12px;max-width:150mm}
+.cover .meta{position:absolute;left:20mm;right:20mm;bottom:20mm;display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;font-size:9.4pt;border-top:1px solid #27282d;padding-top:12px}
+.cover .meta div span{display:block;font-family:'JetBrains Mono',monospace;font-size:7.4pt;color:var(--g);letter-spacing:.12em;text-transform:uppercase}
+.cover .tag{display:inline-block;border:1px solid #065f46;color:var(--g);font-family:'JetBrains Mono',monospace;font-size:8pt;padding:4px 10px;border-radius:5px;letter-spacing:.1em;margin-top:18mm}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20pt;letter-spacing:-.035em}
+.brand sup{color:var(--g2);font-family:'JetBrains Mono',monospace;font-size:9pt}
+.person{display:flex;gap:12px;align-items:flex-start}
+.av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#34d399,#065f46);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;font-size:10pt}
+.bar{height:7px;border-radius:4px;background:#e5e7eb;overflow:hidden;margin-top:5px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#34d399,#10b981)}
+</style></head><body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="brand"><svg width="30" height="35" viewBox="0 0 25 29"><path d="m3 17 10-14 6 4L9 21z" fill="#34d399"/><path d="m7 22 10-14 6 4-10 14z" fill="#10b981"/></svg>BATON<sup>®</sup></div>
+  <div class="tag">ROUND 3 · FINAL PRODUCT REPORT</div>
+  <h1>Pass the knowledge,<br><em>not just the code.</em></h1>
+  <p class="sub">The engineering handover platform that turns GitHub history and AI-agent memory into a cited, risk-ranked, admin-approved handover — before the knowledge walks out of the door.</p>
+  <div class="wm">BATON</div>
+  <div class="meta">
+    <div><span>Live product</span>baton-nu.vercel.app</div>
+    <div><span>No-login judge demo</span>baton-nu.vercel.app/demo-page</div>
+    <div><span>Source code</span>github.com/may1102-1909/BATON</div>
+    <div><span>Team</span>Mumbai_wale · Full Stack Development</div>
+    <div><span>Team</span>Tanmay Khurpe · Vikrant GP · Krishna Gupta · Komal Chaurasiya</div>
+    <div><span>Submitted</span>16 November 2026 · CodersInPune Hackathon 2026</div>
+  </div>
+</div>
+
+<!-- CONTENTS + EXEC SUMMARY -->
+<div>
+  <div class="kicker">Contents</div>
+  <div class="toc">
+    <div><span>01</span>Executive summary</div>
+    <div><span>02</span>Judge quick start (no login)</div>
+    <div><span>03</span>The three committed improvements</div>
+    <div><span>04</span>Complete feature list</div>
+    <div><span>05</span>Architecture &amp; implementation</div>
+    <div><span>06</span>MCP + Antigravity in demo mode</div>
+    <div><span>07</span>Reliability engineering</div>
+    <div><span>08</span>Testing &amp; quality assurance</div>
+    <div><span>09</span>Improvements since Round 2</div>
+    <div><span>10</span>Team &amp; contributions</div>
+    <div><span>11</span>Documentation &amp; running it</div>
+    <div><span>12</span>Roadmap &amp; future development</div>
+  </div>
+
+  <div style="height:14px"></div>
+  <div class="kicker">01 · Executive summary</div>
+  <h2>Every team loses knowledge when someone leaves.</h2>
+  <div class="rule"></div>
+  <p class="lead">Code survives a resignation. The reasoning behind it does not: why a library was chosen, which workaround is temporary, which module only one person understands. BATON captures that reasoning while the work happens and turns it into a handover the next engineer can trust.</p>
+  <div class="grid g2">
+    <div class="card accent"><h4>The problem</h4>Handover documents are written in the last week, from memory, and never checked. Bus-factor-1 modules are discovered after the person is gone. Decisions made inside AI coding assistants are never recorded at all.</div>
+    <div class="card accent"><h4>What BATON does</h4>Two capture layers — <b>GitHub</b> (commits, PRs, issues, branches) and the <b>Baton MCP server</b> inside AI IDEs (Claude Code, Antigravity, Cursor) — feed a handover engine that ranks knowledge gaps by risk, detects conflicting facts, cites every claim and requires admin approval.</div>
+  </div>
+  <div class="grid g4" style="margin-top:12px">
+    <div class="metric"><b>3 / 3</b><span>Round 2 commitments delivered in full</span></div>
+    <div class="metric"><b>149</b><span>automated tests, 100% passing</span></div>
+    <div class="metric"><b>34</b><span>pull requests merged in Round 3 (#12–#45)</span></div>
+    <div class="metric"><b>11</b><span>MCP tools for AI-agent memory</span></div>
+  </div>
+  <div class="callout"><b>Status at submission:</b> the product is live in production with sign-up, GitHub App connection and real data, and as a zero-login demo at <code>/demo-page</code> that runs the <i>same</i> engine on a snapshot of our own repository. Every main journey is covered by an automated end-to-end test that runs on every pull request.</div>
+  <figure><img class="shot" src="img/overview.jpg"><figcaption>Demo Overview — risk assessment and the contribution matrix computed from the real BATON git history.</figcaption></figure>
+</div>
+
+<!-- QUICK START -->
+<div class="section">
+  <div class="kicker">02 · Judge quick start</div>
+  <h2>Try it in three minutes — no account needed.</h2>
+  <div class="rule"></div>
+  <p class="lead">Per the organisers' guidance on demo access, BATON ships a dedicated demo route. <b>Open <code>https://baton-nu.vercel.app/demo-page</code> — it needs no login and no credentials.</b> It is pre-loaded with the real BATON repository (63 commits, 14 pull requests, 3 contributors), runs the production handover engine, and never touches production data. <i>Reset Demo</i> restores it at any time.</p>
+  <table>
+    <tr><th style="width:6%">#</th><th style="width:34%">Do this</th><th>What you should see</th></tr>
+    <tr><td>1</td><td><b>Overview</b> tab</td><td>Decisions, blockers, commit counts, the architectural risk card and the <b>“Who knows what” contribution matrix</b> with bus factor per module (R3.2).</td></tr>
+    <tr><td>2</td><td><b>Handovers</b> tab</td><td>“Create an MCP token first” — a handover needs an agent connected, exactly as in production.</td></tr>
+    <tr><td>3</td><td><b>Team &amp; Tokens → + Generate MCP Token</b></td><td>A real <code>baton_…</code> token; close the dialog and the <b>Antigravity ⇄ Baton MCP</b> pop-up explains what connected. Closing it scrolls to the live panel of tool calls.</td></tr>
+    <tr><td>4</td><td><b>Handovers</b> again</td><td>Vikrant GP → Krishna Gupta handover, built only from Vikrant's frontend work: <b>risk-ranked exit interview</b>, <b>1 unresolved conflict</b> (task due 10 Nov vs. comment 15 Nov) and evidence-backed claims (R3.1).</td></tr>
+    <tr><td>5</td><td>Click <b>Resolve conflict</b> (pre-filled)</td><td>The conflict becomes a reviewed claim; the handover is approved and <b>Markdown + PDF export</b> unlock.</td></tr>
+    <tr><td>6</td><td><b>Open packet</b></td><td>Role-filtered packet, version history with diff, and cited newcomer Q&amp;A (R3.3).</td></tr>
+    <tr><td>7</td><td>Try to break it</td><td>Refresh mid-flow, click twice, submit empty forms, revoke the last token (the handover is withdrawn and rebuilt on the next token). State persists; nothing hangs.</td></tr>
+  </table>
+  <div class="grid g2">
+    <div class="card"><h4>Production (real accounts)</h4><code>baton-nu.vercel.app</code> → <b>Launch App</b> → sign up with email or GitHub → create a workspace → connect a repository through the BATON GitHub App → generate an MCP token → start a handover.</div>
+    <div class="card"><h4>Source &amp; self-hosting</h4><code>github.com/may1102-1909/BATON</code> — <code>npm install &amp;&amp; npm run dev</code> runs the full app locally; the README lists every environment variable and migration (Section 11).</div>
+  </div>
+</div>
+
+<!-- THREE IMPROVEMENTS -->
+<div class="section">
+  <div class="kicker">03 · The three committed improvements</div>
+  <h2>Exactly what we named at Round 2 — all three delivered.</h2>
+  <div class="rule"></div>
+  <p class="lead">Measured line-by-line against the “Roadmap for Round 3” table on page 6 of our Round 2 report. Nothing was substituted or descoped.</p>
+  <table>
+    <tr><th style="width:17%">Commitment</th><th style="width:33%">Promised at Round 2</th><th style="width:37%">Delivered in Round 3</th><th>Status</th></tr>
+    <tr><td><b>R3.1</b> Risk-ranked exit interview &amp; deterministic conflict detection</td><td>Sort questions strictly by risk (bus-factor-1 modules and unmerged branches first); deterministic conflict detection, e.g. task vs. thread deadline mismatch.</td><td>Documented scoring (<code>server/risk.js</code>): bus-factor-1 module, open PR, active blocker, uncited decision, ahead-of-base branch — weighted, capped at 100, labelled high/medium/low; questions ordered by score with the reason shown. <code>server/conflicts.js</code> finds date disagreements between a task and its comments <b>without any model</b>; only an admin can resolve them.</td><td><span class="pill ok">DELIVERED</span></td></tr>
+    <tr><td><b>R3.2</b> Bus-factor dashboard &amp; member contribution matrix</td><td>Bus-factor dashboard on the main workspace with per-member contribution summaries and early-warning alerts (“only 1 person has touched /payments”).</td><td>“Who knows what” matrix on the Overview (changes and share per module × contributor, bus factor column, sole-owner highlighting); bus-factor alerts (“only one person has changed server/”) with one-click <i>Start handover</i>. Alerts require ≥3 changes and clear when a second contributor appears.</td><td><span class="pill ok">DELIVERED</span></td></tr>
+    <tr><td><b>R3.3</b> Role-based newcomer Q&amp;A with cited answers &amp; version history UI</td><td>Role-filtered handover packet and cited Q&amp;A in the main router; role filters (Backend, Infra, Admin); v1/v2 diff viewer; Playwright E2E tests.</td><td>Function roles (backend, frontend, infra, data, design, product) plus admin visibility, enforced in the API <i>and</i> inside Postgres (<code>match_memory</code>). Packet page <code>/handover/:id</code> with cited Q&amp;A, version history and side-by-side diff. 26 Playwright tests in CI.</td><td><span class="pill ok">DELIVERED</span></td></tr>
+  </table>
+  <figure><img class="shot" src="img/risk.jpg"><figcaption>R3.1 — Vikrant's exit interview, ranked by risk score with the reason shown. It covers only his work (landing-page shader, /usage page, Antigravity session); the answers are drafted from that evidence and become verified claims.</figcaption></figure>
+  <figure><img class="shot" src="img/conflict.jpg"><figcaption>R3.1 — deterministic conflict: the task says 10 Nov, the comment says 15 Nov. BATON never picks a winner; an admin decides and the resolution becomes a cited claim.</figcaption></figure>
+  <p class="small">Evidence in tests: <code>tests/round3.test.js</code> (14 tests — scoring weights, top question targets the single-contributor module, 10 Nov vs 15 Nov conflict, bus-factor thresholds, versions/diffs, leaver-scoped evidence), <code>tests/handover.test.js</code>, <code>tests/schema.test.js</code> (role visibility inside SQL), <code>e2e/handover.spec.js</code>.</p>
+</div>
+
+<!-- FEATURES -->
+<div class="section">
+  <div class="kicker">04 · Complete feature list</div>
+  <h2>A finished product, not a prototype.</h2>
+  <div class="rule"></div>
+  <div class="grid g2">
+    <div class="card"><h4>Capture</h4><ul class="check">
+      <li>GitHub App: commits, PRs, issues, branches (ahead/behind), HMAC-verified webhooks</li>
+      <li>Repository picker limited to your own account and organisations</li>
+      <li>Baton MCP server — 11 tools for Claude Code, Antigravity, Cursor</li>
+      <li><code>baton init</code> writes client configs + git post-commit hook</li>
+      <li>Conversation sync (<code>sync_history</code>) for Claude Code &amp; Antigravity transcripts</li>
+      <li>Memory &amp; decisions log with semantic search (pgvector)</li></ul></div>
+    <div class="card"><h4>Handover engine</h4><ul class="check">
+      <li>Risk-ranked exit interview (up to 10 questions)</li>
+      <li>Deterministic conflict detection + admin resolution</li>
+      <li>Claims labelled Verified / Inferred / Missing / Conflicting</li>
+      <li>Every claim cited; unsupported citations downgraded</li>
+      <li>Gemini drafting with evidence-only fallback when no model is available</li>
+      <li>Edit / approve / reject, versions, diff, publish, acknowledge</li></ul></div>
+    <div class="card"><h4>Team &amp; governance</h4><ul class="check">
+      <li>Multi-workspace, admin/member roles, invite links (single-use, expiring)</li>
+      <li>Function-role audiences: backend, frontend, infra, data, design, product</li>
+      <li>Team / admin / private visibility enforced by Postgres RLS</li>
+      <li>Per-member MCP tokens: hashed, scoped, revocable</li>
+      <li>Workspace settings, typed confirmations, data reset and delete</li></ul></div>
+    <div class="card"><h4>Insight &amp; output</h4><ul class="check">
+      <li>Bus-factor alerts + contribution matrix</li>
+      <li>Tasks with priorities, assignees, deadlines and threads</li>
+      <li>Role-filtered handover packet with cited newcomer Q&amp;A</li>
+      <li>Markdown export (API + MCP <code>export_handover</code>) and PDF export</li>
+      <li>Zero-login demo on real repository data</li>
+      <li>Usage guide, developer notes and feature overview at <code>/usage</code></li></ul></div>
+  </div>
+  <div class="card dark" style="margin-top:10px"><h4>Security built in</h4>Secrets are redacted <b>twice</b> — client-side in the MCP server (<code>mcp-server/src/redact.ts</code>) and server-side before storage and before any LLM call — using credential patterns, JWT/private-key detection, emails and Shannon-entropy checks. GitHub OAuth tokens are encrypted at rest (AES-256-GCM, <code>TOKEN_ENCRYPTION_KEY</code>); API tokens and invites are stored only as hashes; OAuth state is hashed and single-use. Database rules (RLS) on every table: handovers are visible only to admins and the two people involved, draft and admin-only claims stay hidden, and agent transcripts are private to their author.</div>
+</div>
+
+<!-- ARCHITECTURE -->
+<div class="section">
+  <div class="kicker">05 · Architecture &amp; implementation</div>
+  <h2>One engine, two capture layers, three runtimes.</h2>
+  <div class="rule"></div>
+  <div class="arch">
+    <div class="lbl">CAPTURE</div>
+    <div class="row g3 grid">
+      <div class="box"><b>AI IDEs</b>Claude Code · Antigravity · Cursor<br><i>baton-mcp-server (stdio, TypeScript)</i></div>
+      <div class="box"><b>GitHub</b>GitHub App + OAuth, webhooks<br><i>server/github.js</i></div>
+      <div class="box"><b>People</b>Exit interview, tasks, threads, admin review<br><i>React workspace</i></div>
+    </div>
+    <div class="lbl">↓ REDACT (client + server) · AUTHENTICATE (Supabase JWT / hashed baton_ token)</div>
+    <div class="row g4 grid">
+      <div class="box"><b>API</b>Node ESM handler, one entry for Vercel and local<br><i>server/app.js</i></div>
+      <div class="box"><b>Handover engine</b>gaps, claims, citations, versions<br><i>server/handover.js</i></div>
+      <div class="box"><b>Risk &amp; conflicts</b>deterministic, no model<br><i>risk.js · conflicts.js</i></div>
+      <div class="box"><b>Audiences</b>role + visibility rules<br><i>audience.js</i></div>
+    </div>
+    <div class="lbl">↓ PERSIST</div>
+    <div class="row g3 grid">
+      <div class="box"><b>Supabase Postgres</b>RLS on every table, pgvector <code style="background:none;color:#34d399">match_memory</code>, generation lock<br><i>supabase/schema.sql + 5 migrations</i></div>
+      <div class="box"><b>Gemini (optional)</b>drafting, Q&amp;A, embeddings — evidence-only fallback<br><i>server/gemini.js</i></div>
+      <div class="box"><b>Demo engine</b>same app, in-memory store, stateless<br><i>server/demo.js → /api/demo</i></div>
+    </div>
+  </div>
+  <h3>Key design decisions</h3>
+  <table>
+    <tr><th style="width:30%">Decision</th><th>Why</th></tr>
+    <tr><td>Deterministic risk &amp; conflict logic</td><td>Judges and admins can reproduce every score; a model outage never changes a risk label. Models only draft text, never decide.</td></tr>
+    <tr><td>Citation validation after generation</td><td>An LLM claim survives only if its cited source exists and is visible to the reader; otherwise it is downgraded to Inferred/Missing.</td></tr>
+    <tr><td>Permissions inside the database</td><td>RLS plus visibility/audience filtering inside <code>match_memory</code> — a bug in the API cannot leak another team's or role's evidence.</td></tr>
+    <tr><td>Demo = production engine</td><td>The demo posts its browser state to <code>/api/demo</code>, which runs the real <code>createApp</code> against an in-memory store with no network and no credentials. What judges see is what customers get.</td></tr>
+    <tr><td>Local stdio MCP + HTTP collector</td><td>Agents run BATON next to the code (no data leaves before redaction); the server only accepts scoped, hashed tokens on collector routes.</td></tr>
+    <tr><td>Cross-instance generation lock</td><td>A Postgres claim with a 5-minute stale timeout stops two serverless instances from generating the same handover twice.</td></tr>
+  </table>
+  <p class="small"><b>Stack:</b> React 18 + Vite 6, Tailwind, Three.js (landing) · Node.js 20 serverless on Vercel · Supabase (Postgres, Auth, pgvector, RLS) · Google Gemini 2.5 Flash · MCP TypeScript SDK · Playwright · GitHub Actions.</p>
+</div>
+
+<!-- MCP + ANTIGRAVITY -->
+<div class="section">
+  <div class="kicker">06 · MCP + Antigravity in demo mode</div>
+  <h2>Our own MCP server, called from Antigravity, feeding the handover.</h2>
+  <div class="rule"></div>
+  <p class="lead">BATON's MCP server was itself built inside AI IDEs, and it remembers the conversations those IDEs have. The demo shows that loop end to end: the handover is assembled from <b>both</b> the git history and the memory the Antigravity agent recorded through BATON's tools.</p>
+  <div class="flow">
+    <div class="st"><b>1 · Connect</b>Generate an MCP token. Antigravity loads <code style="background:none;color:#34d399">baton-mcp-server</code> from <code style="background:none;color:#34d399">.agents/mcp_config.json</code>.</div><div class="ar">→</div>
+    <div class="st"><b>2 · sync_history</b>Reads the IDE conversation turns (who asked what, what the agent decided).</div><div class="ar">→</div>
+    <div class="st"><b>3 · save_memory</b>Redacts, then stores 2 decisions + 1 blocker through the token-authenticated collector.</div><div class="ar">→</div>
+    <div class="st"><b>4 · Handover</b>Claims and interview questions cite “[Antigravity · MCP]” records next to commits and PRs.</div>
+  </div>
+  <div class="grid g2">
+    <figure><img class="shot" style="max-height:52mm" src="img/agy-popup.jpg"><figcaption>After the token is created, a pop-up confirms that Antigravity is connected.</figcaption></figure>
+    <figure><img class="shot" style="max-height:52mm" src="img/agy-panel.jpg"><figcaption>The panel: conversation memory and each tool call that stored it.</figcaption></figure>
+  </div>
+  <table>
+    <tr><th>MCP tool</th><th>Purpose</th><th>MCP tool</th><th>Purpose</th></tr>
+    <tr><td><code>log_decision</code></td><td>Record an architectural decision</td><td><code>sync_history</code></td><td>Sync latest commit, file summaries, agent conversation turns</td></tr>
+    <tr><td><code>log_blocker</code></td><td>Record a blocker / workaround</td><td><code>github_activity</code></td><td>Repository tracking state</td></tr>
+    <tr><td><code>get_context</code></td><td>Search repository memory</td><td><code>get_exit_interview</code></td><td>Fetch assigned interview questions</td></tr>
+    <tr><td><code>bootstrap_project</code></td><td>Safe incremental repo snapshot</td><td><code>answer_exit_question</code></td><td>Answer from inside the IDE</td></tr>
+    <tr><td><code>save_memory</code></td><td>Store one new decision/blocker/delta</td><td><code>export_handover</code></td><td>Write the approved packet into the repo as Markdown</td></tr>
+    <tr><td><code>get_file_context</code></td><td>Decisions touching a file</td><td><code>baton_bootstrap</code> (prompt)</td><td>Session start-up guidance</td></tr>
+  </table>
+  <div class="callout"><b>Transparency note.</b> A browser cannot reach a judge's IDE, so the demo replays a recorded Antigravity session through the <i>real</i> collector endpoint, authenticated with the token the judge just created — the panel says so. A live IDE connects with <code>npm run baton -- init --org … --repo … --key …</code> against production; the stdio round trip (save, search, interview, Markdown export) is covered by <code>tests/mcp-integration.test.js</code>.</div>
+  <figure style="margin-top:10px"><img class="shot" style="max-height:78mm" src="img/agy-live.png"><figcaption><b>Verified live, outside the demo.</b> Google Antigravity on a team member's machine running the <code>baton_bootstrap</code> prompt against production (baton-nu.vercel.app): <code>bootstrap_project</code> confirmed the repository snapshot (78 tracked files), <code>get_context</code> and <code>get_exit_interview</code> answered over the token-authenticated API.</figcaption></figure>
+</div>
+
+<!-- RELIABILITY -->
+<div class="section">
+  <div class="kicker">07 · Reliability engineering</div>
+  <h2>Built to hold up without us in the room.</h2>
+  <div class="rule"></div>
+  <p class="lead">The brief named four things a judge will do. Each one has a specific behaviour and a test.</p>
+  <table>
+    <tr><th style="width:20%">Judge action</th><th style="width:52%">BATON's behaviour</th><th>Covered by</th></tr>
+    <tr><td><b>Bad input</b></td><td>Validated names, sizes and IDs; garbage, expired, used or wrong-email invites refused without being consumed; oversized demo state rejected (413); bad webhook signatures refused; cross-organisation URLs return 404 without leaking names.</td><td><code>reliability.test.js</code>, <code>demo.test.js</code></td></tr>
+    <tr><td><b>Empty state</b></td><td>Every tab has an explanatory empty state with the next action (“Create an MCP token first”, “Connect a repository”). Missing Supabase settings show setup guidance, not a crash.</td><td><code>navigation.spec.js</code>, <code>production.spec.js</code></td></tr>
+    <tr><td><b>Refresh</b></td><td>Demo state persists in the browser and is replayed by the engine; production state is server-side. Interview refresh keeps answered questions.</td><td><code>reliability.test.js</code></td></tr>
+    <tr><td><b>Same action twice</b></td><td>Collector de-duplicates by session/event ID; webhooks are idempotent; duplicate and cross-instance handover generation is locked; demo requests are serialised.</td><td><code>reliability.test.js</code>, <code>github.test.js</code></td></tr>
+    <tr><td><b>Service outage</b></td><td>Database outage → 503 “Database unavailable, try again shortly” (15 s timeout) and a <i>Retry</i> button that recovers; Gemini failure → evidence-only fallback; one bad GitHub record no longer fails the whole sync; GitHub rate limit → 429.</td><td><code>production.spec.js</code>, <code>reliability.test.js</code></td></tr>
+  </table>
+  <figure><img class="shot" src="img/needs-token.jpg"><figcaption>Guided empty state: a handover cannot start until an agent is connected, and the button takes you straight there.</figcaption></figure>
+</div>
+
+<!-- TESTING -->
+<div class="section">
+  <div class="kicker">08 · Testing &amp; quality assurance</div>
+  <h2>149 automated tests. 149 passing.</h2>
+  <div class="rule"></div>
+  <p class="lead">Run on 16 November 2026 against the submitted <code>main</code> branch. Round 2 shipped with 31 tests; Round 3 grew the suite almost five-fold and added a full browser layer and continuous integration.</p>
+  <div class="grid g4">
+    <div class="metric"><b>117/117</b><span>Backend, API &amp; database · <code style="background:none;color:#a1a1aa">npm test</code> · 11.9 s</span></div>
+    <div class="metric"><b>26/26</b><span>Playwright end-to-end · Chromium · 1.3 min</span></div>
+    <div class="metric"><b>6/6</b><span>MCP server · <code style="background:none;color:#a1a1aa">mcp-server</code> · 0.7 s</span></div>
+    <div class="metric"><b>31 → 149</b><span>tests, Round 2 → Round 3</span></div>
+  </div>
+  <h3>8.1 Backend, API and database suite</h3>
+  <table>
+    <tr><th style="width:26%">File</th><th style="width:7%">Tests</th><th>What it proves</th></tr>
+    <tr><td><code>reliability.test.js</code></td><td>25</td><td>Invite lifecycle and abuse cases; API-token scoping, revocation and expiry; webhook signatures; GitHub error mapping; cross-org isolation; outages → 503; generation locking; Gemini fallback; interview refresh.</td></tr>
+    <tr><td><code>github.test.js</code></td><td>20</td><td>OAuth state security, account linking, installations, paginated repository discovery, sync, webhook idempotency, credential protection.</td></tr>
+    <tr><td><code>backend.test.js</code></td><td>14</td><td>Memory store adapters, demo vs production identity, organisation scoping, tasks/comments, admin protection.</td></tr>
+    <tr><td><code>handover.test.js</code></td><td>14</td><td>Evidence-based generation, citation rules, claim review, Q&amp;A privacy, stale-evidence invalidation, permissions.</td></tr>
+    <tr><td><code>round3.test.js</code></td><td>14</td><td>R3.1–R3.3: gap-score weights, risk ordering, conflict detection, bus-factor thresholds, leaver-scoped evidence, audiences, versions and diffs.</td></tr>
+    <tr><td><code>workspace.test.js</code></td><td>13</td><td>Workspace admin, data reset/delete, Markdown export permissions, visibility-filtered search.</td></tr>
+    <tr><td><code>demo.test.js</code></td><td>9</td><td>Zero-email demo identities; production-only routes blocked; demo MCP token works on the collector; <b>Antigravity memory is cited by the handover alongside git history</b>.</td></tr>
+    <tr><td><code>mcp-integration.test.js</code></td><td>3</td><td>Real stdio MCP server against the authenticated API: save, search, interview, export, outage message.</td></tr>
+    <tr><td><code>schema.test.js</code></td><td>4</td><td>Applies <code>supabase/schema.sql</code> and migrations to in-process Postgres + pgvector (PGlite); checks RLS for sources, handovers, claims, transcripts and summaries as different users, the handover workflow on real tables and role visibility inside <code>match_memory</code>.</td></tr>
+    <tr><td><code>legacy-migration.test.js</code></td><td>1</td><td>Builds a database with the old production <code>handovers</code> shape, applies the upgrade and security migrations twice, keeps the old rows, then starts and generates a real handover on it.</td></tr>
+  </table>
+  <h3>8.2 End-to-end user journeys (Playwright)</h3>
+  <table>
+    <tr><th style="width:24%">Spec</th><th style="width:7%">Tests</th><th>Journeys</th></tr>
+    <tr><td><code>handover.spec.js</code></td><td>2</td><td>“The handover appears after an MCP token is created; resolving the conflict enables Markdown and PDF export” · “Demo GitHub, team invite and MCP tools work without signing in” (incl. Antigravity pop-up → scroll to panel).</td></tr>
+    <tr><td><code>production.spec.js</code></td><td>12</td><td>Production overview without demo content; GitHub account switch; own-account repository picker; <b>database outage on first load → Retry recovers</b>; missing app install; connect/disconnect repositories; team settings and invites.</td></tr>
+    <tr><td><code>routes.spec.js</code></td><td>9</td><td>Retired routes redirect; invite token survives sign-in; landing page; demo never offers workspace management; usage page.</td></tr>
+    <tr><td><code>navigation.spec.js</code></td><td>3</td><td>Demo navigation; missing Supabase configuration; no e-mail addresses in demo data.</td></tr>
+  </table>
+  <h3>8.3 MCP server suite</h3>
+  <p>Redaction of API keys, JWTs and high-entropy strings; credential and repository scoping; event de-duplication; scoped GitHub activity; bounded bootstrap metadata; stdio tool listing.</p>
+  <h3>8.4 Continuous integration</h3>
+  <div class="flow">
+    <div class="st"><b>Trigger</b>Every pull request and push to main</div><div class="ar">→</div>
+    <div class="st"><b>Build</b>App + MCP server</div><div class="ar">→</div>
+    <div class="st"><b>Drift check</b>Committed <code style="background:none;color:#34d399">mcp-server/dist</code> must match source</div><div class="ar">→</div>
+    <div class="st"><b>Unit + DB</b>117 tests</div><div class="ar">→</div>
+    <div class="st"><b>E2E</b>26 Playwright tests; report kept 7 days on failure</div>
+  </div>
+  <p>No pull request in Round 3 was merged with a failing check. When a UI change broke a journey (e.g. the new Antigravity pop-up intercepting clicks), CI caught it and the test was updated in the same pull request.</p>
+  <h3>8.5 Manual QA &amp; usability testing</h3>
+  <p>Owned by <b>Komal Chaurasiya</b> (QA &amp; User Experience Lead): the test plan, the synthetic off-boarding scenario with planted secrets and unmerged work used to check redaction and role filtering, and usability reviews of the main journeys. Manual checks complement the automated suites above; the pass/fail evidence in this section comes from the automated runs.</p>
+  <h3>8.6 Reproduce</h3>
+  <p><code>npm install</code> · <code>npm test</code> · <code>npx playwright install chromium &amp;&amp; npm run test:e2e</code> · <code>cd mcp-server &amp;&amp; npm ci &amp;&amp; npm test</code> — no credentials or network needed.</p>
+</div>
+
+<!-- IMPROVEMENTS SINCE R2 -->
+<div class="section">
+  <div class="kicker">09 · Improvements since Round 2</div>
+  <h2>72 hours, 34 merged pull requests.</h2>
+  <div class="rule"></div>
+  <p class="lead">Beyond the three commitments, Round 3 began with an honest audit of our own build. It found real defects — a committed API token, sign-ups that became admins of the first workspace, a handover screen wired to the wrong API shape, a risk card that always said “no risk”. All were fixed before new features were added.</p>
+  <table>
+    <tr><th style="width:15%">PRs</th><th>Improvement</th></tr>
+    <tr><td>Audit fixes</td><td>Committed token removed from the repository; sign-up no longer joins an existing organisation; handover and risk screens wired to real API responses.</td></tr>
+    <tr><td>#12–#15</td><td>Standalone demo sandbox; GitHub connect flow made to work end to end; hard-coded dashboard data removed; demo rebuilt on the real BATON repository.</td></tr>
+    <tr><td><b>#16</b></td><td><b>Round 3 core:</b> risk-ranked interview, conflict detection, bus-factor matrix, role filter, packet page, Playwright E2E and CI.</td></tr>
+    <tr><td>#17–#24</td><td>Production-ready dashboard; connect any repository; workspace management and deletion; MCP Markdown export; Claude Code &amp; Antigravity setup; GitHub sync resilience (bad records, private-key formats); own-account repository picker.</td></tr>
+    <tr><td><b>#25</b></td><td><b>Hardening:</b> real-Postgres schema tests, search permissions inside SQL, cross-instance generation lock, 503 outage handling with Retry, operations documentation.</td></tr>
+    <tr><td>#26–#29</td><td>Judge-ready demo: ready-made handover, resolve-then-export (PDF + Markdown), working invites and MCP, export loading state, token revocation withdraws the handover.</td></tr>
+    <tr><td>#30–#36</td><td>Sign-in and onboarding flow (GitHub sign-in → <code>/usage</code>), usage showcase, handovers gated on an MCP token, only real contributors can be handed over.</td></tr>
+    <tr><td>#37–#39</td><td>Antigravity ⇄ Baton MCP in demo mode: memory from the IDE feeds the handover; connection pop-up.</td></tr>
+    <tr><td>#40</td><td>Handovers are scoped to the leaving member's own work; the demo is now Vikrant GP → Krishna Gupta, built from Vikrant's real frontend commits; clearer demo buttons.</td></tr>
+    <tr><td>#41</td><td>GitHub-style interface: system fonts, sentence-case labels, /usage features as a list and the before/after as a pull-request diff; every screen fits a phone.</td></tr>
+    <tr><td>#42–#44</td><td>Security review: database rules now limit handovers to admins and the two people involved, hide draft and admin-only claims, and make agent transcripts private to their author; schema accepts every visibility value the API writes; an additive migration upgrades older production handover tables, with a test that replays it on the old table shape.</td></tr>
+    <tr><td>#45</td><td>The 3D paper landing page now runs on phones and tablets as well as laptops; the header fits 320px screens.</td></tr>
+  </table>
+</div>
+
+<!-- TEAM -->
+<div class="section">
+  <div class="kicker">10 · Team &amp; contributions</div>
+  <h2>Team Mumbai_wale</h2>
+  <div class="rule"></div>
+  <div class="card accent" style="border-left-color:#10b981">
+    <div class="person"><div class="av">TK</div><div style="flex:1"><h4 style="margin:0">Tanmay Khurpe — Backend Developer &amp; System Architect</h4><div class="small">Designed the end-to-end workflow and built the backend, database, MCP server and the handover engine.</div><div class="bar"><i style="width:100%"></i></div></div></div>
+    <div class="grid g2" style="margin-top:8px;font-size:9pt">
+      <ul class="check">
+        <li><b>Workflow design:</b> capture → redact → evidence → risk-ranked interview → claims → conflict resolution → approval → export</li>
+        <li><b>Handover engine</b> (<code>server/handover.js</code>): gap detection, claims, citation validation, versions, diffs, Q&amp;A, Gemini + evidence-only fallback</li>
+        <li><b>All three Round 3 improvements</b>: risk scoring (<code>risk.js</code>), conflict detection (<code>conflicts.js</code>), bus-factor matrix, role audiences (<code>audience.js</code>)</li>
+        <li><b>Baton MCP server</b>: 11 tools, <code>baton init</code> CLI, hooks, transcript sync for Claude Code &amp; Antigravity, client-side redaction</li>
+        <li><b>Antigravity integration</b> and the demo flow where IDE memory feeds the handover</li></ul>
+      <ul class="check">
+        <li><b>Database</b>: Supabase schema, RLS on every table, pgvector search with permissions in SQL, 5 migrations, generation lock</li>
+        <li><b>GitHub App</b>: OAuth, installations, sync, webhooks, resilient private-key handling</li>
+        <li><b>API &amp; security</b>: auth, orgs, invites, hashed tokens, encrypted OAuth tokens, server redaction</li>
+        <li><b>Reliability</b>: 503 outage handling, idempotency, de-duplication, demo engine</li>
+        <li><b>Test suite &amp; CI</b>: 117 backend tests, MCP integration test, Playwright pipeline</li></ul>
+    </div>
+  </div>
+  <div class="card accent" style="margin-top:10px;border-left-color:#34d399">
+    <div class="person"><div class="av">VG</div><div style="flex:1"><h4 style="margin:0">Vikrant GP — Frontend &amp; Design Lead</h4><div class="small">Owned the look and first impression of BATON: landing page, onboarding pages, app shell and the first version of the no-login demo. 11 commits on <code>main</code>.</div></div></div>
+    <div class="grid g2" style="margin-top:8px;font-size:9pt">
+      <ul class="check">
+        <li><b>Landing page:</b> integrated and re-branded the 3D Paper shader hero, entrance animation, 0–100 loader and team roster; later streamlined the hero and cut the shader code for faster loading</li>
+        <li><b>Setup &amp; usage page</b> (<code>/usage</code>): the step-by-step guide judges and new users follow, with an “On this page” section navigator, ambient glow and the developer-notes card with avatar stickers and name hover pills</li></ul>
+      <ul class="check">
+        <li><b>First no-login demo:</b> built the original standalone <code>/demo-page</code> and its in-browser sandbox with a unified header (≈1,050 lines), later connected to the production engine</li>
+        <li><b>App shell:</b> routing, page-transition overlay, sign-in screen, dashboard redesign, review and task page wiring, and the BATON logo in the dashboard and loader</li></ul>
+    </div>
+  </div>
+  <div class="grid g2" style="margin-top:10px">
+    <div class="card"><div class="person"><div class="av">KG</div><div><h4 style="margin:0">Krishna Gupta</h4><div class="small">UI/UX Designer &amp; Business Analyst</div></div></div><p style="font-size:9pt">User research and survey, wireframes and the five-stage user flow, handover format and confidence labels (Verified / Inferred / Missing / Conflicting), exit-interview question and AI prompt design.</p></div>
+    <div class="card"><div class="person"><div class="av">KC</div><div><h4 style="margin:0">Komal Chaurasiya</h4><div class="small">QA &amp; User Experience Lead</div></div></div><p style="font-size:9pt">Test plan, redaction and permission test cases, synthetic demo data, usability testing and project documentation.</p></div>
+  </div>
+  <div class="callout dark" style="margin-top:12px"><b>Built inside the event window.</b> The repository history is public: 138 commits on <code style="background:#1f2937;color:#34d399">main</code>, 82 of them during Round 3, across pull requests #1–#45 between 8 and 16 November 2026.</div>
+</div>
+
+<!-- DOCS -->
+<div class="section">
+  <div class="kicker">11 · Documentation &amp; running it</div>
+  <h2>Clone it, run it, deploy it.</h2>
+  <div class="rule"></div>
+  <p class="lead">The README is written for someone who has never seen the project: components, setup, every environment variable, migrations, operations and known limits. <code>docs/MCP.md</code> covers each MCP client; <code>AGENTS.md</code> tells AI agents how to log into BATON.</p>
+  <div class="card dark mono" style="font-size:8.6pt;line-height:1.7">
+    git clone https://github.com/may1102-1909/BATON &amp;&amp; cd BATON<br>
+    npm install<br>
+    npm --prefix mcp-server install &amp;&amp; npm run build:mcp<br>
+    npm run dev&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# http://localhost:3000 — /demo-page works with no configuration<br>
+    npm test &amp;&amp; npm run test:e2e<br>
+    npm run baton -- init --org &lt;ORG&gt; --repo &lt;REPO&gt; --key &lt;TOKEN&gt;&nbsp;&nbsp;# connect an AI IDE
+  </div>
+  <table>
+    <tr><th style="width:36%">Configuration</th><th>Purpose</th></tr>
+    <tr><td><code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>SUPABASE_ANON_KEY</code></td><td>Database, auth and browser access (service key never sent to the browser)</td></tr>
+    <tr><td><code>TOKEN_ENCRYPTION_KEY</code></td><td>Encrypts stored GitHub OAuth tokens</td></tr>
+    <tr><td><code>GITHUB_APP_ID</code>, <code>GITHUB_APP_PRIVATE_KEY</code>, <code>GITHUB_CLIENT_ID/SECRET</code>, <code>GITHUB_WEBHOOK_SECRET</code></td><td>GitHub App, account linking and verified webhooks</td></tr>
+    <tr><td><code>GEMINI_API_KEY</code> (optional)</td><td>Drafting, Q&amp;A and embeddings; without it BATON runs evidence-only</td></tr>
+    <tr><td><code>supabase/schema.sql</code> + migrations</td><td>New databases need only the schema; migrations are idempotent and listed in order</td></tr>
+  </table>
+  <h3>Known limits — stated honestly</h3>
+  <ul>
+    <li>Redaction is pattern- and entropy-based; it lowers risk but cannot guarantee every secret is caught.</li>
+    <li>Claims are checked against cited source text, not against code structure.</li>
+    <li>Very large repositories are capped (300 commits, 200 PRs, 200 issues, 50 branches per sync) rather than paged.</li>
+    <li>Claude Code and Google Antigravity were verified live against production; Cursor and Codex configurations follow their documentation. The no-login demo replays an Antigravity session rather than connecting to the judge's IDE.</li>
+  </ul>
+  <h3>Disclosures (rules 06 and 08)</h3>
+  <table>
+    <tr><th style="width:24%">What</th><th>Details</th></tr>
+    <tr><td><b>Templates / earlier code</b></td><td>The landing-page hero adapts the <b>ThreeUI “3D Paper”</b> shader template (<code>src/shaders/3d-paper/</code>), restyled with BATON branding. No other pre-existing code: the repository starts with its first commit on 8 November 2026 and all product code was written during the event.</td></tr>
+    <tr><td><b>Open-source libraries</b></td><td>React, Vite, Tailwind, Three.js, Express, Supabase client, Model Context Protocol TypeScript SDK, Playwright — used under their licences.</td></tr>
+    <tr><td><b>AI tools</b></td><td><b>Hoplite</b> (AI coding agent) for implementation, tests and pull requests under team direction and review — its branches are named <code>hoplite/*</code> in the public history; <b>Google Antigravity</b> (Gemini) as an IDE assistant; <b>Google Gemini 2.5 Flash</b> inside the product for drafting, Q&amp;A and embeddings.</td></tr>
+  </table>
+</div>
+
+<!-- ROADMAP -->
+<div class="section">
+  <div class="kicker">12 · Roadmap &amp; future development</div>
+  <h2>From one repository to the whole office: every departure, one handover.</h2>
+  <div class="rule"></div>
+  <p class="lead">Today, when anyone leaves a company, the handover is a rushed PDF, a long email and a list of links, and each team does it differently. Our goal is for BATON to replace all of that. Work already lives in Jira, Slack, GitHub, Google Drive and the CRM, so BATON reads it there, asks the person leaving only about the gaps, and gives the successor one cited handover in the same format for every role.</p>
+  <div class="flow">
+    <div class="st"><b>1 · Notice given</b>HR system or manager marks the departure; BATON opens the handover automatically.</div><div class="ar">→</div>
+    <div class="st"><b>2 · Collect</b>Connectors pull the person's tickets, threads, docs, code and deals with permissions intact.</div><div class="ar">→</div>
+    <div class="st"><b>3 · Ask the gaps</b>A short, risk-ranked exit interview covers only what the records cannot answer.</div><div class="ar">→</div>
+    <div class="st"><b>4 · Approve</b>Manager resolves conflicts and approves; every line cites its source.</div><div class="ar">→</div>
+    <div class="st"><b>5 · Transfer</b>Successor gets the handover; tickets, channels and files are reassigned in one step.</div>
+  </div>
+  <div class="grid g3">
+    <div class="card accent"><span class="pill ok">NOW · WEEKS 1–2</span><h4 style="margin-top:6px">Finish engineering handovers</h4><ul>
+      <li>Verify production migrations (0.25 h)</li>
+      <li>Live Cursor verification (0.5 h); Claude Code and Antigravity already verified</li>
+      <li>Page large GitHub syncs (3 h)</li>
+      <li>Run MCP tests and lint in CI (1 h)</li>
+      <li>Remote MCP over HTTP, so no local install (1–2 d)</li></ul></div>
+    <div class="card accent"><span class="pill warn">NEXT · MONTHS 1–3</span><h4 style="margin-top:6px">Office connectors</h4><ul>
+      <li><b>Jira</b> and Linear: tickets, owners, status, comments (2–3 d)</li>
+      <li><b>Slack</b> and Microsoft Teams: decisions and blockers in channels the person used (3–4 d)</li>
+      <li><b>Google Drive</b>, Confluence and Notion: docs the person owns (2–3 d each)</li>
+      <li>Email and calendar: recurring meetings and external contacts (3 d)</li>
+      <li>Handovers that update continuously, so they are ready the day notice is given</li></ul></div>
+    <div class="card accent"><span class="pill neu">LATER · QUARTER 2+</span><h4 style="margin-top:6px">Every role, whole company</h4><ul>
+      <li>Handover templates per department: sales (accounts, deals from Salesforce/HubSpot), support, operations, HR</li>
+      <li>HR triggers (Workday, BambooHR, Keka) start the handover on resignation</li>
+      <li>One-click transfer of Jira tickets, Slack channels and Drive files to the successor</li>
+      <li>Company-wide knowledge-risk map; SSO, SCIM, audit log, retention, self-hosting</li></ul></div>
+  </div>
+  <div class="callout" style="margin-top:10px"><b>Why this is a plan, not a wish list.</b> The engine is already source-neutral: every input becomes a typed, redacted, permission-checked source record, and the gap detection, risk scoring, conflict detection, citations and approval steps work on those records whatever their origin. GitHub and the MCP server are the first two connectors; Jira, Slack and Drive are the next ones on the same pipeline, not a rebuild.</div>
+  <div style="break-inside:avoid">
+  <h3>Why this matters commercially</h3>
+  <div class="grid g3">
+    <div class="card"><h4>Who buys</h4>HR and engineering leaders at 20–500-person companies, where one departure can stall a product line or a client account. We start with software teams and expand to every department.</div>
+    <div class="card"><h4>How it's sold</h4>Free tier for one repository; per-seat plan with all connectors; enterprise plan with SSO, HR integration and self-hosting.</div>
+    <div class="card"><h4>Why now</h4>Work is scattered across a dozen tools, and AI agents now do much of it. Their reasoning disappears with the chat window. BATON is the memory layer that keeps it.</div>
+  </div>
+  </div>
+  <div class="callout dark" style="margin-top:14px">
+    <div class="brand" style="font-size:14pt;color:#fff"><svg width="18" height="21" viewBox="0 0 25 29"><path d="m3 17 10-14 6 4L9 21z" fill="#34d399"/><path d="m7 22 10-14 6 4-10 14z" fill="#10b981"/></svg>BATON</div>
+    <p style="margin-top:6px">Live: <b>baton-nu.vercel.app</b> · Demo without login: <b>baton-nu.vercel.app/demo-page</b> · Code: <b>github.com/may1102-1909/BATON</b></p>
+    <p class="small" style="color:#a1a1aa">Team Mumbai_wale — Tanmay Khurpe, Vikrant GP, Krishna Gupta, Komal Chaurasiya</p>
+  </div>
+</div>
+</body></html>
