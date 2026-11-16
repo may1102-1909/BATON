@@ -267,3 +267,21 @@ test('ahead branches create high-risk follow-up, unfinished claim, and risk with
   assert.doesNotMatch(branchRisk.summary, /abandon/i);
   assert.equal(risks.counts.branches_ahead, 1);
 });
+
+test('only a team member with commits or pull requests in the synced repositories can be handed over from', async () => {
+  const commit = (id, login) => ({ id, org_id: 'org', type: 'commit', author_login: login, content: `work ${id}`, metadata: { author_login: login, files: ['server/app.js'] }, visibility: 'team' });
+  const store = createMemoryStore({
+    members: [
+      { id: 'ma', org_id: 'org', user_id: 'admin', role: 'admin', github_login: 'may' },
+      { id: 'mv', org_id: 'org', user_id: 'vikrant', role: 'member', name: 'Vikrant', github_login: 'vik' },
+      { id: 'mk', org_id: 'org', user_id: 'krishna', role: 'member', name: 'Krishna' },
+    ],
+    sources: [commit('c1', 'may'), commit('c2', 'vik')],
+  });
+  const domain = createHandovers({ store, env: {} });
+  const actor = { id: 'admin', org_id: 'org', role: 'admin' };
+  await assert.rejects(domain.start({ orgId: 'org', actor, leaverId: 'krishna', incomingId: 'vikrant' }), error => error.status === 409 && /Krishna has not contributed/.test(error.message) && /link it first/.test(error.message));
+  await assert.rejects(domain.start({ orgId: 'org', actor, leaverId: 'stranger', incomingId: 'vikrant' }), error => error.status === 400 && /member of this team/.test(error.message));
+  const started = await domain.start({ orgId: 'org', actor, leaverId: 'vikrant', incomingId: 'krishna' });
+  assert.equal(started.handover.leaver_id, 'vikrant');
+});
