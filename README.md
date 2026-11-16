@@ -204,25 +204,6 @@ CI (`.github/workflows/ci.yml`) runs the build, rebuilds the MCP server and fail
 
 ---
 
-## 🗺 Roadmap
-
-Everything in the Round 3 completion and improvement plans is built. What remains, sequenced by dependency; effort and risk are rough estimates.
-
-| # | Step | Depends on | Effort | Risk |
-| --- | --- | --- | --- | --- |
-| 1 | Run the two `20261115_*` migrations in production and confirm the earlier two are applied | none | 0.25 h | Low |
-| 2 | Try the Antigravity config in the app (`/mcp` lists `baton`'s tools) | none | 0.25 h | Low |
-| 3 | Page large syncs (for example 100 commits per request, the dashboard loops until done) if a repository ever approaches the time limit | none | 3 h | Medium |
-| 4 | Remote MCP over HTTP so agents need no local install | none | 1–2 d | Medium |
-| 5 | Per-tool transcript parsers beyond Claude Code and Antigravity | 4 | 1 d | Low |
-| 6 | Slack and Jira connectors as additional evidence sources | none | 2–3 d each | Medium |
-| 7 | Living handover: regenerate automatically when cited sources change | none | 2 d | Medium |
-| 8 | Self-hosting guide (Docker image, Postgres with pgvector) | none | 1 d | Low |
-
-Out of scope for now: desktop or mobile packages, further landing-page variants and additional MCP tools.
-
----
-
 <div align="center">
 
 **Built for CodersInPune Hackathon 2026 — Team MUMBAI_WALE**
