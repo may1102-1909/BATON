@@ -23,7 +23,7 @@ test('the handover appears after an MCP token is created; resolving the conflict
   await expect(page.getByLabel('New token')).toHaveValue(/^baton_/);
   await page.keyboard.press('Escape');
   // The demo then explains the Antigravity connection; closing it scrolls to the Antigravity panel.
-  await page.getByRole('dialog', { name: 'Antigravity is connected to Baton MCP' }).getByTestId('antigravity-popup-close').click();
+  await page.getByRole('dialog', { name: 'Antigravity is connected to Baton MCP' }).getByRole('button', { name: 'Close dialog' }).click();
   await expect(page.getByTestId('antigravity-link')).toBeInViewport();
   await expect(page.getByText(/Baton has built the Krishna Gupta to Vikrant handover/)).toBeVisible();
 
@@ -101,7 +101,7 @@ test('demo GitHub, team invite and MCP tools work without signing in', async ({ 
   await page.getByRole('button', { name: 'Create token' }).click();
   await expect(page.getByLabel('New token')).toHaveValue(/^baton_/);
   await page.keyboard.press('Escape');
-  await page.getByTestId('antigravity-popup-close').click();
+  await page.getByRole('dialog', { name: 'Antigravity is connected to Baton MCP' }).getByRole('button', { name: 'Close dialog' }).click();
   await page.getByRole('button', { name: 'Run log_decision' }).click();
   await expect(page.getByText(/^Response 201/)).toBeVisible();
   await expect(page.locator('pre').filter({ hasText: '/api/collector/push' })).toContainText('[REDACTED]');
