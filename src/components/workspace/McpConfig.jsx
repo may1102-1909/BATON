@@ -90,7 +90,7 @@ export function McpConfig({ orgId, repositories, tokens, revealedToken, notify, 
           {snippet || 'Connect a repository first (GitHub tab) to generate an MCP configuration.'}
         </pre>
       </div>
-      {snippet && <div className="ws-muted" style={{ marginTop: 8, fontFamily: 'monospace', fontSize: '0.76rem' }}>{current?.tip}</div>}
+      {snippet && <div className="ws-muted" style={{ marginTop: 8, fontFamily: 'var(--mono)', fontSize: '0.76rem' }}>{current?.tip}</div>}
 
       {children}
     </div>

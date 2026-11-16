@@ -59,7 +59,7 @@ export function TeamTab({
                       borderRadius: 6,
                       padding: 14,
                       display: 'flex',
-                      justifyContent: 'space-between',
+                      justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
                       alignItems: 'center',
                     }}
                   >
@@ -73,7 +73,7 @@ export function TeamTab({
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                       <span className={`ws-badge ${m.role === 'admin' ? 'ws-badge-verified' : 'ws-badge-muted'}`}>
                         {m.role}
                       </span>

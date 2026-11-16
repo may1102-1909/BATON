@@ -1,180 +1,82 @@
 import React from 'react'
-import { Icon } from './Icon'
 
-const comparisonPoints = [
+// Before/after shown as a pull-request diff: each topic is a hunk, the old way removed, the Baton way added.
+const hunks = [
   {
-    topic: 'Architectural Decisions',
-    without: 'Scattered across Slack threads, Google Docs, and forgotten 1-on-1 calls.',
-    with: 'Directly extracted from git commits, PR discussions, and AI coding agent session traces.'
+    topic: 'Architectural decisions',
+    without: 'Scattered across Slack threads, Google Docs and 1-on-1 calls nobody wrote down.',
+    with: 'Pulled from commits, pull requests and the AI agent sessions where the decision was made.'
   },
   {
-    topic: 'Verifiability & Trust',
-    without: 'Assumptions and guesswork. Incoming engineers have no way to verify if a note is up to date.',
-    with: 'Cryptographically cited sources. Verified, Inferred, and Conflicting claims stay explicit.'
+    topic: 'Can I trust this note?',
+    without: 'No way to tell whether a note is current or a guess from six months ago.',
+    with: 'Every claim cites the record it came from and is marked Verified, Inferred, Missing or Conflicting.'
   },
   {
-    topic: 'Credentials & Security',
-    without: 'Accidental secret exposure when engineers dump environment variables into shared documents.',
-    with: 'Automated secret redaction and role-based clearance boundaries prior to handover generation.'
+    topic: 'Secrets',
+    without: 'API keys and .env values get pasted into the handover doc "just for now".',
+    with: 'Keys and tokens are redacted before anything is stored, and each reader only sees their role’s records.'
   },
   {
-    topic: 'Onboarding Acceleration',
-    without: '4 to 6 weeks of tribal knowledge hunting and asking departed engineers for guidance.',
-    with: 'Day-one clarity. Incoming engineers start shipping with zero context loss.'
+    topic: 'First week for the new engineer',
+    without: 'Digging through old threads and messaging someone who has already left.',
+    with: 'A reviewed handover with cited answers to their questions, ready on day one.'
   }
 ]
 
+const mono = 'var(--mono)'
+const line = '#27282d'
+
+function DiffLine({ sign, num, text }) {
+  const added = sign === '+'
+  return (
+    <div className="usage-diff-line" style={{ display: 'grid', gridTemplateColumns: '44px 20px 1fr', background: added ? 'rgba(52, 211, 153, 0.09)' : 'rgba(248, 81, 73, 0.08)' }}>
+      <span style={{ fontFamily: mono, fontSize: 12, color: '#6e7681', textAlign: 'right', padding: '6px 10px 6px 0', background: added ? 'rgba(52, 211, 153, 0.13)' : 'rgba(248, 81, 73, 0.12)', userSelect: 'none' }}>
+        {num}
+      </span>
+      <span style={{ fontFamily: mono, fontSize: 13, color: added ? '#34d399' : '#f47067', textAlign: 'center', padding: '6px 0', userSelect: 'none' }}>
+        {sign}
+      </span>
+      <span style={{ fontSize: 14, lineHeight: 1.55, color: added ? '#e6edf3' : '#adb3bc', padding: '6px 14px 6px 2px' }}>{text}</span>
+    </div>
+  )
+}
+
 export function Comparison() {
   return (
-    <section style={{ padding: '60px 0', borderTop: '1px solid #27282d' }}>
-      <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <div
-          style={{
-            color: '#34d399',
-            fontSize: 10,
-            letterSpacing: 1.7,
-            fontFamily: 'monospace',
-            marginBottom: 10,
-            fontWeight: 600
-          }}
-        >
-          THE CONTINUITY ADVANTAGE
-        </div>
-        <h2
-          style={{
-            fontSize: 30,
-            fontWeight: 500,
-            letterSpacing: -1,
-            margin: '0 0 10px',
-            color: '#f4f4f5'
-          }}
-        >
-          Stop losing tribal knowledge with every departure.
-        </h2>
-        <p
-          style={{
-            fontSize: 13,
-            color: '#999ba5',
-            margin: '0 auto',
-            maxWidth: 500,
-            lineHeight: 1.8
-          }}
-        >
-          Compare standard legacy handovers with Baton’s verifiable, AI-assisted continuity framework.
-        </p>
-      </div>
+    <section>
+      <h2 style={{ fontSize: 24, fontWeight: 600, margin: 0, paddingBottom: 10, borderBottom: `1px solid ${line}`, color: '#f4f4f5' }}>
+        Stop losing tribal knowledge with every departure.
+      </h2>
+      <p style={{ fontSize: 14, color: '#999ba5', margin: '12px 0 20px', lineHeight: 1.6 }}>
+        The same handover, before and after Baton.
+      </p>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: 24,
-          maxWidth: 1040,
-          margin: '0 auto'
-        }}
-      >
-        {/* Without Baton */}
-        <div
-          style={{
-            background: '#131416',
-            border: '1px solid #2c2f35',
-            borderRadius: 10,
-            padding: '30px 26px'
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#ef8585',
-              marginBottom: 20
-            }}
-          >
-            <span
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: 4,
-                background: '#ef858518',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 12
-              }}
-            >
-              ✕
+      <div style={{ border: `1px solid ${line}`, borderRadius: 6, overflow: 'hidden', background: '#0d0e10' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '8px 14px', background: '#141518', borderBottom: `1px solid ${line}` }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: mono, fontSize: 12.5, color: '#e6edf3', minWidth: 0 }}>
+            <span style={{ color: '#6e7681' }}>handover/</span>vikrant-to-krishna.md
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: mono, fontSize: 12 }}>
+            <span style={{ color: '#34d399' }}>+{hunks.length}</span>
+            <span style={{ color: '#f47067' }}>−{hunks.length}</span>
+            <span aria-hidden="true" style={{ display: 'flex', gap: 2 }}>
+              {[0, 1, 2, 3, 4].map(i => (
+                <span key={i} style={{ width: 8, height: 8, borderRadius: 1, background: i < 2 ? '#34d399' : i < 4 ? '#f47067' : '#3a3d44' }} />
+              ))}
             </span>
-            Without Baton
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {comparisonPoints.map((item) => (
-              <div key={item.topic}>
-                <div style={{ fontSize: 11, color: '#888d96', fontFamily: 'monospace', marginBottom: 4 }}>
-                  {item.topic}
-                </div>
-                <div style={{ fontSize: 12, color: '#aaadb8', lineHeight: 1.6 }}>
-                  {item.without}
-                </div>
-              </div>
-            ))}
-          </div>
+          </span>
         </div>
-
-        {/* With Baton */}
-        <div
-          style={{
-            background: 'linear-gradient(145deg, #121816, #111415)',
-            border: '1px solid #234c38',
-            borderRadius: 10,
-            padding: '30px 26px',
-            boxShadow: '0 0 50px rgba(52, 211, 153, 0.05)'
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#34d399',
-              marginBottom: 20
-            }}
-          >
-            <span
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: 4,
-                background: '#10b98122',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 12
-              }}
-            >
-              ✓
-            </span>
-            With Baton
+        {hunks.map((h, i) => (
+          <div key={h.topic}>
+            <div style={{ fontFamily: mono, fontSize: 12, color: '#8b949e', padding: '6px 14px', background: 'rgba(52, 211, 153, 0.04)', borderTop: i ? `1px solid ${line}` : undefined }}>
+              @@ {h.topic} @@
+            </div>
+            <DiffLine sign="−" num={i * 2 + 1} text={h.without} />
+            <DiffLine sign="+" num={i * 2 + 1} text={h.with} />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {comparisonPoints.map((item) => (
-              <div key={item.topic}>
-                <div style={{ fontSize: 11, color: '#34d399', fontFamily: 'monospace', marginBottom: 4 }}>
-                  {item.topic}
-                </div>
-                <div style={{ fontSize: 12, color: '#dbe0d8', lineHeight: 1.6 }}>
-                  {item.with}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        ))}
       </div>
     </section>
   )
 }
-

@@ -116,7 +116,7 @@ export function MemoryTab({
                                 border: '1px solid #2d3039',
                                 padding: '2px 8px',
                                 borderRadius: 4,
-                                fontFamily: 'monospace',
+                                fontFamily: 'var(--mono)',
                                 fontSize: '0.75rem',
                                 color: '#93c5fd',
                               }}

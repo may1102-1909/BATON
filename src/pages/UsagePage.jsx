@@ -1066,118 +1066,59 @@ export function UsagePage() {
           {/* Features Section */}
           <section
             ref={featuresRef}
-            style={{ padding: '130px 0 160px', scrollMarginTop: 100 }}
+            style={{ padding: '110px 0 130px', scrollMarginTop: 100 }}
           >
-            <div
-              style={{
-                color: C.green,
-                fontSize: 10,
-                letterSpacing: 1.7,
-                fontFamily: 'monospace',
-                marginBottom: 12,
-                fontWeight: 600
-              }}
-            >
-              BUILT FOR CONTINUITY
-            </div>
-            <h2
-              style={{
-                fontSize: 31,
-                fontWeight: 500,
-                letterSpacing: -1.2,
-                margin: '0 0 10px'
-              }}
-            >
+            <h2 style={{ fontSize: 24, fontWeight: 600, margin: 0, paddingBottom: 10, borderBottom: `1px solid ${C.line}` }}>
               A handover. Not a guessing game.
             </h2>
-            <p
-              style={{
-                fontSize: 13,
-                color: C.muted,
-                margin: '0 0 30px',
-                lineHeight: 1.8
-              }}
-            >
+            <p style={{ fontSize: 14, color: C.muted, margin: '12px 0 20px', lineHeight: 1.6 }}>
               Everything your next engineer needs. Nothing they shouldn’t see.
             </p>
 
-            <div
-              className="bt-grid"
-              style={{
-                border: `1px solid ${C.line}`,
-                borderRadius: 9,
-                overflow: 'hidden'
-              }}
-            >
+            <div style={{ border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 16px', background: '#141518', borderBottom: `1px solid ${C.line}`, fontSize: 13, color: C.muted }}>
+                <span><strong style={{ color: C.text, fontWeight: 600 }}>3 checks</strong> run on every handover</span>
+                <span className="usage-hide-sm" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>before it reaches the incoming engineer</span>
+              </div>
               {[
                 {
                   icon: 'git',
                   title: 'Every claim has a source.',
                   body: 'Trace decisions back to the pull request, commit, or conversation that made them.',
-                  note: 'Evidence over assumptions'
+                  example: <>cites <code>PR #16</code> · <code>d12b095</code></>
                 },
                 {
                   icon: 'lock',
                   title: 'Context without the risk.',
                   body: 'Secrets are redacted before handover. Role-based clearance keeps sensitive context scoped.',
-                  note: 'Private by design'
+                  example: <><code>sk_live_…</code> → <code>[REDACTED]</code></>
                 },
                 {
                   icon: 'shield',
                   title: 'Know what you can trust.',
                   body: 'Verified, inferred, and conflicting claims stay distinct. Uncertainty is visible, not buried.',
-                  note: 'Confidence, made explicit'
+                  example: (
+                    <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {[['Verified', '#34d399'], ['Inferred', '#d29922'], ['Conflicting', '#f47067']].map(([label, color]) => (
+                        <span key={label} style={{ border: `1px solid ${color}66`, color, borderRadius: 999, padding: '0 8px', fontSize: 12, lineHeight: '20px' }}>{label}</span>
+                      ))}
+                    </span>
+                  )
                 }
               ].map((f, i) => (
                 <div
                   key={f.title}
-                  className="bt-card"
-                  style={{
-                    padding: 26,
-                    background: '#111315',
-                    borderRight: i < 2 ? `1px solid ${C.line}` : undefined
-                  }}
+                  className="usage-feature-row"
+                  style={{ display: 'grid', gridTemplateColumns: '20px 1fr auto', gap: 14, alignItems: 'start', padding: '16px', borderTop: i ? `1px solid ${C.line}` : undefined }}
                 >
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      color: C.green,
-                      background: '#10b9810a',
-                      padding: 9,
-                      border: '1px solid #294136',
-                      borderRadius: 7
-                    }}
-                  >
-                    <Icon name={f.icon} size={18} />
+                  <span style={{ color: C.muted, display: 'flex', paddingTop: 2 }}>
+                    <Icon name={f.icon} size={16} />
                   </span>
-                  <h3
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 500,
-                      margin: '22px 0 10px'
-                    }}
-                  >
-                    {f.title}
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: 12,
-                      lineHeight: 1.8,
-                      color: C.muted,
-                      margin: '0 0 25px'
-                    }}
-                  >
-                    {f.body}
-                  </p>
-                  <span
-                    style={{
-                      fontSize: 9,
-                      color: '#6f7975',
-                      fontFamily: 'monospace'
-                    }}
-                  >
-                    {f.note}
-                  </span>
+                  <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px' }}>{f.title}</h3>
+                    <p style={{ fontSize: 14, lineHeight: 1.55, color: C.muted, margin: 0 }}>{f.body}</p>
+                  </div>
+                  <div className="usage-feature-example" style={{ fontSize: 12, color: C.muted, paddingTop: 2 }}>{f.example}</div>
                 </div>
               ))}
             </div>
@@ -1186,7 +1127,7 @@ export function UsagePage() {
           <SectionDivider />
 
           {/* Comparison */}
-          <div style={{ padding: '130px 0 160px' }}>
+          <div style={{ padding: '110px 0 140px' }}>
             <Comparison />
           </div>
         </div>

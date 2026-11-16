@@ -87,7 +87,7 @@ export function InviteModal({ orgId, onClose, notify, linkPrefix = '/auth?invite
             Send this link to your teammate. It can be used once{email.trim() && !demo ? ` and only by ${email.trim()}` : ''}.
           </div>
           <label className="ws-form-label" htmlFor="ws-invite-link">Invite link</label>
-          <input id="ws-invite-link" className="ws-input" readOnly value={link} onFocus={e => e.target.select()} style={{ width: '100%', marginBottom: 14, fontFamily: 'monospace', fontSize: '0.8rem' }} />
+          <input id="ws-invite-link" className="ws-input" readOnly value={link} onFocus={e => e.target.select()} style={{ width: '100%', marginBottom: 14, fontFamily: 'var(--mono)', fontSize: '0.8rem' }} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="ws-btn" onClick={onClose}>Close</button>
             <button type="button" className="ws-btn ws-btn-primary" onClick={copy}>{copied ? '✓ Copied' : 'Copy link'}</button>
@@ -138,7 +138,7 @@ export function TokenModal({ orgId, onClose, onCreated, notify }) {
             <strong>Do not share:</strong> copy this token now. For your security it will not be shown again.
           </div>
           <label className="ws-form-label" htmlFor="ws-token-secret">New token</label>
-          <input id="ws-token-secret" className="ws-input" readOnly value={token} onFocus={e => e.target.select()} style={{ width: '100%', marginBottom: 14, fontFamily: 'monospace', fontSize: '0.8rem', color: '#34d399' }} />
+          <input id="ws-token-secret" className="ws-input" readOnly value={token} onFocus={e => e.target.select()} style={{ width: '100%', marginBottom: 14, fontFamily: 'var(--mono)', fontSize: '0.8rem', color: '#34d399' }} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="ws-btn" onClick={onClose}>Close</button>
             <button type="button" className="ws-btn ws-btn-primary" onClick={copy}>{copied ? '✓ Copied' : 'Copy token'}</button>
