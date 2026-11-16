@@ -975,13 +975,6 @@ export function Workspace({
           <p style={{ margin: '0 0 12px', color: 'var(--muted)', fontSize: '0.9rem' }}>
             Your new token connected the Antigravity IDE to <code>baton-mcp-server</code>. Antigravity called <code>sync_history</code> to keep a memory of the conversation and <code>save_memory</code> to store 2 decisions and 1 blocker. The handover is built from that memory together with the GitHub history.
           </p>
-          <div className="ws-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button type="button" className="ws-btn ws-btn-primary" data-testid="antigravity-popup-close" onClick={() => {
-              setAgyPopup('');
-              setActiveTab('team');
-              setTimeout(() => document.querySelector('[data-testid="antigravity-link"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
-            }}>Close</button>
-          </div>
         </Modal>
       )}
 
