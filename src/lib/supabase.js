@@ -22,8 +22,7 @@ const supabaseUrl =
 const supabaseKey =
   (typeof __BATON_SUPABASE_ANON_KEY__ !== 'undefined' && __BATON_SUPABASE_ANON_KEY__) ||
   getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') ||
-  getEnv('VITE_SUPABASE_ANON_KEY') ||
-  getEnv('SUPABASE_SERVICE_ROLE_KEY')
+  getEnv('VITE_SUPABASE_ANON_KEY')
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey)
 

@@ -37,3 +37,6 @@ test-results
 .mcp.json
 .cursor/mcp.json
 .agents/mcp_config.json
+
+# Local MCP client configs can hold a Baton API token
+.antigravity/

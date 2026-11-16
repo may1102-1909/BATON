@@ -96,3 +96,43 @@ test('match_memory filters visibility, private authorship and function audience 
     assert.deepEqual(await recall(null,null),['infra note','my private note','team note','untagged note'],'no role means the restrictive member view');
   }finally{await db.close();}
 });
+
+test('direct database access to handovers, transcripts and summaries is limited to the right people', async () => {
+  const db = newDb();
+  try {
+    await db.exec(`CREATE ROLE authenticated; CREATE ROLE anon; CREATE SCHEMA auth;
+      CREATE TABLE auth.users(id uuid PRIMARY KEY);
+      CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+      GRANT USAGE ON SCHEMA public, auth TO authenticated, anon;
+      GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated,anon;`);
+    const sql = (await readFile(new URL('../supabase/schema.sql', import.meta.url), 'utf8')).replace(/create extension if not exists pgcrypto;/i, '');
+    await db.exec(sql);
+    // The migration must also apply cleanly on top of the schema, twice.
+    const migration = await readFile(new URL('../supabase/migrations/20261116_rls_hardening.sql', import.meta.url), 'utf8');
+    await db.exec(migration); await db.exec(migration);
+    const [admin, leaver, incoming, other] = ['1', '2', '3', '4'].map(n => `10000000-0000-4000-8000-00000000000${n}`);
+    const org = '20000000-0000-4000-8000-000000000001', h = '30000000-0000-4000-8000-000000000001';
+    await db.exec(`INSERT INTO auth.users(id) VALUES ('${admin}'),('${leaver}'),('${incoming}'),('${other}');
+      INSERT INTO organizations(id,name,created_by) VALUES ('${org}','Org','${admin}');
+      INSERT INTO org_memberships(org_id,user_id,role) VALUES ('${org}','${admin}','admin'),('${org}','${leaver}','member'),('${org}','${incoming}','member'),('${org}','${other}','member');
+      INSERT INTO sources(org_id,author_id,content,type,visibility) VALUES ('${org}','${admin}','team-wide','decision','all');
+      INSERT INTO handovers(id,org_id,leaver_id,incoming_id,status) VALUES ('${h}','${org}','${leaver}','${incoming}','draft');
+      INSERT INTO handover_claims(handover_id,org_id,section,text,visibility,status) VALUES ('${h}','${org}','risks','team claim','team','approved'),('${h}','${org}','risks','admin claim','admin','approved');
+      INSERT INTO handover_versions(handover_id,org_id,version_number) VALUES ('${h}','${org}',1);
+      INSERT INTO agent_messages(org_id,author_id,content) VALUES ('${org}','${leaver}','leaver transcript'),('${org}','${other}','other transcript');
+      GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+      SET ROLE authenticated;`);
+    const as = async (user, query) => { await db.exec(`SET request.jwt.claim.sub='${user}'`); return (await db.query(query)).rows; };
+    assert.equal((await as(other, 'SELECT id FROM handovers')).length, 0, 'unrelated member cannot see the handover');
+    assert.equal((await as(incoming, 'SELECT id FROM handovers')).length, 1);
+    assert.equal((await as(incoming, 'SELECT text FROM handover_claims')).length, 0, 'draft claims stay hidden from the incoming member');
+    assert.equal((await as(other, 'SELECT id FROM handover_versions')).length, 0);
+    assert.equal((await as(admin, 'SELECT text FROM handover_claims')).length, 2);
+    await db.exec(`RESET ROLE; UPDATE handovers SET status='approved' WHERE id='${h}'; SET ROLE authenticated;`);
+    assert.deepEqual((await as(incoming, 'SELECT text FROM handover_claims')).map(r => r.text), ['team claim'], 'approved: team claims only');
+    assert.deepEqual((await as(leaver, 'SELECT content FROM agent_messages')).map(r => r.content), ['leaver transcript']);
+    await as(leaver, 'DELETE FROM agent_messages');
+    assert.equal((await as(admin, 'SELECT id FROM agent_messages')).length, 2, 'members cannot delete transcripts');
+    assert.equal((await as(other, 'SELECT content FROM sources')).length, 1, "'all' visibility is accepted and readable");
+  } finally { await db.close(); }
+});
